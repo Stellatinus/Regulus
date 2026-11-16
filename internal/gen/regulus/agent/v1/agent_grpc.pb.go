@@ -10,9 +10,16 @@
 // hub. The built-in agent of the hub uses exactly the same contract through
 // an in-process transport, so remote agents need no separate protocol.
 //
-// Compatibility rules (see also docs in the design): fields are only added,
-// never renumbered or reused; a breaking change bumps protocol_version and is
-// negotiated in the Hello/Welcome exchange.
+// Compatibility rules (docs/versioning.md): fields are only added, never
+// renumbered, retyped or reused (CI runs `buf breaking`); a change in meaning
+// that an older peer cannot follow bumps protocol_version and is negotiated in
+// the Hello/Welcome exchange.
+//
+// The update contract is the part that never changes its meaning, in any
+// protocol version, because it is what brings an old agent up to date: Hello,
+// Welcome, Reject, Heartbeat, Command with ApplyUpdate (and Ping),
+// CommandResult, and FetchUpdate with its messages. A hub speaks it to every
+// agent that was ever released (see Welcome.update_only).
 
 package agentv1
 

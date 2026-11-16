@@ -107,6 +107,13 @@ describe("ServersPage", () => {
     expect(screen.getByText("incompatible")).toBeInTheDocument();
   });
 
+  it("says when a server is connected only to be updated", async () => {
+    const old: Agent = { ...online, id: "o", name: "Old", compatibility: "too_old", update_only: true, version: "0.1.0" };
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [old] }) });
+    renderAs(viewer, <ServersPage />);
+    expect(await screen.findByText("too old for this hub: connected only to be updated (Updates page)")).toBeInTheDocument();
+  });
+
   it("says when there is no server", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [] }) });
     renderAs(viewer, <ServersPage />);

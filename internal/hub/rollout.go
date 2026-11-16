@@ -129,7 +129,13 @@ func newRolloutState() *rolloutState {
 func (h *Hub) candidates() []AgentInfo {
 	var out []AgentInfo
 	for _, a := range h.agents.agents() {
-		if a.ID == BuiltinAgentID || a.Compat != update.CompatBehind {
+		if a.ID == BuiltinAgentID {
+			continue
+		}
+		// Too-old agents are connected only to be updated (UpdateOnly), and
+		// they are taken straight to the hub's version, whatever they skipped.
+		updatable := a.Compat == update.CompatBehind || (a.Compat == update.CompatTooOld && a.UpdateOnly)
+		if !updatable {
 			continue
 		}
 		if a.System.GetOs() != "linux" {

@@ -1607,18 +1607,26 @@ components:
         uptime_seconds: { type: [integer, "null"] }
         compatibility:
           type: string
-          enum: [current, behind, ahead, unknown]
+          enum: [current, behind, ahead, too_old, unknown]
           description: |
             For a connected agent, how its release relates to the hub's. The hub
             accepts the same release series and the previous one. `behind`: older
             but supported, worth updating. `ahead`: newer than the hub (update the
-            hub). `unknown`: one of the two is not a release build.
+            hub). `too_old`: further behind than the hub supports; such an agent
+            is connected only to be updated (see `update_only`). `unknown`: one
+            of the two is not a release build.
         protocol_version:
           type: integer
           description: The protocol version negotiated for the connection.
         incompatible_reason:
           type: string
           description: Why the hub refused the agent; with the status `incompatible`.
+        update_only:
+          type: boolean
+          description: |
+            The agent is too old for this hub (compatibility `too_old`) and is
+            connected only to be updated: the hub ignores its metrics and sends
+            it no command but the update. It is a candidate of the rollout.
     MetricsPoint:
       type: object
       required:

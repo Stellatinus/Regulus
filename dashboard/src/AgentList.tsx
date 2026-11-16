@@ -82,6 +82,7 @@ const STATUS_LABEL: Record<Agent["status"], MessageKey> = {
 // differs from the hub's, or "" when there is nothing to do.
 export function versionNote(a: Agent, t: Translator): string {
   if (a.status === "incompatible") return t("servers.list.noteTooOld");
+  if (a.update_only) return t("servers.list.noteUpdateOnly");
   if (a.compatibility === "behind") return t("servers.list.noteBehind");
   if (a.compatibility === "ahead") return t("servers.list.noteAhead");
   return "";

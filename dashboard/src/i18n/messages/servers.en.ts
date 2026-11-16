@@ -34,6 +34,7 @@ export const servers = {
   "servers.list.version": "Version",
   "servers.list.neverConnected": "never connected",
   "servers.list.noteTooOld": "too old for this hub: update it",
+  "servers.list.noteUpdateOnly": "too old for this hub: connected only to be updated (Updates page)",
   "servers.list.noteBehind": "behind the hub",
   "servers.list.noteAhead": "ahead of the hub: update the hub",
 
@@ -47,6 +48,8 @@ export const servers = {
   "servers.server.incompatibleNote":
     "The hub refuses this server's agent: {reason}. The agent keeps trying and connects once it is updated.",
   "servers.server.incompatibleFallback": "its version does not work with this hub",
+  "servers.server.updateOnlyNote":
+    "This server's agent ({version}) is too old for this hub. It is connected only so that it can be updated, and sends no metrics until then. Update it from the Updates page.",
   "servers.server.offlineNote": "This server is offline. Its metrics appear here again when its agent reconnects.",
   "servers.server.nameLabel": "Name",
   "servers.server.rename": "Rename",
