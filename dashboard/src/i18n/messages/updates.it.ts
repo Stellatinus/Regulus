@@ -29,6 +29,11 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.version.checked": "Controllato {ago}.",
   "updates.version.notChecked": "Non ancora controllato.",
   "updates.version.checkFailed": "L'ultimo controllo non è riuscito: {error}",
+  "updates.version.stale":
+    "Questo hub non riesce a cercare nuove release dal {when}. Potrebbe non sapere di un aggiornamento, anche di sicurezza. Controlla che possa raggiungere api.github.com.",
+  "updates.version.staleNever":
+    "Questo hub non è mai riuscito a cercare nuove release. Potrebbe non sapere di un aggiornamento, anche di sicurezza. Controlla che possa raggiungere api.github.com.",
+  "updates.version.lastSuccess": "Ultimo controllo riuscito: {ago}.",
 
   "updates.staged.label": "Aggiornamento scaricato",
   "updates.staged.version": "La versione",

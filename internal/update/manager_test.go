@@ -458,3 +458,56 @@ func hasActor(a *fakeAudit, event, actor string) bool {
 	}
 	return false
 }
+
+// A hub whose checks keep failing does not know about new releases, a
+// security fix included: after StaleAfter without an answer the status says
+// so, whether it had an answer before or never had one (#213).
+func TestStatusSaysWhenTheLastSuccessfulCheckIsOld(t *testing.T) {
+	boom := errors.New("cannot reach the release server: boom")
+	t.Run("after a success", func(t *testing.T) {
+		r := newRig(t, "0.1.0", "0.2.0")
+		if _, err := r.m.Check(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+		ok := *r.clock
+		r.src.set(nil, boom)
+		for i := 0; i < 14; i++ { // a failed check every six hours for three and a half days
+			*r.clock = r.clock.Add(6 * time.Hour)
+			_, _ = r.m.Check(t.Context())
+			st := r.status(t)
+			if st.SucceededAt == nil || !st.SucceededAt.Equal(ok) {
+				t.Fatalf("succeeded_at = %v, want %v", st.SucceededAt, ok)
+			}
+			if want := r.clock.Sub(ok) > StaleAfter; st.CheckStale != want {
+				t.Fatalf("after %v: check_stale = %v, want %v", r.clock.Sub(ok), st.CheckStale, want)
+			}
+		}
+		r.src.set([]Release{r.rel.release()}, nil)
+		*r.clock = r.clock.Add(time.Hour)
+		if st, err := r.m.Check(t.Context()); err != nil || st.CheckStale || st.SucceededAt == nil || !st.SucceededAt.Equal(*r.clock) {
+			t.Errorf("after a good answer: %+v, %v", st, err)
+		}
+	})
+	t.Run("never a success", func(t *testing.T) {
+		r := newRig(t, "0.1.0", "0.2.0")
+		r.src.set(nil, boom)
+		_, _ = r.m.Check(t.Context())
+		if st := r.status(t); st.CheckStale || st.SucceededAt != nil {
+			t.Fatalf("right after the first failure: %+v", st)
+		}
+		for i := 0; i < 13; i++ {
+			*r.clock = r.clock.Add(6 * time.Hour)
+			_, _ = r.m.Check(t.Context())
+		}
+		if st := r.status(t); !st.CheckStale {
+			t.Errorf("failing for %v without ever an answer: not stale", 13*6*time.Hour)
+		}
+	})
+	t.Run("checks off", func(t *testing.T) {
+		r := newRig(t, "0.1.0", "0.2.0", func(o *Options) { o.Enabled = false })
+		*r.clock = r.clock.Add(30 * 24 * time.Hour)
+		if st := r.status(t); st.CheckStale {
+			t.Error("a hub with checks turned off warns about stale checks")
+		}
+	})
+}

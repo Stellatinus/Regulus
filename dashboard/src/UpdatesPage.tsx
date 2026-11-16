@@ -204,6 +204,22 @@ function Version({
               {t("updates.version.checkFailed", { error: status.check_error })}
             </p>
           )}
+          {status.check_error && status.succeeded_at && !status.check_stale && (
+            <p className="muted">
+              {t("updates.version.lastSuccess", {
+                ago: formatAgo(status.succeeded_at, undefined, t),
+              })}
+            </p>
+          )}
+          {status.check_stale && (
+            <p role="alert" className="note warn">
+              {status.succeeded_at
+                ? t("updates.version.stale", {
+                    when: new Date(status.succeeded_at).toLocaleString(),
+                  })
+                : t("updates.version.staleNever")}
+            </p>
+          )}
         </>
       )}
 

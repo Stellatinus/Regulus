@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -171,5 +172,69 @@ func TestClipKeepsCharactersWhole(t *testing.T) {
 	}
 	if got := clip("short", 10); got != "short" {
 		t.Errorf("clip = %q", got)
+	}
+}
+
+// More than one page of releases that are not the core's (plugin releases,
+// newer pre-releases): the newest stable release of the core is still found,
+// and pages stop as soon as one holds a stable core release (#213).
+func TestGitHubSourceReadsPagesUntilAStableRelease(t *testing.T) {
+	page := func(n int) string {
+		var items []string
+		for i := 0; i < perPage; i++ {
+			switch {
+			case n == 1:
+				items = append(items, fmt.Sprintf(`{"tag_name":"plugin/docker/v1.%d.0","prerelease":false}`, i))
+			case n == 2 && i < 3:
+				items = append(items, fmt.Sprintf(`{"tag_name":"v0.5.0-alpha.%d","prerelease":true}`, 3-i))
+			case n == 2 && i == 3:
+				items = append(items, `{"tag_name":"v0.4.2","prerelease":false}`)
+			default:
+				items = append(items, fmt.Sprintf(`{"tag_name":"v0.0.%d","prerelease":false}`, i))
+			}
+		}
+		return "[" + strings.Join(items, ",") + "]"
+	}
+	var pages []string
+	g := newGitHub(t, func(w http.ResponseWriter, r *http.Request) {
+		pages = append(pages, r.URL.Query().Get("page"))
+		if r.URL.Query().Get("per_page") != "100" {
+			t.Errorf("per_page = %q", r.URL.Query().Get("per_page"))
+		}
+		n := 1
+		_, _ = fmt.Sscan(r.URL.Query().Get("page"), &n)
+		_, _ = w.Write([]byte(page(n)))
+	})
+	got, err := g.Releases(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(pages, ",") != "1,2" {
+		t.Errorf("pages read: %v, want 1,2", pages)
+	}
+	if best, ok := Latest(got, Stable); !ok || best.Tag != "v0.4.2" {
+		t.Errorf("stable: %+v, %v", best.Tag, ok)
+	}
+	if best, ok := Latest(got, Alpha); !ok || best.Tag != "v0.5.0-alpha.3" {
+		t.Errorf("alpha: %+v, %v", best.Tag, ok)
+	}
+}
+
+// Without any stable core release the reading stops after maxPages.
+func TestGitHubSourceStopsAfterMaxPages(t *testing.T) {
+	var calls int
+	g := newGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		var items []string
+		for i := 0; i < perPage; i++ {
+			items = append(items, fmt.Sprintf(`{"tag_name":"plugin/x/v1.%d.%d","prerelease":false}`, calls, i))
+		}
+		_, _ = w.Write([]byte("[" + strings.Join(items, ",") + "]"))
+	})
+	if _, err := g.Releases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != maxPages {
+		t.Errorf("pages read: %d, want %d", calls, maxPages)
 	}
 }
