@@ -1,4 +1,4 @@
-.PHONY: dashboard build lint test test-postgres smoke proto proto-check clean
+.PHONY: dashboard build lint test test-postgres smoke proto proto-check proto-breaking clean
 
 # Build the dashboard into internal/webui/dist so it is embedded in the binary.
 dashboard:
@@ -44,6 +44,15 @@ proto:
 # Fails if the committed generated code is out of date.
 proto-check: proto
 	@test -z "$$(git status --porcelain -- internal/gen)" || { echo 'internal/gen is out of date: run make proto and commit'; git status --short -- internal/gen; exit 1; }
+
+# Fails if proto/ changed in a way an older hub or agent cannot read (a field
+# renumbered, retyped or removed; see docs/versioning.md). Compares with the
+# main branch; CI passes the repository address, since its checkout has no
+# other branch. Example against a release: make proto-breaking PROTO_AGAINST='../.git#tag=v0.2.0,subdir=proto' (the path is relative to proto/)
+PROTO_AGAINST ?= ../.git\#branch=main,subdir=proto
+proto-breaking:
+	GOBIN=$(TOOLS) go install github.com/bufbuild/buf/cmd/buf@v1.75.0
+	cd proto && $(TOOLS)/buf breaking --against '$(PROTO_AGAINST)'
 
 clean:
 	rm -rf bin internal/webui/dist/* dashboard/node_modules
