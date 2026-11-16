@@ -1,0 +1,24 @@
+[Unit]
+Description=Settle an interrupted Regulus update before Regulus starts
+Documentation=https://github.com/Stellatinus/Regulus
+# Only when the update helper left its marker: a power cut (or a crash of the
+# machine) between replacing the executable and confirming the new version.
+ConditionPathExists=/var/lib/regulus-update/pending.json
+# Before the service, so that an executable that cannot run, or a new version
+# that already took the machine down twice, is replaced by the previous version
+# before it runs again. Nothing here starts or restarts a unit: that would wait
+# for this unit to finish. The new version, when it is in place and may be
+# fine, is watched by regulus-update-confirm.service once it has started.
+Before=regulus.service regulus-agent.service regulus-update-confirm.service regulus-update.service regulus-agent-update.service
+
+[Service]
+Type=oneshot
+# Root, no sandbox: it may have to replace /usr/bin/regulus and the database
+# with the copies the update helper keeps in /var/lib/regulus-update. The
+# script does not depend on /usr/bin/regulus being usable.
+ExecStart=/usr/lib/regulus/update-recover
+TimeoutStartSec=10min
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

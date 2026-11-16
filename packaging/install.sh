@@ -835,6 +835,11 @@ enable_self_update() {
 	unit=regulus-update.path
 	[ "$role" != agent ] || unit=regulus-agent-update.path
 	$SUDO systemctl enable --now "$unit" || warn "could not enable $unit: updates from the hub will not install until it is enabled"
+	# They only do something when the machine starts with an update unsettled
+	# (a power cut in the middle of one): the first puts things right before
+	# Regulus starts, the second checks the new version once it has started.
+	$SUDO systemctl enable regulus-update-recover.service regulus-update-confirm.service ||
+		warn "could not enable the recovery of an interrupted update at the start of the machine (regulus-update-recover.service, regulus-update-confirm.service)"
 }
 
 # listen_port prints the TCP port the hub listens on.

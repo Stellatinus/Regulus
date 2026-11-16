@@ -138,6 +138,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh scripts/test-install.sh
       - run: sh scripts/test-next-version.sh
+      - run: sh scripts/test-update-recover.sh
 
   dashboard:
     name: Dashboard (lint, typecheck, test, build)

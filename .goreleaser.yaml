@@ -52,6 +52,16 @@ nfpms:
         dst: /usr/lib/systemd/system/regulus-agent-update.path
       - src: packaging/regulus-agent-update.service
         dst: /usr/lib/systemd/system/regulus-agent-update.service
+      - src: packaging/regulus-update-recover.service
+        dst: /usr/lib/systemd/system/regulus-update-recover.service
+      - src: packaging/regulus-update-confirm.service
+        dst: /usr/lib/systemd/system/regulus-update-confirm.service
+      # Settles an interrupted update when the machine starts; a shell script
+      # so that it works when /usr/bin/regulus itself cannot run.
+      - src: packaging/update-recover.sh
+        dst: /usr/lib/regulus/update-recover
+        file_info:
+          mode: 0755
       - src: packaging/config.yaml
         dst: /etc/regulus/config.yaml
         type: config|noreplace

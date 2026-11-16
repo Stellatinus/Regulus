@@ -1,0 +1,22 @@
+[Unit]
+Description=Check the Regulus version an interrupted update left in place, or put the previous one back
+Documentation=https://github.com/Stellatinus/Regulus
+# Only when the marker of an update in flight is still there after
+# regulus-update-recover.service: the new version is in place and nobody
+# watched it start.
+ConditionPathExists=/var/lib/regulus-update/pending.json
+After=regulus-update-recover.service regulus.service regulus-agent.service
+
+[Service]
+Type=oneshot
+# The same command systemd runs after the update helper stops: restart the
+# service, watch that the new version is healthy, put the previous version
+# (and the database from before the update) back if it is not. Root, no
+# sandbox, like there. It takes the lock of the state directory, so it never
+# runs together with an update that was asked for.
+ExecStart=/usr/bin/regulus update-apply --recover --state-dir /var/lib/regulus-update
+TimeoutStartSec=20min
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

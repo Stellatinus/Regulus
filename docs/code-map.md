@@ -83,7 +83,7 @@ Sizes are lines on `main` on 2026-10-29. Line numbers are approximate and drift;
 
 **Reading order.** `Runner`; `Installer` and `defaults` (the 90 s and 15 s health settings); `Apply`; `fetchVerified`; `restartAndWatch`; `rollback`; the safe file helpers (`openRegular`, `readRegular`, `extractBinary`, `copyExecutable`).
 
-**Entry points.** `Installer.Apply`, called from `cmd/regulus/update_apply.go`. **Depends on.** `localstatus`, the verifier, systemd (through `Runner`).
+**Entry points.** `Installer.Apply`, called from `cmd/regulus/update_apply.go`; `Installer.Recover` and `Installer.RecoverBeforeStart` (`pending.go`) settle an update the helper did not finish, the second when the machine starts, before the service does (`packaging/update-recover.sh`, `regulus-update-recover.service`, `regulus-update-confirm.service`). **Depends on.** `localstatus`, the verifier, systemd (through `Runner`).
 **Decision: leave.** One linear procedure; the file helpers are part of why the procedure is safe and are read together with it.
 
 ## cmd/regulus/console.go
