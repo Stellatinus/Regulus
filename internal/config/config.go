@@ -309,6 +309,9 @@ type Agent struct {
 	// (regulus-agent-update.path, enabled by the installer). On its own the
 	// setting does nothing.
 	Updates bool `yaml:"updates"`
+	// PluginsDir, when set, is the directory of the plugins this agent runs
+	// (docs/plugins/runtime.md). Empty: no plugin is run.
+	PluginsDir string `yaml:"plugins_dir"`
 	// EnrollOnly enrolls and exits without connecting. The installer uses it
 	// to enroll as the service user before the service starts. Command line
 	// only.
@@ -359,6 +362,7 @@ func LoadAgent(args []string, getenv func(string) string, output io.Writer) (Age
 	logLevel := fs.String("log-level", "", "log level: debug, info, warn, error (env REGULUS_LOG_LEVEL)")
 	logFormat := fs.String("log-format", "", "log format: text, json (env REGULUS_LOG_FORMAT)")
 	enrollOnly := fs.Bool("enroll-only", false, "enroll with the token, save the credentials and exit")
+	pluginsDir := fs.String("plugins-dir", "", "directory of the plugins to run; empty runs none (env REGULUS_AGENT_PLUGINS_DIR)")
 	if err := fs.Parse(args); err != nil {
 		return Agent{}, err
 	}
@@ -384,6 +388,7 @@ func LoadAgent(args []string, getenv func(string) string, output io.Writer) (Age
 	setIfNotEmpty(&cfg.Token, getenv("REGULUS_AGENT_TOKEN"))
 	setIfNotEmpty(&cfg.CAFingerprint, getenv("REGULUS_AGENT_CA_FINGERPRINT"))
 	setIfNotEmpty(&cfg.DataDir, getenv("REGULUS_AGENT_DATA_DIR"))
+	setIfNotEmpty(&cfg.PluginsDir, getenv("REGULUS_AGENT_PLUGINS_DIR"))
 	if v := getenv("REGULUS_AGENT_UPDATES"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
@@ -404,6 +409,8 @@ func LoadAgent(args []string, getenv func(string) string, output io.Writer) (Age
 			cfg.CAFingerprint = *fingerprint
 		case "data-dir":
 			cfg.DataDir = *dataDir
+		case "plugins-dir":
+			cfg.PluginsDir = *pluginsDir
 		case "log-level":
 			cfg.Log.Level = *logLevel
 		case "log-format":

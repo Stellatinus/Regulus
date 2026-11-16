@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+// Contract between Regulus (the host: an agent or a hub) and a plugin.
+//
+// A plugin is a separate program. The host starts it with the address of a
+// Unix socket in REGULUS_PLUGIN_SOCKET; the plugin serves PluginService there
+// and the host connects to it. Nothing else is shared: a plugin that crashes
+// or hangs ends its own process, never the host's (docs/plugins/runtime.md).
+//
+// Compatibility rules (docs/versioning.md): fields are only added, never
+// renumbered, retyped or reused. A change in meaning raises the plugin API
+// version (plugin.APIVersion in internal/plugin), which a plugin declares in
+// its manifest (`api`) and again in DescribeResponse.
+package regulus.plugin.v1;
+
+service PluginService {
+  // Describe is the first call on every start: the plugin says who it is,
+  // and the host checks that it matches the manifest it started.
+  rpc Describe(DescribeRequest) returns (DescribeResponse);
+
+  // Health is asked periodically. A plugin that does not answer, or answers
+  // NOT_SERVING several times in a row, is restarted.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message DescribeRequest {
+  // The plugin API version of the host.
+  uint32 host_api_version = 1;
+  // The release version of Regulus, for example "0.3.0".
+  string host_version = 2;
+  // "agent" or "hub": which component of the plugin was started.
+  string role = 3;
+}
+
+message DescribeResponse {
+  // Must equal `id` in plugin.yaml.
+  string id = 1;
+  // Must equal `version` in plugin.yaml.
+  string version = 2;
+  // The plugin API version the plugin speaks; must equal `api` in plugin.yaml.
+  uint32 api_version = 3;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_SERVING = 1;
+    STATUS_NOT_SERVING = 2;
+  }
+  Status status = 1;
+  // Human readable, shown to the administrator. Safe to display.
+  string message = 2;
+}

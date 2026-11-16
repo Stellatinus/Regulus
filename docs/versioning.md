@@ -13,7 +13,7 @@ Splitting `regulus` into separately downloaded modules (hub, agent, a communicat
 - **A module still has to be updated.** A separate "communication module" that lives longer than the rest only moves the problem: the day it must change, it has the same problem the agent has today. What makes a part long-lived is a **contract that does not change**, not a separate file.
 - **One signature, one helper.** Every installed file must be verified by the root helper. One archive means one verification path (Sigstore, checksums), which is where the security work is (`docs/updates.md`).
 
-What *is* split is the **plugins**: they are separate programs with their own versions, because they really are developed and released apart from the core ([Plugins](plugins.md)).
+What *is* split is the **plugins**: they are separate programs with their own versions, because they really are developed and released apart from the core ([Plugins](plugins/README.md)).
 
 This decision can be revisited if a real need appears (for example an agent for a device too small for the full binary); see [Design decisions](decisions.md#versioning-contracts-instead-of-modules-227).
 
@@ -28,7 +28,7 @@ This decision can be revisited if a real need appears (for example an agent for 
 | **Database schema** | the hub ↔ its own data, across versions | migration number | `internal/storage/migrations` | forward only; a hub refuses a schema newer than it knows (a rollback restores the copy, #205, #247) |
 | **Release layout** | the release workflow ↔ installed hubs, agents and the helper | asset names | `checksums.txt`, `checksums.txt.sigstore.json`, `regulus_<version>_<os>_<arch>.tar.gz`, tag `v<version>` | never renamed; new assets may be added |
 | **HTTP API** | dashboard, scripts ↔ hub | the path (`/api/...`) and `openapi.yaml` | `internal/hub/openapi.yaml` | the dashboard is embedded, so it always matches; scripts get additive changes only |
-| **Plugin API** | a plugin ↔ the host | `plugin.api` in the manifest | [Plugins](plugins.md) | its own range, independent of the release version |
+| **Plugin API** | a plugin ↔ the host | `plugin.api` in the manifest | [Plugins](plugins/README.md) | its own range, independent of the release version |
 
 ### The update contract: why it is frozen
 
