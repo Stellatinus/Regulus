@@ -1,4 +1,4 @@
-// Header, navigation and the database banner.
+// Header, navigation, the database banner and the last-resort error screen.
 export const core = {
   "app.brand": "Regulus",
   "app.language": "Language",
@@ -7,6 +7,10 @@ export const core = {
   "theme.system": "System",
   "theme.light": "Light",
   "theme.dark": "Dark",
+  "app.crashed.title": "Something went wrong",
+  "app.crashed.body": "The dashboard hit an error it could not handle. Reloading the page usually fixes it; your servers are not affected.",
+  "app.crashed.reload": "Reload the page",
+  "app.crashed.details": "Technical details",
 
   "nav.main": "Main",
   "nav.dashboard": "Dashboard",

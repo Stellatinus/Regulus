@@ -82,6 +82,18 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "Regulus" })).toBeInTheDocument();
   });
 
+  it("says what is wrong when a proxy answers 200 with an HTML page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("<!doctype html><p>Accept the terms</p>", { status: 200, headers: { "Content-Type": "text/html" } }))),
+    );
+    render(<App />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/Could not reach the hub: .*not JSON \(text\/html\)/);
+    // The page is not blank: the banner and frame are still drawn.
+    expect(screen.getByRole("heading", { name: "Regulus" })).toBeInTheDocument();
+  });
+
   it("asks for a login before showing anything", async () => {
     const hub = mockHub({ me: { setup_required: false, user: null }, agents: [agent] });
     render(<App />);
