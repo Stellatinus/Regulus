@@ -77,10 +77,19 @@ func verifyPinned(pin string, raw [][]byte, now time.Time) error {
 	if !found {
 		return errors.New("the hub is not the one this agent was enrolled with: its CA does not match the pinned fingerprint")
 	}
-	_, err := certs[0].Verify(x509.VerifyOptions{
+	if _, err := certs[0].Verify(x509.VerifyOptions{
 		Roots:       roots,
 		CurrentTime: now,
 		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	})
-	return err
+	}); err != nil {
+		return err
+	}
+	// A hub before #316 put no kind on its listener certificate, so a
+	// certificate without one is accepted; one with a kind must be the hub's.
+	if hasKindMark(certs[0]) {
+		if kind, _, ok := kindOf(certs[0]); !ok || kind != KindHub {
+			return errors.New("the hub presented a certificate that is not a hub certificate")
+		}
+	}
+	return nil
 }
