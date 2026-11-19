@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -28,6 +29,15 @@ type Config struct {
 	// with client certificates). Empty keeps remote agents off: only the
 	// built-in agent can then connect.
 	AgentListen string `yaml:"agent_listen"`
+	// TrustedProxies lists the reverse proxies (CIDR blocks or single
+	// addresses) whose X-Forwarded-For and X-Forwarded-Proto headers the hub
+	// believes. Empty: the headers are ignored and the client address is the
+	// peer of the connection. Set it to the proxy's address, for example
+	// ["127.0.0.1"], when the hub listens behind one; otherwise every client
+	// shares the proxy's address in the login limit, the audit log and the
+	// session list. A list, so it is edited in the file or with
+	// REGULUS_TRUSTED_PROXIES (comma separated), not with `regulus config set`.
+	TrustedProxies []string `yaml:"trusted_proxies"`
 	// DataDir is the directory where the hub stores its database.
 	DataDir string `yaml:"data_dir"`
 	// BuiltinAgent runs an agent inside the hub, so the hub's own server is
@@ -129,6 +139,9 @@ func (c Config) Validate() error {
 	if c.DataDir == "" {
 		return errors.New("data_dir must not be empty")
 	}
+	if _, err := ParseTrustedProxies(c.TrustedProxies); err != nil {
+		return err
+	}
 	if c.MetricsInterval < MinMetricsInterval {
 		return fmt.Errorf("metrics_interval %v is too short (minimum %v)", c.MetricsInterval, MinMetricsInterval)
 	}
@@ -191,6 +204,14 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 	setIfNotEmpty(&cfg.Listen, getenv("REGULUS_LISTEN"))
 	setIfNotEmpty(&cfg.DataDir, getenv("REGULUS_DATA_DIR"))
 	setIfNotEmpty(&cfg.AgentListen, getenv("REGULUS_AGENT_LISTEN"))
+	if v := getenv("REGULUS_TRUSTED_PROXIES"); v != "" {
+		cfg.TrustedProxies = nil
+		for _, e := range strings.Split(v, ",") {
+			if e = strings.TrimSpace(e); e != "" {
+				cfg.TrustedProxies = append(cfg.TrustedProxies, e)
+			}
+		}
+	}
 	if v := getenv("REGULUS_BUILTIN_AGENT"); v != "" {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
@@ -424,4 +445,24 @@ func LoadAgent(args []string, getenv func(string) string, output io.Writer) (Age
 		return Agent{}, fmt.Errorf("invalid configuration: %w", err)
 	}
 	return cfg, nil
+}
+
+// ParseTrustedProxies turns the trusted_proxies entries (CIDR blocks such as
+// 10.0.0.0/8, or single addresses such as 127.0.0.1 or ::1) into prefixes.
+func ParseTrustedProxies(entries []string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, e := range entries {
+		e = strings.TrimSpace(e)
+		if p, err := netip.ParsePrefix(e); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(e)
+		if err != nil {
+			return nil, fmt.Errorf("trusted_proxies entry %q is not an address or a CIDR block (for example 127.0.0.1 or 10.0.0.0/8)", e)
+		}
+		a = a.Unmap()
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out, nil
 }

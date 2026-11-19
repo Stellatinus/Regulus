@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -18,11 +19,11 @@ import (
 
 const goodPassword = "correct horse battery"
 
-func newService(t *testing.T) *Service {
+func newService(t *testing.T, opts ...Option) *Service {
 	t.Helper()
 	db := storagetest.Open(t, t.TempDir())
 	t.Cleanup(func() { _ = db.Close() })
-	s, err := New(context.Background(), db, slog.New(slog.NewTextHandler(io.Discard, nil)), WithSecret(testSecret))
+	s, err := New(context.Background(), db, slog.New(slog.NewTextHandler(io.Discard, nil)), append([]Option{WithSecret(testSecret)}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,11 +395,122 @@ func TestHTTPRateLimitAnswers429(t *testing.T) {
 }
 
 func TestCookieIsSecureBehindTLS(t *testing.T) {
-	s := newService(t)
+	s := newService(t, WithTrustedProxies(proxies(t, "192.0.2.1")))
 	c := newClient(t, s)
 	forwarded := func(r *http.Request) { r.Header.Set("X-Forwarded-Proto", "https") }
 	c.do("POST", "/api/auth/setup", map[string]string{"username": "admin", "password": goodPassword, "setup_token": s.SetupToken()}, forwarded)
 	if c.cookie == nil || !c.cookie.Secure {
 		t.Fatalf("cookie must be Secure when the client used HTTPS: %+v", c.cookie)
+	}
+}
+
+func proxies(t *testing.T, entries ...string) []netip.Prefix {
+	t.Helper()
+	var out []netip.Prefix
+	for _, e := range entries {
+		if p, err := netip.ParsePrefix(e); err == nil {
+			out = append(out, p)
+			continue
+		}
+		a := netip.MustParseAddr(e)
+		out = append(out, netip.PrefixFrom(a, a.BitLen()))
+	}
+	return out
+}
+
+func TestForwardingHeadersAreIgnoredFromAnyoneButATrustedProxy(t *testing.T) {
+	s := newService(t) // no trusted proxy
+	c := newClient(t, s)
+	setup(t, s)
+	forwarded := func(r *http.Request) { r.Header.Set("X-Forwarded-For", "198.51.100.7") }
+	for range maxFailures {
+		c.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": "wrong password!"}, forwarded)
+	}
+	// The header did not give the client a budget of its own: the peer is limited.
+	rec := c.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": goodPassword}, func(r *http.Request) {
+		r.Header.Set("X-Forwarded-For", "198.51.100.8")
+	})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429: X-Forwarded-For must be ignored without trusted_proxies", rec.Code)
+	}
+	c.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": goodPassword}, func(r *http.Request) {
+		r.Header.Set("X-Forwarded-Proto", "https")
+	})
+	if c.cookie != nil && c.cookie.Secure {
+		t.Fatal("X-Forwarded-Proto from an untrusted peer must not make the cookie Secure")
+	}
+}
+
+func TestTrustedProxyGivesEachClientItsOwnBudgetAndTheAuditTheRealAddress(t *testing.T) {
+	s := newService(t, WithTrustedProxies(proxies(t, "192.0.2.1")))
+	c := newClient(t, s)
+	setup(t, s)
+	from := func(addr string) func(*http.Request) {
+		return func(r *http.Request) { r.Header.Set("X-Forwarded-For", addr) }
+	}
+	bad := map[string]string{"username": "someone", "password": "wrong password!"}
+	for range maxFailures {
+		c.do("POST", "/api/auth/login", bad, from("198.51.100.1"))
+	}
+	if rec := c.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": goodPassword}, from("198.51.100.1")); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("client A: status = %d, want 429", rec.Code)
+	}
+	if rec := c.do("POST", "/api/auth/login", map[string]string{"username": "admin", "password": goodPassword}, from("198.51.100.2")); rec.Code != http.StatusOK {
+		t.Fatalf("client B: status = %d, want 200: it must not share A's limit", rec.Code)
+	}
+	entries, err := s.Audit(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var login bool
+	for _, e := range entries {
+		if e.Event == "login_failed" && e.Remote != "198.51.100.1" {
+			t.Errorf("login_failed recorded %q, want the real client 198.51.100.1", e.Remote)
+		}
+		if e.Event == "login" && e.Remote == "198.51.100.2" {
+			login = true
+		}
+	}
+	if !login {
+		t.Errorf("no login entry for 198.51.100.2 in %+v", entries)
+	}
+	sessions, err := s.store.listSessions(context.Background(), 1, time.Now(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, si := range sessions {
+		found = found || si.RemoteAddr == "198.51.100.2"
+	}
+	if !found {
+		t.Errorf("the session does not record the real client: %+v", sessions)
+	}
+}
+
+func TestClientAddressWalksForwardedForFromTheRight(t *testing.T) {
+	s := newService(t, WithTrustedProxies(proxies(t, "192.0.2.0/24", "10.0.0.0/8")))
+	for _, tc := range []struct {
+		name, peer string
+		xff        []string
+		want       string
+	}{
+		{"no header", "192.0.2.1:1", nil, "192.0.2.1"},
+		{"one hop", "192.0.2.1:1", []string{"198.51.100.1"}, "198.51.100.1"},
+		{"the client forges the left, the proxy appended the truth", "192.0.2.1:1", []string{"203.0.113.9, 198.51.100.1"}, "198.51.100.1"},
+		{"a trusted hop in the chain is skipped", "192.0.2.1:1", []string{"198.51.100.1, 10.1.2.3"}, "198.51.100.1"},
+		{"several header lines", "192.0.2.1:1", []string{"203.0.113.9", "198.51.100.1"}, "198.51.100.1"},
+		{"all trusted: the leftmost", "192.0.2.1:1", []string{"10.9.9.9, 10.1.2.3"}, "10.9.9.9"},
+		{"garbage stops the walk at the hop that wrote it", "192.0.2.1:1", []string{"198.51.100.1, nonsense"}, "192.0.2.1"},
+		{"untrusted peer: header ignored", "203.0.113.5:1", []string{"198.51.100.1"}, "203.0.113.5"},
+		{"IPv6 peer", "[2001:db8::1]:1", []string{"198.51.100.1"}, "2001:db8::1"},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = tc.peer
+		for _, v := range tc.xff {
+			r.Header.Add("X-Forwarded-For", v)
+		}
+		if got := s.remoteIP(r); got != tc.want {
+			t.Errorf("%s: remoteIP = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }
