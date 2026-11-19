@@ -1405,7 +1405,14 @@ components:
         window_start: { type: string }
         window_end: { type: string }
         platform: { type: string, example: linux/amd64 }
-        checked_at: { type: [string, "null"], format: date-time }
+        checked_at: { type: [string, "null"], format: date-time, description: The last check, successful or not. }
+        succeeded_at: { type: [string, "null"], format: date-time, description: The last check that got an answer from the release server. }
+        check_stale:
+          type: boolean
+          description: |
+            The last successful check is older than three days (or checks have
+            failed for that long without ever succeeding): the hub may not know
+            about a new release, a security fix included. Only with checks on.
         check_error: { type: string }
         checking: { type: boolean }
         latest:

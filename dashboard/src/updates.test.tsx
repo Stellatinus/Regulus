@@ -166,6 +166,54 @@ describe("UpdatesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("warns when the hub has not reached the release server for days", async () => {
+    const old = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+    mockHub({
+      "GET /api/updates": [
+        {
+          data: {
+            ...base,
+            check_error: "cannot reach the release server",
+            succeeded_at: old,
+            check_stale: true,
+          },
+        },
+      ],
+    });
+    renderPage();
+    expect(
+      await screen.findByText(
+        /has not been able to ask for new releases since/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("warns when the hub has never reached the release server", async () => {
+    mockHub({
+      "GET /api/updates": [
+        {
+          data: {
+            ...base,
+            check_error: "boom",
+            succeeded_at: null,
+            check_stale: true,
+          },
+        },
+      ],
+    });
+    renderPage();
+    expect(
+      await screen.findByText(/has never been able to ask for new releases/),
+    ).toBeInTheDocument();
+  });
+
+  it("does not warn after a recent successful check", async () => {
+    mockHub({ "GET /api/updates": [{ data: { ...base, succeeded_at: now } }] });
+    renderPage();
+    await screen.findByText(/Checked/);
+    expect(screen.queryByText(/ask for new releases/)).not.toBeInTheDocument();
+  });
+
   it("offers a newer release with its notes and a link", async () => {
     mockHub({ "GET /api/updates": [{ data: newer }] });
     renderPage();
