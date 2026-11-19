@@ -86,7 +86,7 @@ Everything here is in `internal/pki` (certificates) and `internal/fleet` (tokens
 - **Client certificate.** The agent makes its own ECDSA key and sends a certificate request; the key never leaves the machine. The hub **ignores the subject** of the request, picks the agent id and signs a certificate whose common name is that id (`CA.SignClient`). It is valid for **5 years** (`ClientValidity`). **Renewal is not implemented** (a comment in `pki.go` says so; tracked in #128).
 - **Identity.** On every stream the hub reads the agent id and certificate serial number from the verified certificate, never from what the agent says, and calls `fleet.Authorize`: the agent must exist, not be revoked, and the serial must be the one issued for it (`requireAgent` in `internal/hub/agent_net.go`). `Enroll` is the only call that works without a certificate; the TLS server asks for a client certificate "if given" and verifies it against the CA (`VerifyClientCertIfGiven`).
 - **Revocation.** `fleet.Revoke` marks the agent in the database; the hub closes its connection; the agent can never connect again (`DELETE /api/agents/{id}`). There is no revocation list to distribute, because the hub checks the registry on every connection.
-- **Registry.** Table `agents` (id, name, hostname, certificate serial and end, `last_seen`, revoked time…). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
+- **Registry.** Table `agents` (id, name, hostname, certificate serial and end, `last_seen`, revoked time…). `last_seen_at` and what an agent reports about itself are written by one goroutine of the hub (`internal/hub/seen.go`), never on the handshake: at connect and disconnect, every minute for the connected agents (so after a crash it is at most a minute old) and once more at shutdown before the database closes. The only database access of a connection is `Authorize`, a read bounded to 10 seconds; an established stream does no database I/O, so a database outage stops new connections, not the ones already open (#218). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
 
 ### Diagram: enrolling an agent
 
@@ -117,7 +117,7 @@ sequenceDiagram
     Agent->>Hub: Hello(version, system, protocol range)
     Hub-->>Agent: Welcome(protocol, heartbeat interval)
     Agent->>Hub: Heartbeat
-    Hub->>DB: record last seen
+    Hub-)DB: record last seen (later, by the presence writer; every minute while connected)
 ```
 
 *Sources: `internal/fleet/fleet.go` (`CreateToken`, `Enroll`, `Authorize`), `internal/pki/pki.go` (`SignClient`, `ServerCertificate`), `internal/agent/remote.go` (`Enroll`, `Dial`), `internal/hub/agent_net.go`, `internal/hub/agents.go` (`Connect`). An order detail: a token is deleted before the request is checked, so a malformed request wastes the token (`fleet.go` comment).*

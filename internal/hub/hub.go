@@ -66,6 +66,7 @@ type Hub struct {
 	agentAddr atomic.Value    // string: where the agent listener is bound, once it is
 	listener  listenerState   // the agent listener, started by Serve or from the dashboard
 	agents    *agentServer
+	seen      *seenRecorder     // writes agent presence off the handshake path
 	transport *inproc.Transport // lets the built-in agent reach the hub without a network port
 	plugins   atomic.Value      // *pluginRunner while plugins_dir is set and Serve runs
 	// pluginTune, if set, changes the plugin supervisor before it starts
@@ -97,6 +98,12 @@ func WithUpdateSource(src update.Source) Option {
 // releases. Only for tests: a hub without it never trusts an unsigned release.
 func WithUpdateVerifier(v update.Verifier) Option {
 	return func(h *Hub) { h.updateVer = v }
+}
+
+// withSeenFlush sets how often the connected agents are recorded as seen
+// (tests).
+func withSeenFlush(every time.Duration) Option {
+	return func(h *Hub) { h.seen.every = every }
 }
 
 // WithAgentIntervals sets the heartbeat and metrics intervals the hub asks
@@ -163,18 +170,22 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		transport: inproc.New(),
 		startedAt: time.Now(),
 	}
-	h.agents.seen = func(info AgentInfo, at time.Time) {
-		sys := info.System
-		if err := h.fleet.Seen(context.Background(), info.ID, info.Version, sys.GetHostname(), sys.GetOsVersion(), at); err != nil {
-			log.Warn("recording when an agent was seen", "agent", info.ID, "err", err)
+	// Presence is written by a goroutine of its own, never on the agent's
+	// handshake (see seen.go).
+	h.seen = newSeenRecorder(log, h.agents.agents, func(info AgentInfo, at time.Time) seenWrite {
+		return func(ctx context.Context) error {
+			sys := info.System
+			return h.fleet.Seen(ctx, info.ID, info.Version, sys.GetHostname(), sys.GetOsVersion(), at)
 		}
-	}
+	})
+	h.agents.seen = h.seen.seen
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
+	h.seen.start()
 	h.agents.hubVersion = h.version
 	ver := h.updateVer
 	if ver == nil {
@@ -249,6 +260,7 @@ func (h *Hub) AgentConn() (*grpc.ClientConn, error) {
 func (h *Hub) Close() error {
 	h.rollout.stop()
 	h.updates.Close()
+	h.seen.close() // records the connected agents a last time, before the database closes
 	err := h.store.Close()
 	h.unlockDir()
 	return err
