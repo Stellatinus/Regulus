@@ -543,7 +543,17 @@ func TestAdminResetsTwoFactor(t *testing.T) {
 	if err := s.ResetTwoFactor(ctx, other, e.user.Username); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("a viewer reset the two-factor of an admin: %v", err)
 	}
-	if err := s.ResetTwoFactor(ctx, e.user, e.user.Username); err != nil {
+	if err := s.ResetTwoFactor(ctx, e.user, e.user.Username); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("an admin reset their own two-factor: %v", err)
+	}
+	if u, err := s.userByName(ctx, e.user.Username); err != nil || !u.TwoFactor {
+		t.Fatalf("a refused self-reset must leave two-factor on: %+v, %v", u, err)
+	}
+	if _, err := s.Authenticate(ctx, e.session); err != nil {
+		t.Fatalf("a refused self-reset must not end the session: %v", err)
+	}
+	admin2 := addUser(t, s, e.user, "frank", RoleAdmin)
+	if err := s.ResetTwoFactor(ctx, admin2, e.user.Username); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Authenticate(ctx, e.session); !errors.Is(err, ErrUnauthenticated) {
@@ -553,7 +563,7 @@ func TestAdminResetsTwoFactor(t *testing.T) {
 		t.Fatalf("login with the password alone after the reset: %v", err)
 	}
 	entries, _ := s.Audit(ctx, 10)
-	if !hasEvent(entries, EventTwoFactorReset, "admin", "admin") {
+	if !hasEvent(entries, EventTwoFactorReset, "frank", "admin") {
 		t.Errorf("audit = %+v", entries)
 	}
 }
