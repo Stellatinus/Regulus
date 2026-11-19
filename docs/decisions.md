@@ -231,6 +231,15 @@ Agreed in conversation on 2026-11-19. **Proposed**: the names and the direction 
 - **Milestones.** The model (#287), the apps (#288), the container manager (#289) and the three managers the maintainer named (firewall #290, VPN #291, wake #292) are in **M6**: they define how plugins are used and need #261 first. The other managers (#293 to #300) and the first apps (#301) have no milestone yet.
 - **Not decided:** built in or plugin for the part that changes state; how privileged actions work (#60); which guards each dangerous operation needs; observe or manage per manager (RAID proposes *observe first*, #285); whether a node type enables managers by default.
 
+## Dashboard design reference: the machine room
+
+Agreed on 2026-11-19. The prototype [`design-drafts/machine-room.html`](../design-drafts/machine-room.html) (git tag `design-reference-machine-room`) is the reference for the dashboard's look and layout; [design-drafts/README.md](../design-drafts/README.md) says what it fixes. Design issues start from it. Nothing of it is in `dashboard/` yet.
+
+- **A room, not a list.** The home shows each node where it physically is (racks, desk, cloud), cabled to the hub, with an inspector and a per-minute load wall. **Rejected:** a starry "constellation" home (pretty, but it says nothing about the machines) and a permanent "needs you" column (alerts now belong to the node: pins in the room, a drawer, the inspector).
+- **Navigation in a left sidebar**, not in top tabs.
+- **Nodes are named by their node name only** and drawn as the same 2U machine; a role is not part of the name.
+- **Open:** where a node's physical location comes from (it is not stored today) and how the user sets it; temperature is not collected.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
