@@ -54,6 +54,13 @@ type strs struct {
 	MsgRestarting, MsgRestarted                  string
 	MsgLinkFailed, MsgLinkReady, MsgMakingLink   string
 	MsgTurningOn, MsgSaved, ResetLinkTitle       string
+
+	// --- Plugins of the hub, on the Status tab (#262). Kept together so
+	// that other changes to this table do not touch these lines.
+	Plugins, NoPlugins, PluginRestarts              string
+	PluginStarting, PluginRunning, PluginRestarting string
+	PluginFailed, PluginIncompatible, PluginStopped string
+	// --- end of the plugins block.
 }
 
 var en = strs{
@@ -139,6 +146,18 @@ var en = strs{
 	MsgTurningOn:          "Turning on remote agents…",
 	MsgSaved:              "Saved %s = %s.",
 	ResetLinkTitle:        "Password reset link",
+
+	// --- Plugins of the hub (#262).
+	Plugins:            "Plugins of the hub",
+	NoPlugins:          "The plugins directory holds no plugin for the hub.",
+	PluginRestarts:     "restarts",
+	PluginStarting:     "starting",
+	PluginRunning:      "running",
+	PluginRestarting:   "restarting",
+	PluginFailed:       "failed",
+	PluginIncompatible: "incompatible",
+	PluginStopped:      "stopped",
+	// --- end of the plugins block.
 }
 
 // T is the language in use. It is English until UseLocale picks another.

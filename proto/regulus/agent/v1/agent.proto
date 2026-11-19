@@ -137,6 +137,27 @@ message MetricsReport {
   repeated DiskMetrics disks = 4;
   repeated NetworkMetrics networks = 5;
   uint64 uptime_seconds = 6;
+  // The plugins the agent runs (docs/plugins/runtime.md), sent with every
+  // report. plugins_enabled is false when the agent has no plugins directory;
+  // an agent older than this field sends neither, which reads the same.
+  // Added in protocol 1 without a new version: an older hub ignores them.
+  repeated PluginStatus plugins = 7;
+  bool plugins_enabled = 8;
+}
+
+// PluginStatus is the state of one plugin as the agent's supervisor sees it.
+message PluginStatus {
+  string id = 1;
+  string version = 2;
+  // One of starting, running, restarting, failed, incompatible, stopped. A
+  // hub shows a value it does not know as it is.
+  string state = 3;
+  // How many times it was started again since the agent started.
+  uint32 restarts = 4;
+  // Why it last stopped, failed or cannot run; empty while it runs.
+  string last_error = 5;
+  // When it entered this state.
+  google.protobuf.Timestamp since = 6;
 }
 
 message CpuMetrics {

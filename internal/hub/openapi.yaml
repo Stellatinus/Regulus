@@ -19,6 +19,7 @@ tags:
   - name: dashboard
   - name: accounts
   - name: updates
+  - name: plugins
 paths:
   /healthz:
     get:
@@ -738,6 +739,26 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/plugins:
+    get:
+      tags: [plugins]
+      summary: The state of the plugins of the hub and of the agents (needs servers.read)
+      description: |
+        `hub` is the hub's own plugins (`plugins_dir`, role `hub`); `enabled` is
+        false when the hub has no plugins directory. `agents` lists the connected
+        agents that report a plugins directory, ordered by id, with what they
+        last reported (every metrics interval). Agents without one, the built-in
+        agent, agents admitted only to be updated and agents older than this
+        report are not listed. The lists are empty, never null. See
+        docs/plugins/runtime.md for the states.
+      responses:
+        "200":
+          description: The plugins.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plugins" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/stream:
     get:
       tags: [agents]
@@ -1635,6 +1656,47 @@ components:
           oneOf:
             - $ref: "#/components/schemas/User"
             - type: "null"
+    Plugins:
+      type: object
+      required: [hub, agents]
+      properties:
+        hub:
+          type: object
+          required: [enabled, plugins]
+          properties:
+            enabled: { type: boolean, description: "plugins_dir is set" }
+            problem:
+              type: string
+              description: Why no plugin runs although enabled (the plugins directory cannot be read). Absent otherwise.
+            plugins:
+              type: array
+              items: { $ref: "#/components/schemas/Plugin" }
+        agents:
+          type: array
+          items:
+            type: object
+            required: [id, plugins]
+            properties:
+              id: { type: string }
+              name: { type: string, description: "The display name, absent when none was given" }
+              plugins:
+                type: array
+                items: { $ref: "#/components/schemas/Plugin" }
+    Plugin:
+      type: object
+      required: [id, version, state, restarts]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        state:
+          type: string
+          description: One of these; an agent of a newer release may report another, shown as it is.
+          examples: [starting, running, restarting, failed, incompatible, stopped]
+        restarts: { type: integer, description: "Times it was started again since the hub or agent started" }
+        last_error:
+          type: string
+          description: Why it last stopped, failed or cannot run. Absent while it runs normally.
+        since: { type: string, format: date-time, description: "When it entered this state" }
     Agent:
       type: object
       required: [id, version, status, connected_at, last_heartbeat, metrics_at, uptime_seconds]

@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/CodexCircle/Regulus/internal/config"
+	"github.com/CodexCircle/Regulus/internal/plugin"
 )
 
 type tab int
@@ -665,6 +666,36 @@ func (m Model) statusBody() []string {
 			style = warnStyle
 		}
 		out = append(out, fmt.Sprintf("   %-14s %s  %-10s %s", a.ID, style.Render(fmt.Sprintf("%-9s", a.Status)), heartbeat(a, at), mutedStyle.Render(a.Hostname)))
+	}
+	if s.Running && s.PluginsEnabled {
+		out = append(out, m.pluginsBody()...)
+	}
+	return out
+}
+
+// pluginsBody is the section of the Status tab about the hub's plugins,
+// shown only while the hub runs with a plugins directory.
+func (m Model) pluginsBody() []string {
+	s := m.snap
+	out := []string{"", " " + headStyle.Render(fmt.Sprintf("%s (%d)", T.Plugins, len(s.Plugins)))}
+	if s.PluginsProblem != "" {
+		out = append(out, "   "+badStyle.Render(s.PluginsProblem))
+	} else if len(s.Plugins) == 0 {
+		out = append(out, "   "+mutedStyle.Render(T.NoPlugins))
+	}
+	for _, p := range s.Plugins {
+		style := warnStyle
+		switch p.State {
+		case plugin.StateRunning:
+			style = goodStyle
+		case plugin.StateFailed, plugin.StateIncompatible:
+			style = badStyle
+		}
+		line := fmt.Sprintf("   %-20s %-10s %s  %s %d", p.ID, p.Version, style.Render(fmt.Sprintf("%-14s", pluginState(p.State))), T.PluginRestarts, p.Restarts)
+		if p.LastError != "" {
+			line += "  " + mutedStyle.Render(p.LastError)
+		}
+		out = append(out, line)
 	}
 	return out
 }

@@ -47,6 +47,9 @@ func fakePlugin(mode string) int {
 		signal.Ignore(syscall.SIGTERM)
 		time.Sleep(time.Hour)
 		return 0
+	case "env":
+		// It writes what it was given, to be checked against the host's.
+		_ = os.WriteFile(filepath.Join(os.Getenv(sdk.EnvDataDir), "env"), []byte(strings.Join(os.Environ(), "\n")), 0o600)
 	case "spawns-child":
 		// A child the plugin starts must not outlive it.
 		child := exec.Command("sleep", "300")
@@ -317,5 +320,50 @@ func TestTheExamplePluginRuns(t *testing.T) {
 	time.Sleep(200 * time.Millisecond) // a few health checks
 	if st := rs.state("example-hello"); st.State != StateRunning || st.Restarts != 0 || st.Version != "0.1.0" {
 		t.Errorf("status = %+v", st)
+	}
+}
+
+// A plugin gets the variables the supervisor sets and nothing of the host's
+// environment: on the hub that environment holds the database password
+// (REGULUS_DATABASE_PASSWORD, #262).
+func TestAPluginGetsACleanEnvironment(t *testing.T) {
+	const secret = "the-database-password"
+	t.Setenv("REGULUS_DATABASE_PASSWORD", secret)
+	t.Setenv("HOME", "/root/secret-home")
+	root := t.TempDir()
+	pluginDir(t, root, "nosy", "env", RoleHub)
+	rs := startSupervisor(t, root, func(s *Supervisor) { s.Role = RoleHub })
+	waitFor(t, "the plugin to run", func() bool { return rs.state("nosy").State == StateRunning })
+	data, err := os.ReadFile(filepath.Join(rs.DataDir, "nosy", "env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		k, v, _ := strings.Cut(line, "=")
+		got[k] = v
+	}
+	// The wrapper script adds its own mode, and the shell PWD and SHLVL.
+	for _, k := range []string{"REGULUS_TEST_PLUGIN", "PWD", "SHLVL", "_", "OLDPWD"} {
+		delete(got, k)
+	}
+	want := map[string]string{
+		"PATH":             "/usr/local/bin:/usr/bin:/bin",
+		sdk.EnvSocket:      filepath.Join(rs.RunDir, "nosy.sock"),
+		sdk.EnvID:          "nosy",
+		sdk.EnvRole:        RoleHub,
+		sdk.EnvCoreVersion: "0.3.0",
+		sdk.EnvDataDir:     filepath.Join(rs.DataDir, "nosy"),
+	}
+	if len(got) != len(want) {
+		t.Errorf("environment = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q", k, got[k], v)
+		}
+	}
+	if strings.Contains(string(data), secret) {
+		t.Error("the database password reached the plugin")
 	}
 }

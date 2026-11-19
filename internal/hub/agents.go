@@ -63,6 +63,11 @@ type AgentInfo struct {
 	// be updated (Welcome.update_only). Its metrics are ignored and the only
 	// commands it gets are Ping and ApplyUpdate.
 	UpdateOnly bool
+	// PluginsEnabled and Plugins are what the agent last reported about its
+	// plugins (MetricsReport.plugins); they are kept here, not in the metrics
+	// history.
+	PluginsEnabled bool
+	Plugins        []*agentv1.PluginStatus
 }
 
 // Rejection is the last time the hub refused an enrolled agent because its
@@ -334,8 +339,13 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		if sanitizeReport(p.Metrics) {
 			s.logReportProblem(sess, "an agent report listed too many disks or interfaces; the rest was cut")
 		}
+		// The plugins are the current state, not history: they are kept with
+		// the agent and left out of the stored report.
+		enabled, plugins := p.Metrics.GetPluginsEnabled(), p.Metrics.GetPlugins()
+		p.Metrics.Plugins, p.Metrics.PluginsEnabled = nil, false
 		s.mu.Lock()
 		sess.info.LastMetrics = p.Metrics
+		sess.info.PluginsEnabled, sess.info.Plugins = enabled, plugins
 		s.mu.Unlock()
 		if sample, prev := s.metrics.add(sess.info.ID, p.Metrics); sample.Report != nil {
 			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: toPoint(sample, prev)})

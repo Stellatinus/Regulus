@@ -1,5 +1,5 @@
 // Package plugin finds, checks and runs plugins: separate programs that add
-// features to an agent or a hub and talk to it over gRPC on a local Unix
+// features to an agent or a hub (each starts a Supervisor with its role) and talk to it over gRPC on a local Unix
 // socket (proto/regulus/plugin/v1).
 //
 // The pieces, in the order a plugin goes through them:

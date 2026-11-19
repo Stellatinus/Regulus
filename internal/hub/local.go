@@ -30,6 +30,11 @@ func (h *Hub) localStatus(addr string) localstatus.Status {
 		h.checkDatabase(context.Background())
 		st.DatabaseProblem = h.dbState.get()
 	}
+	hp := h.HubPlugins()
+	st.PluginsEnabled, st.PluginsProblem = hp.Enabled, hp.Problem
+	for _, p := range hp.Plugins {
+		st.Plugins = append(st.Plugins, localstatus.Plugin{ID: p.ID, Version: p.Version, State: p.State, Restarts: p.Restarts, LastError: p.LastError, Since: p.Since})
+	}
 	now := time.Now()
 	for _, a := range h.Agents() {
 		j := toAgentJSON(a, now, h.StaleAfter())

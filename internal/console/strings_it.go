@@ -90,4 +90,16 @@ var it = strs{
 	MsgTurningOn:          "Attivo gli agent remoti…",
 	MsgSaved:              "Salvato %s = %s.",
 	ResetLinkTitle:        "Link per reimpostare la password",
+
+	// --- Plugin dell'hub (#262).
+	Plugins:            "Plugin dell'hub",
+	NoPlugins:          "La directory dei plugin non contiene plugin per l'hub.",
+	PluginRestarts:     "riavvii",
+	PluginStarting:     "in avvio",
+	PluginRunning:      "in esecuzione",
+	PluginRestarting:   "in riavvio",
+	PluginFailed:       "fallito",
+	PluginIncompatible: "incompatibile",
+	PluginStopped:      "fermato",
+	// --- end of the plugins block.
 }

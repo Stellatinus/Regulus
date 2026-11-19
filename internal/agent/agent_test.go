@@ -444,3 +444,57 @@ func TestHungCollectorDoesNotStopHeartbeats(t *testing.T) {
 		t.Fatal("no report after the collector came back")
 	}
 }
+
+// The state of the plugins goes with every metrics report; an agent without
+// plugins says so (#262).
+func TestMetricsReportCarriesThePlugins(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		plugins func() []*agentv1.PluginStatus
+		enabled bool
+		want    int
+	}{
+		{"no plugins directory", nil, false, 0},
+		{"plugins", func() []*agentv1.PluginStatus {
+			return []*agentv1.PluginStatus{{Id: "example-hello", Version: "0.1.0", State: "running"}}
+		}, true, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reports := make(chan *agentv1.MetricsReport, 1)
+			conn := newFakeHub(t, func(_ int, stream grpc.BidiStreamingServer[agentv1.AgentMessage, agentv1.HubMessage]) error {
+				if _, err := stream.Recv(); err != nil {
+					return err
+				}
+				if err := stream.Send(welcome("a", time.Hour, time.Hour)); err != nil {
+					return err
+				}
+				for {
+					msg, err := stream.Recv()
+					if err != nil {
+						return nil
+					}
+					if m := msg.GetMetrics(); m != nil {
+						select {
+						case reports <- m:
+						default:
+						}
+					}
+				}
+			})
+			o := opts()
+			o.Plugins = tc.plugins
+			runAgent(t, conn, o)
+			select {
+			case r := <-reports:
+				if r.GetPluginsEnabled() != tc.enabled || len(r.GetPlugins()) != tc.want {
+					t.Fatalf("enabled = %v, plugins = %v", r.GetPluginsEnabled(), r.GetPlugins())
+				}
+				if tc.want > 0 && r.GetPlugins()[0].GetState() != "running" {
+					t.Fatalf("plugins = %v", r.GetPlugins())
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("no metrics report")
+			}
+		})
+	}
+}

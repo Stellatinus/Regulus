@@ -31,6 +31,7 @@ import (
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/inproc"
 	"github.com/CodexCircle/Regulus/internal/pki"
+	"github.com/CodexCircle/Regulus/internal/plugin"
 	"github.com/CodexCircle/Regulus/internal/storage"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
@@ -62,6 +63,10 @@ type Hub struct {
 	listener  listenerState   // the agent listener, started by Serve or from the dashboard
 	agents    *agentServer
 	transport *inproc.Transport // lets the built-in agent reach the hub without a network port
+	plugins   atomic.Value      // *pluginRunner while plugins_dir is set and Serve runs
+	// pluginTune, if set, changes the plugin supervisor before it starts
+	// (tests).
+	pluginTune func(*plugin.Supervisor)
 }
 
 // Option customizes a Hub.
@@ -233,7 +238,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Version: h.version, DatabaseProblem: h.dbState.get}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Version: h.version, DatabaseProblem: h.dbState.get}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -268,6 +273,10 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 		}
 		defer stopAgent()
 	}
+
+	// The hub's plugins run beside its servers, each in its own process; they
+	// are stopped (SIGTERM, then SIGKILL) before Serve returns.
+	defer h.startPlugins(ctx)()
 
 	defer h.serveLocal(ln.Addr().String())()
 	h.watchDatabase(ctx)
@@ -427,6 +436,9 @@ type Deps struct {
 	// Rollout updates the managed servers to the version of the hub. May be nil
 	// in tests; the endpoints then answer 404.
 	Rollout RolloutControl
+	// Plugins reports the hub's own plugins. May be nil: GET /api/plugins then
+	// shows the hub's plugins as off.
+	Plugins PluginSource
 	// Version is the version the hub was built with. The enrollment answer
 	// carries it when it is a release, so a new agent installs the same one.
 	Version string
@@ -467,6 +479,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/agents/{id}/metrics", handler: need(auth.PermServersRead, metricsHandler(d.Agents))},
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
+		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(l.put))), needsAuth: true},

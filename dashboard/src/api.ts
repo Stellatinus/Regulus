@@ -614,3 +614,41 @@ export const startRollout = (waveSize: number) =>
 
 export const stopRollout = () =>
   request<RolloutStatus>("POST", "/api/updates/rollout/stop", {});
+
+// Plugins: what the hub and each agent run (GET /api/plugins, servers.read).
+// See docs/plugins/runtime.md for the states. An agent of a newer release may
+// report a state this dashboard does not know: show it as it is.
+export type PluginState =
+  | "starting"
+  | "running"
+  | "restarting"
+  | "failed"
+  | "incompatible"
+  | "stopped";
+
+export interface PluginStatus {
+  id: string;
+  version: string;
+  state: PluginState | (string & {});
+  // Times it was started again since the hub or the agent started.
+  restarts: number;
+  // Why it last stopped, failed or cannot run; absent while it runs.
+  last_error?: string;
+  // When it entered this state (RFC 3339).
+  since?: string;
+}
+
+export interface PluginsStatus {
+  hub: {
+    // false: the hub has no plugins directory (plugins_dir).
+    enabled: boolean;
+    // Why no plugin runs although enabled (the directory cannot be read).
+    problem?: string;
+    plugins: PluginStatus[];
+  };
+  // Connected agents that report a plugins directory, ordered by id.
+  agents: { id: string; name?: string; plugins: PluginStatus[] }[];
+}
+
+export const fetchPlugins = (signal?: AbortSignal) =>
+  request<PluginsStatus>("GET", "/api/plugins", undefined, signal);

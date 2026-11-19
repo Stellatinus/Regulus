@@ -39,6 +39,9 @@ type Check struct {
 // Agent is a connected agent as the hub reports it.
 type Agent = localstatus.Agent
 
+// Plugin is a plugin of the hub as the hub reports it.
+type Plugin = localstatus.Plugin
+
 // Snapshot is everything the console shows about the hub at one moment.
 type Snapshot struct {
 	Version string `json:"version"`
@@ -75,6 +78,11 @@ type Snapshot struct {
 	Uptime     string    `json:"uptime,omitempty"`
 	SetupToken string    `json:"setup_token,omitempty"`
 	Agents     []Agent   `json:"agents"`
+	// PluginsEnabled is true when the running hub has a plugins directory;
+	// Plugins is the state of its plugins and PluginsProblem why none runs.
+	PluginsEnabled bool     `json:"plugins_enabled,omitempty"`
+	PluginsProblem string   `json:"plugins_problem,omitempty"`
+	Plugins        []Plugin `json:"plugins,omitempty"`
 
 	Settings []config.Entry `json:"-"`
 	Health   []Check        `json:"health"`
@@ -196,6 +204,7 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 		}
 		snap.CAFingerprint = live.CAFingerprint
 		snap.DatabaseProblem = live.DatabaseProblem
+		snap.PluginsEnabled, snap.PluginsProblem, snap.Plugins = live.PluginsEnabled, live.PluginsProblem, live.Plugins
 	}
 	snap.Health = healthChecks(snap, cfg, fetchErr)
 	return snap

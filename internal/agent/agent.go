@@ -55,6 +55,10 @@ type Options struct {
 	// MinBackoff and MaxBackoff bound the wait between reconnection attempts
 	// (defaults 1s and 30s).
 	MinBackoff, MaxBackoff time.Duration
+	// Plugins, if set, returns the state of the plugins this agent runs; it is
+	// sent with every metrics report (MetricsReport.plugins). Nil: the agent
+	// runs no plugins (no plugins directory). It must not block.
+	Plugins func() []*agentv1.PluginStatus
 }
 
 // RejectedError is returned by Run when the hub refuses the agent for good:
@@ -369,6 +373,10 @@ func (a *agent) startCollection(ctx context.Context, reports chan<- *agentv1.Met
 		if err != nil {
 			a.log.Warn("collecting metrics failed", "err", err)
 			return
+		}
+		if a.opts.Plugins != nil && report != nil {
+			report.PluginsEnabled = true
+			report.Plugins = a.opts.Plugins()
 		}
 		select {
 		case reports <- report:

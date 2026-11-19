@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/CodexCircle/Regulus/internal/config"
+	"github.com/CodexCircle/Regulus/internal/plugin"
 )
 
 // Format is how a command prints.
@@ -92,6 +93,12 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 			return err
 		}
 	}
+	if snap.Running && snap.PluginsEnabled {
+		_, _ = fmt.Fprintf(w, "\n%s (%d)\n", T.Plugins, len(snap.Plugins))
+		for _, line := range pluginLines(snap) {
+			_, _ = fmt.Fprintln(w, "  "+line)
+		}
+	}
 
 	_, _ = fmt.Fprintln(w)
 	tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
@@ -129,6 +136,15 @@ func writeStatusPlain(w io.Writer, snap Snapshot, now time.Time) error {
 	p("agents", len(snap.Agents))
 	for _, a := range snap.Agents {
 		p("agent."+a.ID, a.Status+" "+heartbeat(a, now))
+	}
+	if snap.PluginsEnabled {
+		p("plugins", len(snap.Plugins))
+		if snap.PluginsProblem != "" {
+			p("plugins_problem", snap.PluginsProblem)
+		}
+		for _, pl := range snap.Plugins {
+			p("plugin."+pl.ID, fmt.Sprintf("%s %s restarts=%d", pl.State, pl.Version, pl.Restarts))
+		}
 	}
 	for _, c := range snap.Health {
 		p("check."+strings.ToLower(strings.ReplaceAll(c.Name, " ", "_")), c.Status+" "+c.Detail)
@@ -189,6 +205,46 @@ func onOff(b bool) string {
 		return T.On
 	}
 	return T.Off
+}
+
+// pluginState is a plugin state in the console's language; a state this
+// console does not know is shown as it is.
+func pluginState(s string) string {
+	switch s {
+	case plugin.StateStarting:
+		return T.PluginStarting
+	case plugin.StateRunning:
+		return T.PluginRunning
+	case plugin.StateRestarting:
+		return T.PluginRestarting
+	case plugin.StateFailed:
+		return T.PluginFailed
+	case plugin.StateIncompatible:
+		return T.PluginIncompatible
+	case plugin.StateStopped:
+		return T.PluginStopped
+	}
+	return s
+}
+
+// pluginLines describes the hub's plugins, one line each (and one for a
+// problem that keeps them all from running), for the text output and the TUI.
+func pluginLines(snap Snapshot) []string {
+	var out []string
+	if snap.PluginsProblem != "" {
+		out = append(out, snap.PluginsProblem)
+	}
+	if len(snap.Plugins) == 0 && snap.PluginsProblem == "" {
+		out = append(out, T.NoPlugins)
+	}
+	for _, p := range snap.Plugins {
+		line := fmt.Sprintf("%-20s %-10s %-14s %s %d", p.ID, p.Version, pluginState(p.State), T.PluginRestarts, p.Restarts)
+		if p.LastError != "" {
+			line += "  " + p.LastError
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // heartbeat describes when an agent was last heard from.

@@ -10,9 +10,10 @@ import { servers } from "./messages/servers.en";
 import { updates } from "./messages/updates.en";
 import { users } from "./messages/users.en";
 import { account } from "./messages/account.en";
+import { plugins } from "./messages/plugins.en";
 
-export const areas = { core, auth, servers, updates, users, account } as const;
+export const areas = { core, auth, servers, updates, users, account, plugins } as const;
 
-export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account } as const;
+export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account, ...plugins } as const;
 
 export type MessageKey = keyof typeof en;

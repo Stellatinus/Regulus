@@ -237,7 +237,7 @@ func newAPI(t *testing.T, h *Hub, role auth.Role) *api {
 	}
 	return &api{
 		t:       t,
-		handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Version: h.version}),
+		handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Version: h.version}),
 		cookie:  &http.Cookie{Name: auth.CookieName, Value: session},
 	}
 }

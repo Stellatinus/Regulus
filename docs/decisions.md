@@ -215,8 +215,18 @@ Choices made while writing the runtime, so they are not rediscovered:
 - **Clean environment**: a plugin gets only the variables it needs, never the agent's (which may hold settings or, on the hub, the database password).
 - **The manifest is strict** (unknown keys refused), like the configuration file, and `<X.Y.Z` in `requires` also leaves out the pre-releases of X.Y.Z, unlike plain SemVer.
 - **Directory = id, links refused** for plugin directories, and a command that leads outside its plugin directory after following links is refused.
-- **Agent first.** The supervisor is wired into `regulus agent` (`plugins_dir`, off by default). The hub's wiring needs its settings and status pages and is left for a follow-up.
+- **Agent first.** The supervisor was first wired into `regulus agent` (`plugins_dir`, off by default); the hub followed in #262 (below).
 - **Not done, on purpose:** signatures, installation, enforcement of permissions, a user per plugin. Until #20, the plugins directory must be writable by root only: who can write it decides what runs.
+
+## Plugins on the hub and their state (#262)
+
+- **The hub runs its plugins like an agent does.** `plugins_dir` (`--plugins-dir`, `REGULUS_PLUGINS_DIR`), off by default, read at start, also settable with `regulus config set`. The supervisor (role `hub`) starts in `Hub.Serve` beside the HTTP and agent servers and is stopped before `Serve` returns. Sockets in `<data_dir>/plugins-run`, plugin data in `<data_dir>/plugins-data/<id>`.
+- **The database password stays out.** The hub's environment holds `REGULUS_DATABASE_PASSWORD`; the supervisor builds each plugin's environment from nothing (it never copies `os.Environ`), and a test runs a plugin on a hub whose environment holds the password and checks what the plugin saw.
+- **Agents report their plugins with their metrics**, not in a new message: `MetricsReport.plugins` and `plugins_enabled` (fields 7 and 8), added to protocol 1 without raising `protocol.Version`, because an older hub ignores unknown fields and an older agent sends none (which reads as "no plugins directory"). The hub keeps the last list with the agent and removes it from the stored report, so it does not fill the hour of metrics history. Lists and texts are cut like the rest of a report (64 entries, 256 bytes).
+- **`GET /api/plugins` needs `servers.read`**: the state of what runs on the servers is read like the servers themselves, by every role. It says nothing a viewer could use to change anything; the plugins' errors are messages for an administrator (exit status, health message), not secrets.
+- **One JSON shape for the hub and for agents** (`id`, `version`, `state`, `restarts`, `last_error`, `since`); the process id is not sent.
+- **The console** shows the hub's plugins on the Status tab and in `regulus status`, only when the hub has a plugins directory, so nothing changes for a hub without one. The agents' plugins are in the dashboard only.
+- **Not done:** a manifest that is invalid is logged but not listed in the API (the supervisor only reports plugins it could read); no health check in the console for a failed plugin; no event on the live stream when a state changes (the dashboard polls).
 
 ## Managers, backends and apps (epic #286, proposed)
 

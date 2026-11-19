@@ -19,7 +19,8 @@ const (
 	maxAgentMessageBytes = 256 << 10
 	// maxAgentStreams bounds the streams of one connection; an agent uses one.
 	maxAgentStreams = 8
-	// maxListEntries bounds the disks and the network interfaces of a report.
+	// maxListEntries bounds the disks, the network interfaces and the plugins
+	// of a report.
 	maxListEntries = 64
 	// maxTextBytes bounds every text an agent reports (host name, version,
 	// mount point, interface name…).
@@ -71,6 +72,12 @@ func sanitizeReport(r *agentv1.MetricsReport) (cut bool) {
 	}
 	if len(r.Networks) > maxListEntries {
 		r.Networks, cut = r.Networks[:maxListEntries], true
+	}
+	if len(r.Plugins) > maxListEntries {
+		r.Plugins, cut = r.Plugins[:maxListEntries], true
+	}
+	for _, p := range r.Plugins {
+		p.Id, p.Version, p.State, p.LastError = cleanText(p.GetId()), cleanText(p.GetVersion()), cleanText(p.GetState()), cleanText(p.GetLastError())
 	}
 	for _, d := range r.Disks {
 		d.MountPoint, d.Filesystem = cleanText(d.GetMountPoint()), cleanText(d.GetFilesystem())
