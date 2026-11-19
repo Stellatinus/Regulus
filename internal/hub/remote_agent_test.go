@@ -237,7 +237,7 @@ func newAPI(t *testing.T, h *Hub, role auth.Role) *api {
 	}
 	return &api{
 		t:       t,
-		handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Version: h.version}),
+		handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Version: h.version, Certificates: h}),
 		cookie:  &http.Cookie{Name: auth.CookieName, Value: session},
 	}
 }
@@ -499,7 +499,7 @@ func TestAPIChecksPermissions(t *testing.T) {
 		}
 		return &api{
 			t:       t,
-			handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h}),
+			handler: NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Layouts: h, Log: quiet(), Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Certificates: h}),
 			cookie:  &http.Cookie{Name: auth.CookieName, Value: session},
 		}
 	}
@@ -518,6 +518,8 @@ func TestAPIChecksPermissions(t *testing.T) {
 		{as("nora4", "nothing"), "GET", "/api/layout", nil, http.StatusOK},
 		{as("vic", auth.RoleViewer), "POST", "/api/enrollment-tokens", map[string]string{}, http.StatusForbidden},
 		{as("vic2", auth.RoleViewer), "PATCH", "/api/agents/local", map[string]string{"name": "x"}, http.StatusForbidden},
+		{as("vic4", auth.RoleViewer), "GET", "/api/certificates", nil, http.StatusForbidden},
+		{as("olivia6", auth.RoleOperator), "GET", "/api/certificates", nil, http.StatusOK},
 		// Updating the core is not part of managing servers.
 		{as("olivia4", auth.RoleOperator), "GET", "/api/updates", nil, http.StatusForbidden},
 		{as("olivia5", auth.RoleOperator), "POST", "/api/updates/check", struct{}{}, http.StatusForbidden},

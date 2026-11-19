@@ -90,4 +90,15 @@ var it = strs{
 	MsgTurningOn:          "Attivo gli agent remoti…",
 	MsgSaved:              "Salvato %s = %s.",
 	ResetLinkTitle:        "Link per reimpostare la password",
+
+	// Scadenza dei certificati (#245).
+	Certificates:   "Certificati",
+	CertNoneSoon:   "nessuno scade entro 90 giorni; il primo a scadere:",
+	CertCA:         "certificato della CA",
+	CertListener:   "certificato del listener degli agent (si rinnova da solo)",
+	CertAgent:      "certificato dell'agent %s",
+	CertEnds:       "%s: scade il %s, tra %s giorni",
+	CertEnded:      "%s: scaduto il %s",
+	CertRenewAgent: "I certificati degli agent non si rinnovano ancora da soli (#128): revoca il server e registralo di nuovo con un nuovo token.",
+	CertRenewCA:    "La CA non si rinnova ancora da sola (#128): una nuova CA vuol dire registrare di nuovo ogni agent.",
 }

@@ -72,6 +72,9 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 		row(T.Database, snap.Database)
 	}
 	row(T.ConfigFile, orDash(snap.ConfigFile, T.None))
+	if snap.CertSoonest != nil {
+		row(T.Certificates, describeCert(*snap.CertSoonest, now))
+	}
 	if snap.Problem != "" {
 		row("Problem", snap.Problem)
 	}
@@ -125,6 +128,12 @@ func writeStatusPlain(w io.Writer, snap Snapshot, now time.Time) error {
 	}
 	if snap.SetupToken != "" {
 		p("setup_token", snap.SetupToken)
+	}
+	if c := snap.CertSoonest; c != nil {
+		p("cert_soonest", strings.TrimSpace(c.Kind+" "+c.AgentID)+" "+c.NotAfter.UTC().Format(time.RFC3339))
+	}
+	for _, c := range snap.CertWarnings {
+		p("cert_warning", strings.TrimSpace(c.Kind+" "+c.AgentID)+" "+c.NotAfter.UTC().Format(time.RFC3339))
 	}
 	p("agents", len(snap.Agents))
 	for _, a := range snap.Agents {

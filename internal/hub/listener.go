@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/CodexCircle/Regulus/internal/auth"
 )
@@ -106,6 +107,7 @@ func (h *Hub) stopAgentListener() {
 		h.listener.stop = nil
 	}
 	h.agentAddr.Store("")
+	h.listenerCertEnd.Store(time.Time{})
 }
 
 // AgentListener reports whether remote agents can connect, and where.

@@ -37,6 +37,10 @@ func TestLocalStatusSocket(t *testing.T) {
 	if len(st.Agents) != 1 || st.Agents[0].ID != BuiltinAgentID || st.Agents[0].Status != statusConnected {
 		t.Errorf("agents = %+v", st.Agents)
 	}
+	// Remote agents are off: the soonest certificate is the CA, 20 years away.
+	if st.CertSoonest == nil || st.CertSoonest.Kind != CertKindCA || !st.CertSoonest.NotAfter.Equal(h.fleet.CA().NotAfter()) || len(st.CertWarnings) != 0 {
+		t.Errorf("certificates = %+v, %+v", st.CertSoonest, st.CertWarnings)
+	}
 	// No admin yet: the console shows the one-time token.
 	if st.SetupToken == "" || st.SetupToken != h.auth.SetupToken() {
 		t.Errorf("setup token = %q", st.SetupToken)

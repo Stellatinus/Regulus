@@ -75,6 +75,10 @@ type Snapshot struct {
 	Uptime     string    `json:"uptime,omitempty"`
 	SetupToken string    `json:"setup_token,omitempty"`
 	Agents     []Agent   `json:"agents"`
+	// CertSoonest is the hub's certificate that ends first, and CertWarnings
+	// the CA and agent certificates that end within 90 days (see certs.go).
+	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
+	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
 
 	Settings []config.Entry `json:"-"`
 	Health   []Check        `json:"health"`
@@ -196,8 +200,12 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 		}
 		snap.CAFingerprint = live.CAFingerprint
 		snap.DatabaseProblem = live.DatabaseProblem
+		snap.CertSoonest, snap.CertWarnings = live.CertSoonest, live.CertWarnings
 	}
 	snap.Health = healthChecks(snap, cfg, fetchErr)
+	if c, ok := certCheck(snap, sys.Now()); ok {
+		snap.Health = append(snap.Health, c)
+	}
 	return snap
 }
 

@@ -136,6 +136,16 @@ One page of 30 releases could be filled by plugin releases (planned in the same 
 
 Withheld or stale answers (a "freeze") cannot be told from "no new release" without signed metadata that expires. That is **not done**: the hub now records when a check last **succeeded** and the Updates page warns after three days without one, which covers the common case (a hub that lost its internet access). A signed `latest.json` with an expiry is left for a later issue.
 
+## Certificate end dates: kept, shown and warned about (audit issue #245)
+
+Agent certificates last five years and the CA twenty, with no renewal (#128), and nobody was told when one ends. Choices:
+
+- **The agent's end date is stored, not recomputed.** `agents.cert_not_after` (migration 0010, both backends) is written at enrollment from the signed certificate. Agents enrolled earlier are filled in from the certificate they present on their next connection (only when its serial is the one issued for them); the hub does not keep agent certificates, and computing `created_at + 5 years` would be a guess. Until then the date is unknown and counted in `agents_unknown`. The agent protocol is unchanged.
+- **One endpoint for the hub-level dates, one field per agent.** `GET /api/certificates` for the CA, the listener, the soonest and the warnings; `cert_not_after` in the existing agent answers for the Servers page. It needs `servers.manage`, like the other trust settings (tokens, the listener): renewing is that permission's job, and a viewer has nothing to act on.
+- **What is warned about:** the CA and agents that are not revoked, within 90 days or already ended. The listener is not: it renews itself 30 days before its end (#204). The warning carries data only; the dashboard writes the text in both languages.
+- **One log line a day**, not one per certificate: checked every hour, logged at start and then at most once in 24 hours while something ends soon. A restart logs it again.
+- **Not verified on a real machine:** the dates shown on a real install and the daily log line under journald (to be added to the certificate test, #241).
+
 ## Remote agents from the dashboard
 
 Remote agents can be turned on from the dashboard (#90), so that enrolling a second server needs no terminal on the hub. The choice is kept in the database, because the hub runs as `regulus` and cannot write `/etc/regulus/config.yaml`. `agent_listen` in the configuration always wins: when it is set the dashboard shows it and cannot change it. Turning the listener on needs `servers.manage`, the same permission as making enrollment tokens, since one is useless without the other; it is audited. Turning it off from the dashboard is not offered yet.

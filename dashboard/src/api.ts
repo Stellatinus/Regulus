@@ -28,6 +28,10 @@ export interface Agent {
   last_heartbeat: string | null;
   metrics_at: string | null;
   uptime_seconds: number | null;
+  // When the agent's client certificate ends (RFC 3339). Absent for the
+  // built-in agent, and for an agent enrolled before the hub kept the date
+  // until it next connects.
+  cert_not_after?: string;
 }
 
 // User as returned by the authentication endpoints (see internal/auth).
@@ -176,6 +180,36 @@ export const renameAgent = (id: string, name: string) =>
 
 export const revokeAgent = (id: string) =>
   request<void>("DELETE", `/api/agents/${encodeURIComponent(id)}`, {});
+
+// One of the hub's certificates and when it ends (see GET /api/certificates).
+export interface CertificateEnd {
+  kind: "ca" | "listener" | "agent";
+  // For kind "agent": the agent, and its name (else its host name).
+  agent_id?: string;
+  name?: string;
+  not_after: string;
+  // Whole days until it ends; negative once it has ended.
+  days_left: number;
+}
+
+// When the hub's certificates end (GET /api/certificates, needs
+// servers.manage). warnings holds the CA and agent certificates that end
+// within warn_days, soonest first: they are not renewed automatically yet
+// (#128), so an agent is revoked and enrolled again, and a new CA means every
+// agent enrolls again.
+export interface Certificates {
+  ca: CertificateEnd;
+  // null while remote agents are off; it renews itself 30 days before its end.
+  listener: CertificateEnd | null;
+  soonest: CertificateEnd;
+  // Enrolled agents whose end date the hub learns when they next connect.
+  agents_unknown: number;
+  warn_days: number;
+  warnings: CertificateEnd[];
+}
+
+export const fetchCertificates = (signal?: AbortSignal) =>
+  request<Certificates>("GET", "/api/certificates", undefined, signal);
 
 export const fetchMe = (signal?: AbortSignal) =>
   request<Me>("GET", "/api/auth/me", undefined, signal);

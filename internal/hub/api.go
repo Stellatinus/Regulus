@@ -69,6 +69,18 @@ type agentJSON struct {
 	// UpdateOnly: the agent is too old for this hub and is connected only to
 	// be updated (compatibility "too_old"); it sends no metrics.
 	UpdateOnly bool `json:"update_only,omitempty"`
+	// CertNotAfter is when the agent's client certificate ends; absent for the
+	// built-in agent and while the hub does not know it (#245).
+	CertNotAfter *time.Time `json:"cert_not_after,omitempty"`
+}
+
+// withRegistry adds what the registry knows of an enrolled agent to its JSON.
+func (j *agentJSON) withRegistry(e fleet.Agent) {
+	j.Name = e.Name
+	if !e.CertNotAfter.IsZero() {
+		t := e.CertNotAfter.UTC()
+		j.CertNotAfter = &t
+	}
 }
 
 func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON {
@@ -145,7 +157,7 @@ func agentsHandler(src AgentSource) http.HandlerFunc {
 			seen := map[string]bool{}
 			for _, a := range src.Agents() {
 				j := toAgentJSON(a, now, staleAfter)
-				j.Name = names[a.ID].Name
+				j.withRegistry(names[a.ID])
 				agents = append(agents, j)
 				seen[a.ID] = true
 			}
@@ -170,7 +182,8 @@ type rejectionSource interface {
 
 // offlineJSON is the JSON form of an enrolled agent that is not connected.
 func offlineJSON(e fleet.Agent, src AgentSource) agentJSON {
-	out := agentJSON{ID: e.ID, Name: e.Name, Version: e.Version, Status: statusOffline, Hostname: e.Hostname, OSVersion: e.OSVersion}
+	out := agentJSON{ID: e.ID, Version: e.Version, Status: statusOffline, Hostname: e.Hostname, OSVersion: e.OSVersion}
+	out.withRegistry(e)
 	if e.Revoked {
 		out.Status = statusRevoked
 	} else if rs, ok := src.(rejectionSource); ok {
@@ -360,7 +373,7 @@ func agentGetHandler(src AgentSource) http.HandlerFunc {
 					j := toAgentJSON(a, now, staleAfter)
 					for _, e := range enrolled {
 						if e.ID == id {
-							j.Name = e.Name
+							j.withRegistry(e)
 						}
 					}
 					writeJSONBody(w, http.StatusOK, j)

@@ -30,7 +30,8 @@ const (
 	caValidity     = 20 * 365 * 24 * time.Hour
 	serverValidity = 365 * 24 * time.Hour
 	// ClientValidity is how long the certificate of an agent is valid. There is
-	// no renewal yet, so it is long; revocation does not depend on it.
+	// no renewal yet (#128), so it is long; revocation does not depend on it.
+	// The hub keeps each agent's end date and warns before it (#245).
 	ClientValidity = 5 * 365 * 24 * time.Hour
 
 	clockSkew = 5 * time.Minute
@@ -129,6 +130,10 @@ func newSerial() (*big.Int, error) {
 
 // CertDER is the certificate of the CA.
 func (ca *CA) CertDER() []byte { return ca.cert.Raw }
+
+// NotAfter is when the certificate of the CA ends. After it, no agent trusts
+// the hub and no agent certificate verifies.
+func (ca *CA) NotAfter() time.Time { return ca.cert.NotAfter }
 
 // Fingerprint is what an agent pins to trust this hub, as "sha256:" followed by
 // 64 hex digits.
@@ -243,6 +248,8 @@ func (ca *CA) ServerTLS(cert tls.Certificate) *tls.Config {
 type Identity struct {
 	AgentID string
 	Serial  string // hex
+	// NotAfter is when the certificate ends.
+	NotAfter time.Time
 }
 
 // ClientIdentity returns the identity from the state of a TLS connection, or
@@ -255,5 +262,5 @@ func ClientIdentity(state tls.ConnectionState) (Identity, bool) {
 	if leaf.Subject.CommonName == "" {
 		return Identity{}, false
 	}
-	return Identity{AgentID: leaf.Subject.CommonName, Serial: leaf.SerialNumber.Text(16)}, true
+	return Identity{AgentID: leaf.Subject.CommonName, Serial: leaf.SerialNumber.Text(16), NotAfter: leaf.NotAfter}, true
 }
