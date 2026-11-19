@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -229,11 +230,17 @@ func parseCPUTimes(content string) (cpuTimes, error) {
 			}
 			v[i] = n
 		}
+		// The sums are checked: counters that do not fit together in 64 bits
+		// are not from a real kernel, and a wrapped total would make busy
+		// time larger than the total.
 		var total uint64
 		for _, n := range v {
+			if total+n < total {
+				return cpuTimes{}, fmt.Errorf("invalid cpu line %q: counters overflow", line)
+			}
 			total += n
 		}
-		idle := v[3] + v[4]
+		idle := v[3] + v[4] // cannot overflow: both are part of total
 		return cpuTimes{busy: total - idle, total: total}, nil
 	}
 	return cpuTimes{}, errors.New("no cpu line in /proc/stat")
@@ -283,6 +290,9 @@ func parseMemInfo(content string) (*agentv1.MemoryMetrics, error) {
 			continue
 		}
 		if len(fields) > 1 && fields[1] == "kB" {
+			if n > math.MaxUint64/1024 {
+				continue // does not fit in bytes: not a real value
+			}
 			n *= 1024
 		}
 		values[name] = n
@@ -293,7 +303,7 @@ func parseMemInfo(content string) (*agentv1.MemoryMetrics, error) {
 	}
 	available, ok := values["MemAvailable"]
 	if !ok { // kernels before 3.14
-		available = values["MemFree"] + values["Buffers"] + values["Cached"]
+		available = saturatingSum(values["MemFree"], values["Buffers"], values["Cached"])
 	}
 	available = min(available, total)
 	swapTotal := values["SwapTotal"]
@@ -305,6 +315,19 @@ func parseMemInfo(content string) (*agentv1.MemoryMetrics, error) {
 		SwapTotalBytes: swapTotal,
 		SwapUsedBytes:  swapTotal - swapFree,
 	}, nil
+}
+
+// saturatingSum adds the values, stopping at the largest uint64 instead of
+// wrapping around to a small number.
+func saturatingSum(values ...uint64) uint64 {
+	var sum uint64
+	for _, v := range values {
+		if sum+v < sum {
+			return math.MaxUint64
+		}
+		sum += v
+	}
+	return sum
 }
 
 type mount struct {
@@ -357,9 +380,12 @@ func unescapeMount(s string) string {
 }
 
 // parseNetDev returns the received and transmitted byte counters of every
-// interface except loopback, from /proc/net/dev.
+// interface except loopback, from /proc/net/dev. A line without a name, and a
+// name already seen, are skipped: the hub matches the counters of two reports
+// by name to compute a rate.
 func parseNetDev(content string) []*agentv1.NetworkMetrics {
 	var nets []*agentv1.NetworkMetrics
+	seen := map[string]bool{}
 	sc := bufio.NewScanner(strings.NewReader(content))
 	for sc.Scan() {
 		name, rest, ok := strings.Cut(sc.Text(), ":")
@@ -368,7 +394,7 @@ func parseNetDev(content string) []*agentv1.NetworkMetrics {
 		}
 		name = strings.TrimSpace(name)
 		fields := strings.Fields(rest) // rx: bytes packets errs drop fifo frame compressed multicast; tx: bytes ...
-		if name == "lo" || len(fields) < 9 {
+		if name == "" || name == "lo" || seen[name] || len(fields) < 9 {
 			continue
 		}
 		rx, err1 := strconv.ParseUint(fields[0], 10, 64)
@@ -376,6 +402,7 @@ func parseNetDev(content string) []*agentv1.NetworkMetrics {
 		if err1 != nil || err2 != nil {
 			continue
 		}
+		seen[name] = true
 		nets = append(nets, &agentv1.NetworkMetrics{Interface: name, RxBytes: rx, TxBytes: tx})
 	}
 	return nets

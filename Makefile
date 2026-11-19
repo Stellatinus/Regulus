@@ -1,4 +1,4 @@
-.PHONY: dashboard build lint test test-postgres smoke proto proto-check proto-breaking clean
+.PHONY: dashboard build lint test test-postgres smoke fuzz proto proto-check proto-breaking clean
 
 # Build the dashboard into internal/webui/dist so it is embedded in the binary.
 dashboard:
@@ -31,6 +31,18 @@ test-postgres:
 # Start the built binary and check it end to end (run make build first).
 smoke:
 	scripts/smoke.sh bin/regulus
+
+# Run every fuzz target for FUZZTIME each (the nightly Fuzz workflow uses 30s).
+# A plain `go test` already runs their seed corpora.
+FUZZTIME ?= 30s
+FUZZ_TARGETS := ./internal/agent:FuzzParseCPUTimes ./internal/agent:FuzzParseMemInfo \
+	./internal/agent:FuzzParseMounts ./internal/agent:FuzzParseNetDev \
+	./internal/agent:FuzzUnescapeMount ./internal/hub:FuzzNetworkRate
+fuzz:
+	@set -e; for t in $(FUZZ_TARGETS); do \
+		echo "fuzz $${t#*:}"; \
+		go test $${t%%:*} -run '^$$' -fuzz "^$${t#*:}$$" -fuzztime $(FUZZTIME); \
+	done
 
 # Regenerate internal/gen from proto/ (generated code is committed, so a normal
 # build does not need these tools). Tool versions are pinned here.

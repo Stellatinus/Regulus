@@ -341,3 +341,44 @@ func TestHungMountIsLeftOutAndNotAskedAgain(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// Inputs the fuzz targets (collector_fuzz_test.go) found, kept as regression
+// tests.
+
+func TestParseCPUTimesRejectsCountersThatOverflow(t *testing.T) {
+	// The total wrapped to 4 while idle is 5: busy time came out larger
+	// than the total.
+	if got, err := parseCPUTimes("cpu 18446744073709551615 0 0 5 0\n"); err == nil {
+		t.Fatalf("got %+v, want an error", got)
+	}
+}
+
+func TestParseMemInfoSkipsKBValuesThatDoNotFitInBytes(t *testing.T) {
+	// 2^54 kB is 2^64 bytes, which wrapped to a total of 0.
+	if m, err := parseMemInfo("MemTotal: 18014398509481984 kB\nMemAvailable: 1 kB\n"); err == nil {
+		t.Fatalf("got %v, want an error (no usable MemTotal)", m)
+	}
+	// Without MemAvailable the fallback sum must not wrap either.
+	m, err := parseMemInfo("MemTotal: 4096\nMemFree: 18446744073709551615\nBuffers: 18446744073709551615\nCached: 2\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.GetAvailableBytes() != 4096 || m.GetUsedBytes() != 0 {
+		t.Errorf("available %d, used %d; want 4096 and 0", m.GetAvailableBytes(), m.GetUsedBytes())
+	}
+}
+
+func TestParseNetDevSkipsUnnamedAndRepeatedInterfaces(t *testing.T) {
+	nets := parseNetDev("eth0:1 0 0 0 0 0 0 0 2 0 0 0 0 0 0 0\n: 1 2 3 4 5 6 7 8 9\neth0: 3 0 0 0 0 0 0 0 4 0 0 0 0 0 0 0\n")
+	if len(nets) != 1 || nets[0].GetInterface() != "eth0" || nets[0].GetRxBytes() != 1 {
+		t.Fatalf("got %v, want eth0 once, with its first counters", nets)
+	}
+}
+
+func TestUnescapeMountAtTheEnd(t *testing.T) {
+	for in, want := range map[string]string{`a\040`: "a ", `a\04`: `a\04`, `a\`: `a\`, `\134`: `\`, `\400`: `\400`} {
+		if got := unescapeMount(in); got != want {
+			t.Errorf("unescapeMount(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
