@@ -138,6 +138,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: sh scripts/test-install.sh
       - run: sh scripts/test-next-version.sh
+      - run: sh scripts/test-update-recover.sh
 
   dashboard:
     name: Dashboard (lint, typecheck, test, build)
@@ -187,3 +188,10 @@ jobs:
           go-version-file: go.mod
       - run: make proto-check
         if: hashFiles('proto/buf.yaml') != ''
+      # An older hub or agent must still read what this one sends
+      # (docs/versioning.md): no field renumbered, retyped or removed compared
+      # with the main branch. The checkout has no other branch, so buf reads
+      # main from the repository itself.
+      - name: Protobuf compatibility with main (buf breaking)
+        if: hashFiles('proto/buf.yaml') != ''
+        run: make proto-breaking PROTO_AGAINST='https://github.com/${{ github.repository }}.git#branch=main,subdir=proto'

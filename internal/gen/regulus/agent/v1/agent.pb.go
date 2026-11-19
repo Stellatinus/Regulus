@@ -10,9 +10,16 @@
 // hub. The built-in agent of the hub uses exactly the same contract through
 // an in-process transport, so remote agents need no separate protocol.
 //
-// Compatibility rules (see also docs in the design): fields are only added,
-// never renumbered or reused; a breaking change bumps protocol_version and is
-// negotiated in the Hello/Welcome exchange.
+// Compatibility rules (docs/versioning.md): fields are only added, never
+// renumbered, retyped or reused (CI runs `buf breaking`); a change in meaning
+// that an older peer cannot follow bumps protocol_version and is negotiated in
+// the Hello/Welcome exchange.
+//
+// The update contract is the part that never changes its meaning, in any
+// protocol version, because it is what brings an old agent up to date: Hello,
+// Welcome, Reject, Heartbeat, Command with ApplyUpdate (and Ping),
+// CommandResult, and FetchUpdate with its messages. A hub speaks it to every
+// agent that was ever released (see Welcome.update_only).
 
 package agentv1
 
@@ -547,8 +554,16 @@ type Welcome struct {
 	HeartbeatInterval *durationpb.Duration `protobuf:"bytes,4,opt,name=heartbeat_interval,json=heartbeatInterval,proto3" json:"heartbeat_interval,omitempty"`
 	// How often the agent must send a MetricsReport.
 	MetricsInterval *durationpb.Duration `protobuf:"bytes,5,opt,name=metrics_interval,json=metricsInterval,proto3" json:"metrics_interval,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The agent is too old for this hub (its release, or the protocol versions
+	// it speaks) and was admitted only to be updated: the hub sends ApplyUpdate
+	// and Ping and nothing else, and ignores everything the agent sends but
+	// heartbeats and command results. An agent that knows this field stops
+	// collecting metrics; an older one ignores it and its reports are dropped.
+	UpdateOnly bool `protobuf:"varint,6,opt,name=update_only,json=updateOnly,proto3" json:"update_only,omitempty"`
+	// Why, for the agent's log. Set with update_only.
+	Notice        string `protobuf:"bytes,7,opt,name=notice,proto3" json:"notice,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Welcome) Reset() {
@@ -614,6 +629,20 @@ func (x *Welcome) GetMetricsInterval() *durationpb.Duration {
 		return x.MetricsInterval
 	}
 	return nil
+}
+
+func (x *Welcome) GetUpdateOnly() bool {
+	if x != nil {
+		return x.UpdateOnly
+	}
+	return false
+}
+
+func (x *Welcome) GetNotice() string {
+	if x != nil {
+		return x.Notice
+	}
+	return ""
 }
 
 // Reject refuses the agent; the hub closes the stream right after.
@@ -1558,14 +1587,17 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x06kernel\x18\x04 \x01(\tR\x06kernel\x12\x12\n" +
 	"\x04arch\x18\x05 \x01(\tR\x04arch\x12\x1b\n" +
 	"\tcpu_count\x18\x06 \x01(\rR\bcpuCount\x12,\n" +
-	"\x12memory_total_bytes\x18\a \x01(\x04R\x10memoryTotalBytes\"\x80\x02\n" +
+	"\x12memory_total_bytes\x18\a \x01(\x04R\x10memoryTotalBytes\"\xb9\x02\n" +
 	"\aWelcome\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12\x1f\n" +
 	"\vhub_version\x18\x02 \x01(\tR\n" +
 	"hubVersion\x12\x19\n" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x12H\n" +
 	"\x12heartbeat_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\x11heartbeatInterval\x12D\n" +
-	"\x10metrics_interval\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x0fmetricsInterval\"\xbd\x02\n" +
+	"\x10metrics_interval\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x0fmetricsInterval\x12\x1f\n" +
+	"\vupdate_only\x18\x06 \x01(\bR\n" +
+	"updateOnly\x12\x16\n" +
+	"\x06notice\x18\a \x01(\tR\x06notice\"\xbd\x02\n" +
 	"\x06Reject\x127\n" +
 	"\x06reason\x18\x01 \x01(\x0e2\x1f.regulus.agent.v1.Reject.ReasonR\x06reason\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +

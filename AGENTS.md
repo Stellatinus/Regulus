@@ -7,6 +7,7 @@ Everything an agent needs to work on Regulus is in this repository. Read these b
 - [docs/architecture.md](docs/architecture.md): how hub, agents, trust, data and updates fit together, with diagrams.
 - [docs/glossary.md](docs/glossary.md): what each term means today; add new terms here.
 - [docs/hub-redundancy.md](docs/hub-redundancy.md): the guide to the result of epic #103; a design issue of #103 is not complete until its section is here.
+- [docs/versioning.md](docs/versioning.md): the contracts between versions (agent protocol, the frozen update contract, helper files); read it before touching `proto/`.
 - [docs/decisions.md](docs/decisions.md): why things are the way they are, what is still open, what has not been verified on a real machine.
 - [docs/plugins.md](docs/plugins.md): the plugin design draft (milestone M6).
 

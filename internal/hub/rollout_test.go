@@ -190,6 +190,43 @@ func TestRolloutUpdatesAnAgentBehind(t *testing.T) {
 	}
 }
 
+// A server that was off for months (two release series behind, which the
+// hub would otherwise refuse) is connected only to be updated, and the
+// rollout takes it straight to the hub's version from the dashboard (#212).
+func TestRolloutUpdatesAnAgentThatIsTooOld(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	admin := newAPI(t, h, auth.RoleAdmin)
+	creds := enrollNew(t, h, "was-off")
+	dir := t.TempDir()
+	stop := runAgentUpdating(t, h, creds, "9.7.0", dir)
+	waitFor(t, "the old agent", func() bool { return len(h.Agents()) == 1 })
+
+	st := decodeRollout(t, admin.do("GET", "/api/updates/rollout", nil))
+	if len(st.Candidates) != 1 || st.Candidates[0].From != "9.7.0" {
+		t.Fatalf("candidates = %+v", st.Candidates)
+	}
+	if rec := admin.do("POST", "/api/updates/rollout", map[string]any{"wave_size": 1}); rec.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %s", rec.Code, rec.Body)
+	}
+	applyDir := update.ApplyDir(dir)
+	waitFor(t, "the request for the installer", func() bool { _, ok := update.ReadRequest(applyDir); return ok })
+	if req, _ := update.ReadRequest(applyDir); req.Version != "9.9.9" {
+		t.Errorf("request = %+v, want straight to 9.9.9", req)
+	}
+	waitInstalling(t, admin)
+	_ = os.Remove(filepath.Join(applyDir, "request.json"))
+	stop()
+	runAgentUpdating(t, h, creds, "9.9.9", dir)
+
+	st = waitRollout(t, admin, RolloutDone)
+	if len(st.Agents) != 1 || st.Agents[0].Status != AgentUpdated {
+		t.Errorf("after: %+v", st)
+	}
+	if a := h.Agents(); len(a) != 1 || a[0].UpdateOnly || a[0].Compat != update.CompatCurrent {
+		t.Errorf("after the update: %+v", a)
+	}
+}
+
 func TestRolloutStopsAtTheFirstFailure(t *testing.T) {
 	h, _ := startRolloutHub(t)
 	admin := newAPI(t, h, auth.RoleAdmin)

@@ -374,8 +374,20 @@ func (in *Installer) restartAndWatch(ctx context.Context, want string) error {
 // schemaBefore the schema version it has. The note says what was done to the
 // database, for the message the hub shows.
 func (in *Installer) rollback(ctx context.Context, backup, want, snapshot string, schemaBefore int) (note string, err error) {
+	if note, err = in.putBack(ctx, backup, want, snapshot, schemaBefore, true); err != nil {
+		return "", err
+	}
+	return note, in.restartOn(ctx, want)
+}
+
+// putBack is the part of a rollback that works on files: the database, when
+// the new version changed its schema, then the executable, which must then
+// report the version want. stop says whether the service may be running and
+// has to be stopped before the database is looked at; before the service
+// starts with the machine it is false, and nothing is asked of systemd.
+func (in *Installer) putBack(ctx context.Context, backup, want, snapshot string, schemaBefore int, stop bool) (note string, err error) {
 	if snapshot != "" {
-		if note, err = in.restoreDatabase(ctx, snapshot, schemaBefore); err != nil {
+		if note, err = in.restoreDatabase(ctx, snapshot, schemaBefore, stop); err != nil {
 			return "", err
 		}
 	}
@@ -388,16 +400,21 @@ func (in *Installer) rollback(ctx context.Context, backup, want, snapshot string
 		return "", err
 	}
 	syncDir(filepath.Dir(in.Binary), in.Log)
-	return note, in.restartOn(ctx, want)
+	if v, verr := in.installedVersion(ctx); verr != nil || v.String() != want {
+		return "", fmt.Errorf("the copy kept of version %s does not report that version (%v, %v)", want, v, verr)
+	}
+	return note, nil
 }
 
-// restoreDatabase stops the service, which has the database open, and puts the
+// restoreDatabase stops the service (when stop is set), which has the database open, and puts the
 // copy back when the schema moved past it (or cannot be read). Nothing is
 // restored when the new version did not change the schema: the old version can
 // read that database, and what was written since is not lost.
-func (in *Installer) restoreDatabase(ctx context.Context, snapshot string, schemaBefore int) (string, error) {
-	if _, err := in.Run(ctx, "systemctl", "stop", in.Unit); err != nil {
-		return "", fmt.Errorf("stopping %s to look at the database: %w", in.Unit, err)
+func (in *Installer) restoreDatabase(ctx context.Context, snapshot string, schemaBefore int, stop bool) (string, error) {
+	if stop {
+		if _, err := in.Run(ctx, "systemctl", "stop", in.Unit); err != nil {
+			return "", fmt.Errorf("stopping %s to look at the database: %w", in.Unit, err)
+		}
 	}
 	now, verr := storage.SQLiteSchemaVersion(ctx, in.DataDir)
 	if verr == nil && now <= schemaBefore {
