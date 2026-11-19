@@ -97,6 +97,14 @@ type strs struct {
 	PortServed, PortInUse, PortPrivileged, PortError, PortFree                 string
 	DataMissing, DataNotWritable, DataWritable                                 string
 	DBProblem, DBAnswers, DBLater, DBFile, DBNone                              string
+
+	// Certificate end dates (#245), kept in a block of their own. CertAgent
+	// takes the agent; CertEnds takes the certificate, the date and the days
+	// left; CertEnded the certificate and the date.
+	Certificates, CertNoneSoon      string
+	CertCA, CertListener, CertAgent string
+	CertEnds, CertEnded             string
+	CertRenewAgent, CertRenewCA     string
 }
 
 var en = strs{
@@ -241,6 +249,17 @@ var en = strs{
 	DBLater:         "%s (checked while the hub runs; `regulus db check` tries it now)",
 	DBFile:          "%s, %s",
 	DBNone:          "none yet",
+
+	// Certificate end dates (#245).
+	Certificates:   "Certificates",
+	CertNoneSoon:   "none ends within 90 days; the first to end:",
+	CertCA:         "CA certificate",
+	CertListener:   "agent listener certificate (renewed by itself)",
+	CertAgent:      "certificate of agent %s",
+	CertEnds:       "%s: ends on %s, in %s days",
+	CertEnded:      "%s: ended on %s",
+	CertRenewAgent: "Agent certificates are not renewed automatically yet (#128): revoke the server and enroll it again with a new token.",
+	CertRenewCA:    "The CA is not renewed automatically yet (#128): a new CA means every agent must enroll again.",
 }
 
 // T is the language in use. It is English until UseLocale picks another.

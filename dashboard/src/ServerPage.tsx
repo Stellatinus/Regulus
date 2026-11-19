@@ -17,6 +17,7 @@ import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
 import { ConfirmButton } from "./ui";
+import { daysLeft } from "./CertificateBanner";
 import { useT } from "./i18n";
 import { registry } from "./widgets";
 import { widgetTitle } from "./widgets/registry";
@@ -152,6 +153,12 @@ function Details({
           <dt>{t("servers.fact.lastContact")}</dt>
           <dd>{lastContact(agent, t)}</dd>
         </div>
+        {agent.id !== "local" && (
+          <div>
+            <dt>{t("servers.fact.certificate")}</dt>
+            <dd>{certificateEnd(agent.cert_not_after, t)}</dd>
+          </div>
+        )}
       </dl>
       {canManage && agent.id !== "local" && (
         <Manage agent={agent} onChanged={onChanged} />
@@ -199,6 +206,19 @@ function Details({
       )}
     </>
   );
+}
+
+// certificateEnd says when an agent's certificate ends (#245).
+function certificateEnd(
+  notAfter: string | undefined,
+  t: ReturnType<typeof useT>,
+): string {
+  if (!notAfter) return t("servers.fact.certificateUnknown");
+  const date = new Date(notAfter).toLocaleDateString();
+  const days = daysLeft(notAfter);
+  return days < 0
+    ? t("servers.fact.certificateEnded", { date })
+    : t("servers.fact.certificateIn", { date, days });
 }
 
 function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {

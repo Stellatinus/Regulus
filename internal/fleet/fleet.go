@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -74,6 +75,10 @@ type Agent struct {
 	LastSeen   time.Time // zero if it never connected
 	Revoked    bool
 	RevokedAt  time.Time
+	// CertNotAfter is when the agent's client certificate ends; zero when the
+	// hub does not know it yet (an agent enrolled before the hub kept it, until
+	// it next connects).
+	CertNotAfter time.Time
 }
 
 // Service is the registry of remote agents.
@@ -290,6 +295,10 @@ func (s *Service) Enroll(ctx context.Context, remote, token string, csrDER []byt
 	if err != nil {
 		return Enrolled{}, &RequestError{err}
 	}
+	leaf, err := x509.ParseCertificate(certDER)
+	if err != nil {
+		return Enrolled{}, err
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -308,8 +317,8 @@ func (s *Service) Enroll(ctx context.Context, remote, token string, csrDER []byt
 		return invalid()
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO agents (id, name, hostname, created_at, enrolled_from, cert_serial) VALUES (?, ?, ?, ?, ?, ?)`,
-		id, name, hostname, ts(now), remote, serial); err != nil {
+		`INSERT INTO agents (id, name, hostname, created_at, enrolled_from, cert_serial, cert_not_after) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, name, hostname, ts(now), remote, serial, ts(leaf.NotAfter)); err != nil {
 		return Enrolled{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -354,6 +363,18 @@ func (s *Service) Authorize(ctx context.Context, id, serial string) error {
 	return nil
 }
 
+// CertificateSeen records when the certificate an agent connected with ends,
+// for an agent enrolled before the hub kept that date. It only writes when the
+// serial is the one issued for the agent and the stored date differs, so it
+// can run on every connection.
+func (s *Service) CertificateSeen(ctx context.Context, id, serial string, notAfter time.Time) error {
+	end := ts(notAfter)
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE agents SET cert_not_after = ? WHERE id = ? AND cert_serial = ? AND (cert_not_after IS NULL OR cert_not_after <> ?)`,
+		end, id, serial, end)
+	return err
+}
+
 // Revoke makes the agent unable to connect again. It does not close a
 // connection that is open: the hub does that.
 func (s *Service) Revoke(ctx context.Context, by, id string) error {
@@ -377,7 +398,7 @@ func (s *Service) Revoke(ctx context.Context, by, id string) error {
 // Agents lists the enrolled agents, oldest first.
 func (s *Service) Agents(ctx context.Context) ([]Agent, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, hostname, version, os_version, created_at, enrolled_from, last_seen_at, revoked_at FROM agents ORDER BY created_at, id`)
+		`SELECT id, name, hostname, version, os_version, created_at, enrolled_from, last_seen_at, revoked_at, cert_not_after FROM agents ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -389,8 +410,9 @@ func (s *Service) Agents(ctx context.Context) ([]Agent, error) {
 			created string
 			seen    sql.NullString
 			revoked sql.NullString
+			certEnd sql.NullString
 		)
-		if err := rows.Scan(&a.ID, &a.Name, &a.Hostname, &a.Version, &a.OSVersion, &created, &a.EnrolledAt, &seen, &revoked); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Hostname, &a.Version, &a.OSVersion, &created, &a.EnrolledAt, &seen, &revoked, &certEnd); err != nil {
 			return nil, err
 		}
 		a.CreatedAt = parseTS(created)
@@ -399,6 +421,9 @@ func (s *Service) Agents(ctx context.Context) ([]Agent, error) {
 		}
 		if revoked.Valid {
 			a.Revoked, a.RevokedAt = true, parseTS(revoked.String)
+		}
+		if certEnd.Valid {
+			a.CertNotAfter = parseTS(certEnd.String)
 		}
 		list = append(list, a)
 	}

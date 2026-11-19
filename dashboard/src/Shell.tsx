@@ -6,6 +6,7 @@ import { ServersPage } from "./ServersPage";
 import { useRoute, type Route } from "./route";
 import { can } from "./api";
 import { LanguageSelect, ThemeSwitch } from "./Appearance";
+import { CertificateBanner } from "./CertificateBanner";
 import { useConnection } from "./LiveProvider";
 import { useT, type MessageKey } from "./i18n";
 import type { Session } from "./session";
@@ -220,6 +221,7 @@ export function Shell({ user, signOut }: Session) {
           <LanguageSelect />
         </header>
         <main>
+          <CertificateBanner />
           <Page route={route} />
         </main>
       </div>
