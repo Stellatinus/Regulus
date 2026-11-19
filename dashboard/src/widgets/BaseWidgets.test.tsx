@@ -109,6 +109,43 @@ describe("built-in widgets", () => {
     expect(screen.getByText("1d 1h")).toBeInTheDocument();
   });
 
+  // An agent that cannot read part of its server says so (#230): the widgets
+  // say "not available" instead of showing zeros or an empty chart.
+  it("a basic-collector agent shows what is not available instead of zeros", async () => {
+    const limited = { unavailable: ["cpu", "load", "memory", "disks", "network"] };
+    mockHub({
+      agents: [agent("local", { collector: "basic", container: "lxc", ...limited })],
+      history: { local: [point(-10, limited), point(0, limited)] },
+    });
+    await show(
+      <>
+        <CpuWidget {...props()} />
+        <MemoryWidget {...props()} />
+        <DiskWidget {...props()} />
+        <NetworkWidget {...props()} />
+        <UptimeWidget {...props()} />
+        <SystemWidget {...props()} />
+      </>,
+    );
+    for (const part of ["the CPU usage", "the memory", "the disks", "the network traffic"]) {
+      expect(screen.getByText(`Not available on this server: the agent cannot read ${part} here.`)).toBeInTheDocument();
+    }
+    expect(screen.queryByText("42%")).not.toBeInTheDocument();
+    expect(screen.queryByText("No disks reported.")).not.toBeInTheDocument();
+    // Uptime is read, so it is shown (in the Uptime and System widgets).
+    expect(screen.getAllByText("1d 1h")).toHaveLength(2);
+    expect(screen.getByText(/only the time and the uptime are reported/)).toBeInTheDocument();
+    expect(screen.getByText("not available")).toBeInTheDocument(); // the load average row
+    expect(screen.getByText(/This server is a container \(lxc\)/)).toBeInTheDocument();
+  });
+
+  it("an agent that cannot read only the load still shows the CPU", async () => {
+    mockHub({ history: { local: [point(-10, { unavailable: ["load"] }), point(0, { unavailable: ["load"] })] } });
+    await show(<CpuWidget {...props()} />);
+    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.queryByText(/^load /)).not.toBeInTheDocument();
+  });
+
   it("cpu shows usage, load and a chart", async () => {
     mockHub();
     await show(<CpuWidget {...props()} />);

@@ -21,6 +21,7 @@ import { daysLeft } from "./CertificateBanner";
 import { useT } from "./i18n";
 import { registry } from "./widgets";
 import { widgetTitle } from "./widgets/registry";
+import { metricsSummary } from "./limits";
 
 // The widgets of the page of a server, in order.
 const WIDGETS = ["system", "cpu", "memory", "network", "disk"];
@@ -153,6 +154,18 @@ function Details({
           <dt>{t("servers.fact.lastContact")}</dt>
           <dd>{lastContact(agent, t)}</dd>
         </div>
+        {agent.container && (
+          <div>
+            <dt>{t("servers.fact.container")}</dt>
+            <dd>{agent.container}</dd>
+          </div>
+        )}
+        {online && metricsSummary(agent.collector, agent.unavailable, t) && (
+          <div>
+            <dt>{t("servers.fact.metrics")}</dt>
+            <dd>{metricsSummary(agent.collector, agent.unavailable, t)}</dd>
+          </div>
+        )}
         {agent.id !== "local" && (
           <div>
             <dt>{t("servers.fact.certificate")}</dt>

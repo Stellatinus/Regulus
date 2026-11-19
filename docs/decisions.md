@@ -29,6 +29,13 @@ Ubuntu Server comes first because it is the system used for the first real tests
 
 Other distributions with systemd can use the `tar.gz` archive. An apt repository or PPA for Ubuntu is postponed.
 
+What runs where (#230; the table is in [Remote agents](remote-agents.md#supported-platforms)):
+
+- **Releases are Linux amd64 and arm64 only, on systemd.** Updates from the dashboard need systemd: the root helper is started by path units. Linux without systemd runs the agent from the `tar.gz` but gets no updates; another OS is not built.
+- **An agent that cannot read something says so** instead of sending zeros: every `MetricsReport` names its collector (`linux` or `basic`, fields 9 and 10 with `unavailable`) and the parts it could not read. Added to protocol 1 without raising `protocol.Version`: an older hub ignores the fields, an older agent sends none and looks as before. The hub keeps them in the stored report (an empty list costs nothing), so a metrics point says what its zeros mean. The basic collector is still chosen once at start, by reading `/proc/stat`; the Linux collector reports per report what it could not read.
+- **No cgroup limits.** CPU, load and memory come from `/proc`, so in a container they are the host's unless LXCFS virtualizes `/proc`; the CPU count follows `cpuset` (`runtime.NumCPU`) but not a quota. Instead of reading cgroup v1/v2 files (two formats, and limits that do not say what is used on the host), the agent reports the container it detects (`SystemInfo.container`, field 8) and the dashboard says the figures may be the host's. Reading cgroup limits is left for a follow-up.
+- **Network filesystems and overlay are not disks.** nfs, cifs and the like belong to the server that exports them (which reports them with its own agent) and are the mounts most likely to hang; overlay is a container's view of the host's disk. A container therefore shows "No disks reported", which is not the same as "not available".
+
 ## Roadmap: phases and milestones
 
 The README describes four **phases**; the work is tracked in six **milestones**, M1 to M6. Issue titles still carry the phase they were first written for (`[Phase 1]`, …), so a title and a milestone can disagree: the milestone is what counts.
