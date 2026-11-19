@@ -17,7 +17,9 @@
 //     and rolls back if the new version does not come up healthy. On a hub
 //     with SQLite it keeps a copy of the database before the swap and puts it
 //     back with the old program when the new version migrated the schema
-//     (pending.go also settles an update that the helper did not finish).
+//     (pending.go also settles an update that the helper did not finish:
+//     Recover after a killed helper, RecoverBeforeStart and then Recover when
+//     the machine starts after a power cut).
 //   - version.go, compat.go: version parsing and the rule of which agent
 //     versions a hub accepts.
 //

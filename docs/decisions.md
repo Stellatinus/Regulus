@@ -59,7 +59,7 @@ Releases are published from the Actions tab (**Publish release**), not by typing
 
 ## Updates
 
-**Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, #20) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file).
+**Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, #20) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file, #254).
 
 **One piece at a time.** It must be possible to update an agent, the hub or a plugin on its own. Versions may require others: agents and hub negotiate the protocol and the hub accepts agents of its own release series and the previous one (#17, [remote agents](remote-agents.md), "Versions"); plugins declare the core versions they need with `requires` (#19, [plugins](plugins.md)).
 
@@ -97,6 +97,25 @@ Before, an agent more than one release series behind (or speaking a protocol the
 The maintainer asked whether Regulus should be split into more modules (for example a separate, long-lived communication module) to make downloads smaller and parts last longer. Decision: **one executable, and a list of contracts, each versioned and checked on its own** ([versioning.md](versioning.md)). A separate module would only last longer if its interface never changed, and that is a property of the contract, not of the file; with one file there is one signature and one install path, and the compatibility matrix is the short list of contracts instead of every pair of modules. Plugins are the exception, since they are released separately ([plugins](plugins.md)).
 
 CI now runs `buf breaking` against `main` (`make proto-breaking`), and golden files of protocol 1 messages are decoded by today's code (`internal/protocol/testdata/v1`). The golden files were written by the code of this pull request, while the protocol is still at version 1 and no field has changed number or type since the first release; they freeze that state from now on, they are not bytes captured from an old binary. The agent now checks that the protocol version the hub picks is one it speaks.
+
+## Updates: an interrupted update is settled when the machine starts (audit issue #246)
+
+A power cut between the swap and the confirmation left a new version that nobody had watched; if it did not work, systemd restarted it for ever and the previous version came back only at the next update request. Choices:
+
+- **Two steps, because of systemd ordering.** A unit ordered before `regulus.service` cannot restart or start it (the job would wait for the unit that asks), and a service that has not started cannot be judged. So `regulus-update-recover.service` (before) does only what needs no running service, and `regulus-update-confirm.service` (after) runs the existing `update-apply --recover`, unchanged: the health check after a power cut is the same code path as after a killed helper, not a second implementation.
+- **A shell script in front** (`/usr/lib/regulus/update-recover`), because the recovery must not depend on the file it may have to repair. It does one thing without the executable: put the kept copy back when `/usr/bin/regulus` does not answer `version` (an empty file counts as broken, although a shell "runs" it). Everything else stays in Go, where it is tested.
+- **Why not always roll back at boot** (simpler, no second step): it would throw away an update that is fine, and with it what the new version saved, each time the power fails during the 90 seconds of the health check.
+- **A new version gets two starts of the machine, within an hour.** Without a limit, a version that takes the machine down would do so for ever. Without the hour, a marker left for days by a confirm step that never ran (masked, or broken on a system we did not test) would make the third reboot restore a database that is weeks old. Counting only close starts keeps the first protection without the second risk. A clock that went backwards counts as close.
+- **A lock** in the state directory serialises the helpers, now that one can be started at boot while a request arrives.
+- **Both new units run as root without the sandbox** of `regulus-update.service`, like its `ExecStopPost`: they exist to repair, and a sandbox mistake that cannot be seen without a real systemd (#81) would disable the repair exactly when it is needed.
+- **`pending.json` is a contract between versions:** written by the version that was installed, possibly read by the one that replaced it. Fields are only added and a reader ignores what it does not know (the rule is written in `internal/update/pending.go`, with a test).
+- **Not verified on a real machine:** unit ordering, the condition, and a real hard power-off (#240).
+
+## Updates: reading the release list (audit issue #213)
+
+One page of 30 releases could be filled by plugin releases (planned in the same repository, `plugin/<id>/vX`) or by many pre-releases, and a stable hub would then report "up to date" for ever. The list is now read 100 at a time, until a page holds a stable release of the core (the newest stable is then known, and so is every pre-release published after it), the list ends, or 5 pages were read. Only the first page is asked conditionally: if it did not change, nothing did. `/releases/latest` was not used because the beta and alpha channels need the pre-releases too, and one paginated path is simpler than two.
+
+Withheld or stale answers (a "freeze") cannot be told from "no new release" without signed metadata that expires. That is **not done**: the hub now records when a check last **succeeded** and the Updates page warns after three days without one, which covers the common case (a hub that lost its internet access). A signed `latest.json` with an expiry is left for a later issue.
 
 ## Remote agents from the dashboard
 

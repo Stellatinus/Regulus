@@ -14,6 +14,7 @@ lint:
 test:
 	sh scripts/test-install.sh
 	sh scripts/test-next-version.sh
+	sh scripts/test-update-recover.sh
 	go vet ./...
 	go test -race ./...
 	cd dashboard && npm ci && npm run typecheck && npm test

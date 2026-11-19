@@ -137,9 +137,14 @@ type Status struct {
 	// Platform is the build of the release this hub would download.
 	Platform string `json:"platform"`
 
-	CheckedAt  *time.Time `json:"checked_at"`
-	CheckError string     `json:"check_error,omitempty"`
-	Checking   bool       `json:"checking"`
+	CheckedAt *time.Time `json:"checked_at"`
+	// SucceededAt is the last check that got an answer, and CheckStale says
+	// it is older than StaleAfter: the hub may not know about a release, a
+	// security fix included (#213). Set only when checks are enabled.
+	SucceededAt *time.Time `json:"succeeded_at"`
+	CheckStale  bool       `json:"check_stale,omitempty"`
+	CheckError  string     `json:"check_error,omitempty"`
+	Checking    bool       `json:"checking"`
 	// Latest is the newest release on the channel at the last check.
 	Latest          *Info `json:"latest"`
 	UpdateAvailable bool  `json:"update_available"`
@@ -199,10 +204,13 @@ const (
 
 	// DefaultCheckEvery is how often the hub asks the release server.
 	DefaultCheckEvery = 6 * time.Hour
-	firstCheckDelay   = time.Minute
-	minCheckGap       = 30 * time.Second
-	downloadTimeout   = 30 * time.Minute
-	checkTimeout      = 30 * time.Second
+	// StaleAfter is how old the last successful check may be before the
+	// Updates page warns: twelve checks missed in a row.
+	StaleAfter      = 3 * 24 * time.Hour
+	firstCheckDelay = time.Minute
+	minCheckGap     = 30 * time.Second
+	downloadTimeout = 30 * time.Minute
+	checkTimeout    = 30 * time.Second
 )
 
 // Options configure a Manager.
@@ -227,8 +235,15 @@ type Options struct {
 
 // persisted is the part of the state that survives a restart.
 type persisted struct {
-	CheckedAt  time.Time `json:"checked_at"`
-	CheckError string    `json:"check_error,omitempty"`
+	CheckedAt time.Time `json:"checked_at"`
+	// SucceededAt is the last check that got an answer from the release
+	// server; CheckedAt moves on a failure too. Zero in a state saved before
+	// this field: the next successful check sets it.
+	SucceededAt time.Time `json:"succeeded_at,omitzero"`
+	// FailingSince is the first of the checks that have failed in a row since
+	// the last success; zero while checks succeed.
+	FailingSince time.Time `json:"failing_since,omitzero"`
+	CheckError   string    `json:"check_error,omitempty"`
 	// Channel is the channel Latest was found on; a different channel makes it
 	// stale.
 	Channel Channel `json:"channel"`
@@ -477,6 +492,24 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		t := m.state.CheckedAt
 		st.CheckedAt = &t
 	}
+	succeeded := m.state.SucceededAt
+	if succeeded.IsZero() && m.state.CheckError == "" {
+		// A state saved before SucceededAt existed: its last check worked.
+		succeeded = m.state.CheckedAt
+	}
+	if !succeeded.IsZero() {
+		t := succeeded
+		st.SucceededAt = &t
+	}
+	// A hub that has tried for days and never got an answer is as uninformed
+	// as one whose last answer is days old; one that never tried yet is not.
+	if m.opts.Enabled && st.ReleaseBuild {
+		since := succeeded
+		if since.IsZero() {
+			since = m.state.FailingSince
+		}
+		st.CheckStale = !since.IsZero() && m.opts.Now().Sub(since) > StaleAfter
+	}
 	// An answer found on another channel says nothing about this one.
 	if m.state.Latest != nil && m.state.Channel == set.Channel {
 		latest := *m.state.Latest
@@ -569,8 +602,12 @@ func (m *Manager) check(ctx context.Context) (Status, error) {
 		// Keep what the last good check found; only the error is new.
 		m.state.CheckError = err.Error()
 		m.state.CheckedAt = m.opts.Now().UTC()
+		if m.state.FailingSince.IsZero() {
+			m.state.FailingSince = m.state.CheckedAt
+		}
 	default:
-		m.state = persisted{CheckedAt: m.opts.Now().UTC(), Channel: set.Channel}
+		now := m.opts.Now().UTC()
+		m.state = persisted{CheckedAt: now, SucceededAt: now, Channel: set.Channel}
 		if best, ok := Latest(releases, set.Channel); ok {
 			m.state.Latest = infoOf(best)
 		}

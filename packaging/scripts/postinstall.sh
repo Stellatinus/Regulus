@@ -60,6 +60,13 @@ if [ ! -d /run/systemd/system ]; then
 fi
 
 systemctl daemon-reload || true
+# An installation that installs updates from the dashboard also settles an
+# update that a power cut interrupted, when the machine starts. On an upgrade
+# from a package that did not have these units they are enabled here; on a
+# first install the installer does it.
+if systemctl is-enabled --quiet regulus-update.path 2>/dev/null || systemctl is-enabled --quiet regulus-agent-update.path 2>/dev/null; then
+	systemctl enable regulus-update-recover.service regulus-update-confirm.service || true
+fi
 if [ "$fresh" = true ] && [ "$role" = agent ]; then
 	echo "Regulus agent is installed; the installer enrolls it and starts the service."
 elif [ "$fresh" = true ]; then

@@ -139,60 +139,112 @@ type ghRelease struct {
 // maxNotes bounds the release notes kept and shown.
 const maxNotes = 8 << 10
 
-// Releases fetches the most recent releases.
+// Releases fetches the recent releases of the core. GitHub lists releases
+// newest first, plugin releases and drafts included, so one page can be
+// filled with releases that are not the core's (#213): pages are read until
+// one holds a stable release of the core (the newest stable one is then
+// known, and every pre-release newer than it was on that page or before),
+// the list ends, or maxPages were read. Only the first page is asked
+// conditionally: when it did not change, nothing did, and the whole cached
+// list is reused.
 func (g *GitHubSource) Releases(ctx context.Context) ([]Release, error) {
+	g.mu.Lock()
+	etag := ""
+	if g.cachedOK {
+		etag = g.etag
+	}
+	g.mu.Unlock()
+
+	var all []Release
+	newETag := ""
+	for page := 1; page <= maxPages; page++ {
+		raw, tag, notModified, err := g.page(ctx, page, etag)
+		if err != nil {
+			return nil, err
+		}
+		if notModified {
+			g.mu.Lock()
+			defer g.mu.Unlock()
+			if g.cachedOK {
+				return g.cached, nil
+			}
+			return nil, errors.New("the release server answered 304 without a previous answer")
+		}
+		if page == 1 {
+			newETag, etag = tag, "" // later pages are always read in full
+		}
+		got := g.convert(raw)
+		all = append(all, got...)
+		if len(raw) < perPage || hasStable(got) {
+			break
+		}
+	}
+	g.mu.Lock()
+	g.etag, g.cached, g.cachedOK = newETag, all, true
+	g.mu.Unlock()
+	return all, nil
+}
+
+const (
+	// perPage is the most the releases API returns at once.
+	perPage = 100
+	// maxPages bounds a check to a few requests of the 60 an hour GitHub
+	// allows without a token: 500 releases with no stable core release among
+	// them is not a list to keep reading.
+	maxPages = 5
+)
+
+func hasStable(releases []Release) bool {
+	for _, r := range releases {
+		if !r.Version.Prerelease() {
+			return true
+		}
+	}
+	return false
+}
+
+// page reads one page of the list. With etag set, a 304 answer is reported
+// as notModified.
+func (g *GitHubSource) page(ctx context.Context, n int, etag string) (raw []ghRelease, tag string, notModified bool, err error) {
 	base := strings.TrimRight(g.BaseURL, "/")
 	if base == "" {
 		base = "https://api.github.com"
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/repos/"+g.Repo+"/releases?per_page=30", nil)
+	u := fmt.Sprintf("%s/repos/%s/releases?per_page=%d&page=%d", base, g.Repo, perPage, n)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", false, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if g.UserAgent != "" {
 		req.Header.Set("User-Agent", g.UserAgent)
 	}
-	g.mu.Lock()
-	if g.cachedOK && g.etag != "" {
-		req.Header.Set("If-None-Match", g.etag)
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
 	}
-	g.mu.Unlock()
-
 	client := g.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("cannot reach the release server: %w", err)
+		return nil, "", false, fmt.Errorf("cannot reach the release server: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 
 	switch {
-	case res.StatusCode == http.StatusNotModified:
-		g.mu.Lock()
-		defer g.mu.Unlock()
-		if g.cachedOK {
-			return g.cached, nil
-		}
-		return nil, errors.New("the release server answered 304 without a previous answer")
+	case res.StatusCode == http.StatusNotModified && etag != "":
+		return nil, "", true, nil
 	case res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusTooManyRequests:
-		return nil, rateLimited(res)
+		return nil, "", false, rateLimited(res)
 	case res.StatusCode != http.StatusOK:
-		return nil, fmt.Errorf("the release server answered %s", res.Status)
+		return nil, "", false, fmt.Errorf("the release server answered %s", res.Status)
 	}
-
-	var raw []ghRelease
 	if err := json.NewDecoder(io.LimitReader(res.Body, maxListBytes)).Decode(&raw); err != nil {
-		return nil, fmt.Errorf("cannot read the list of releases: %w", err)
+		return nil, "", false, fmt.Errorf("cannot read the list of releases: %w", err)
 	}
-	releases := g.convert(raw)
-	g.mu.Lock()
-	g.etag, g.cached, g.cachedOK = res.Header.Get("ETag"), releases, true
-	g.mu.Unlock()
-	return releases, nil
+	return raw, res.Header.Get("ETag"), false, nil
 }
 
 func (g *GitHubSource) convert(raw []ghRelease) []Release {

@@ -497,6 +497,11 @@ export interface UpdateStatus {
   channel: UpdateChannel;
   platform: string;
   checked_at: string | null;
+  // The last check that got an answer; checked_at also moves on a failure.
+  succeeded_at?: string | null;
+  // The last successful check is older than three days: the hub may not
+  // know about a new release, a security fix included.
+  check_stale?: boolean;
   check_error?: string;
   checking: boolean;
   latest: UpdateInfo | null;
