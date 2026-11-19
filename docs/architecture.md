@@ -177,6 +177,7 @@ flowchart LR
 | `updates/` | downloaded, verified releases | |
 | `tuf/` | cache of the Sigstore trusted root | |
 | `update-apply/` | request/result files exchanged with the root update helper | |
+| `running.json` | version and start time of the hub, written each time it starts serving; the update helper reads it when `regulus.sock` cannot be reached (#312) | |
 
 **In memory only** (lost on hub restart): metrics history, the list of connected agents and their sessions, the rollout state, the broker of live events, the memory of refused agents.
 

@@ -3,12 +3,14 @@ package hub
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/localstatus"
+	"github.com/CodexCircle/Regulus/internal/update"
 )
 
 func TestLocalStatusSocket(t *testing.T) {
@@ -103,5 +105,47 @@ func TestLocalStatusAnswersWhileTheDatabaseBlocks(t *testing.T) {
 	h.checkDatabase(t.Context())
 	if st := fetch(); st.DatabaseProblem != "" || st.CertSoonest == nil {
 		t.Errorf("after the database answers again: problem %q, certificates %+v", st.DatabaseProblem, st.CertSoonest)
+	}
+}
+
+// A data directory whose path is too long for a Unix socket (#312): the hub
+// runs without the socket, and writes running.json so that the update helper
+// can still tell that the new version came up.
+func TestHubWithoutStatusSocketWritesRunning(t *testing.T) {
+	dir := t.TempDir()
+	for len(localstatus.SocketPath(dir)) <= maxSocketPath {
+		dir = filepath.Join(dir, strings.Repeat("d", 40))
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.DataDir = dir
+	h := startHubIn(t, cfg)
+
+	var r update.Running
+	waitFor(t, update.RunningName, func() bool {
+		var ok bool
+		r, ok = update.ReadRunning(dir)
+		return ok
+	})
+	if r.Version != "9.9.9" || !r.StartedAt.Equal(h.startedAt.UTC()) || !strings.Contains(r.StatusSocket, "longer than") {
+		t.Errorf("running = %+v", r)
+	}
+	if _, err := os.Lstat(localstatus.SocketPath(dir)); !os.IsNotExist(err) {
+		t.Errorf("a socket was made at a path too long for one: %v", err)
+	}
+}
+
+func TestHubWithStatusSocketWritesRunning(t *testing.T) {
+	h := startHubWithConfig(t, config.Default())
+	var r update.Running
+	waitFor(t, update.RunningName, func() bool {
+		var ok bool
+		r, ok = update.ReadRunning(h.cfg.DataDir)
+		return ok
+	})
+	if r.Version != "9.9.9" || r.StatusSocket != "" {
+		t.Errorf("running = %+v", r)
 	}
 }

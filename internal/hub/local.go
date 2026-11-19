@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/CodexCircle/Regulus/internal/localstatus"
 	"github.com/CodexCircle/Regulus/internal/storage"
+	"github.com/CodexCircle/Regulus/internal/update"
 )
 
 // maxSocketPath is the longest path a Unix socket can have on Linux.
@@ -77,24 +79,27 @@ func (h *Hub) localStatus(ctx context.Context, addr string) localstatus.Status {
 
 // serveLocal starts the Unix socket for local tools in the data directory and
 // returns the function that stops it. The socket is readable by the hub's
-// user only; when it cannot be made the hub runs without it.
-func (h *Hub) serveLocal(addr string) (stop func()) {
+// user only; when it cannot be made the hub runs without it, and problem says
+// why. Without it `regulus status` sees no live data, and the update helper
+// confirms an update through running.json instead (#312).
+func (h *Hub) serveLocal(addr string) (stop func(), problem string) {
 	path := localstatus.SocketPath(h.cfg.DataDir)
+	without := func(problem string, args ...any) (func(), string) {
+		h.log.Warn("no local status socket: `regulus status` and the console will not see live data; updates are confirmed through "+update.RunningName+" instead", append([]any{"problem", problem, "path", path}, args...)...)
+		return func() {}, problem
+	}
 	if len(path) > maxSocketPath {
-		h.log.Warn("the data directory path is too long for the local status socket; `regulus status` will not see live data", "path", path)
-		return func() {}
+		return without(fmt.Sprintf("the path of the socket is %d bytes, longer than the %d a Unix socket allows (move data_dir to a shorter path)", len(path), maxSocketPath))
 	}
 	_ = os.Remove(path) // left behind by a hub that was killed
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-		h.log.Warn("cannot open the local status socket", "path", path, "err", err)
-		return func() {}
+		return without("cannot open the socket: " + err.Error())
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
-		h.log.Warn("cannot restrict the local status socket", "path", path, "err", err)
 		_ = ln.Close()
 		_ = os.Remove(path)
-		return func() {}
+		return without("cannot restrict the socket to the hub's user: " + err.Error())
 	}
 	srv := &http.Server{
 		Handler:           localstatus.Handler(func(ctx context.Context) localstatus.Status { return h.localStatus(ctx, addr) }),
@@ -106,5 +111,12 @@ func (h *Hub) serveLocal(addr string) (stop func()) {
 		defer cancel()
 		_ = srv.Shutdown(ctx)
 		_ = os.Remove(path)
+	}, ""
+}
+
+// writeRunning records that this hub serves, for the update helper (#312).
+func (h *Hub) writeRunning(socketProblem string) {
+	if err := update.WriteRunning(h.cfg.DataDir, update.Running{Version: h.version, StartedAt: h.startedAt.UTC(), StatusSocket: socketProblem}); err != nil {
+		h.log.Warn("cannot write "+update.RunningName+"; an update cannot be confirmed without the local status socket", "err", err)
 	}
 }
