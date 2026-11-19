@@ -219,6 +219,31 @@ func TestLoadAgent(t *testing.T) {
 	}
 }
 
+func TestLoadAgentPluginsDir(t *testing.T) {
+	cfg, err := LoadAgent([]string{"--hub", "h:1"}, env(nil), io.Discard)
+	if err != nil || cfg.PluginsDir != "" {
+		t.Fatalf("plugins are off by default: %+v, %v", cfg, err)
+	}
+	file := filepath.Join(t.TempDir(), "agent.yaml")
+	if err := os.WriteFile(file, []byte("hub: h:1\nplugins_dir: /from/file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{[]string{"--config", file}, nil, "/from/file"},
+		{[]string{"--config", file}, map[string]string{"REGULUS_AGENT_PLUGINS_DIR": "/from/env"}, "/from/env"},
+		{[]string{"--config", file, "--plugins-dir", "/from/flag"}, map[string]string{"REGULUS_AGENT_PLUGINS_DIR": "/from/env"}, "/from/flag"},
+	} {
+		cfg, err := LoadAgent(tc.args, env(tc.env), io.Discard)
+		if err != nil || cfg.PluginsDir != tc.want {
+			t.Errorf("%v %v: %q, %v; want %q", tc.args, tc.env, cfg.PluginsDir, err, tc.want)
+		}
+	}
+}
+
 func TestLoadAgentEnrollOnly(t *testing.T) {
 	cfg, err := LoadAgent([]string{"--hub", "hub.example:8443"}, env(nil), io.Discard)
 	if err != nil || cfg.EnrollOnly {

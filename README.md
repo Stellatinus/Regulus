@@ -68,7 +68,7 @@ The [documentation index](docs/README.md) says where to go for each task. The ma
 
 - [Installation](docs/installation.md), [configuration](docs/configuration.md), [releases](docs/releases.md) and [updates](docs/updates.md)
 - [Console and command line](docs/console-and-cli.md), [authentication](docs/authentication.md), [remote agents](docs/remote-agents.md), [HTTP API](docs/http-api.md) and [dashboard](docs/dashboard.md)
-- [Architecture](docs/architecture.md) (with the code map), [glossary](docs/glossary.md), [design decisions](docs/decisions.md) and the [plugin design draft](docs/plugins.md)
+- [Architecture](docs/architecture.md) (with the code map), [glossary](docs/glossary.md), [design decisions](docs/decisions.md) and the [plugin guide](docs/plugins/README.md)
 
 ## Contributing
 

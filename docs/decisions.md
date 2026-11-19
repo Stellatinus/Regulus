@@ -61,7 +61,7 @@ Releases are published from the Actions tab (**Publish release**), not by typing
 
 **Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, #20) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file, #254).
 
-**One piece at a time.** It must be possible to update an agent, the hub or a plugin on its own. Versions may require others: agents and hub negotiate the protocol and the hub accepts agents of its own release series and the previous one (#17, [remote agents](remote-agents.md), "Versions"); plugins declare the core versions they need with `requires` (#19, [plugins](plugins.md)).
+**One piece at a time.** It must be possible to update an agent, the hub or a plugin on its own. Versions may require others: agents and hub negotiate the protocol and the hub accepts agents of its own release series and the previous one (#17, [remote agents](remote-agents.md), "Versions"); plugins declare the core versions they need with `requires` (#19, [plugins](plugins/README.md)).
 
 **Who decides.** The administrator chooses the mode in the dashboard: `manual` (tell me), `download` (download and verify, then wait for my approval) or `automatic` (install inside a maintenance window). The default for a new installation is **`download`**: nothing is installed without an administrator's approval.
 
@@ -127,7 +127,7 @@ No release has been published yet, and several parts have only been tested by un
 
 ## Language: English only, GUI in English and Italian
 
-Decided by the maintainer on 2026-10-29 (#120). Code, comments, commits, issues, pull requests and documents are in English only. The GUI (dashboard and console) supports English and Italian in every version, alpha included. The Italian sections that used to follow the English text in the README, `CONTRIBUTING.md`, `SECURITY.md`, this file and [plugins](plugins.md) were removed: one source of truth, no double maintenance, no drift. The Italian text stays in git history. Issues opened before this decision stay bilingual. There is no translation mechanism for the GUI yet (the console has an English-only string table, the dashboard hard-codes its strings): #125.
+Decided by the maintainer on 2026-10-29 (#120). Code, comments, commits, issues, pull requests and documents are in English only. The GUI (dashboard and console) supports English and Italian in every version, alpha included. The Italian sections that used to follow the English text in the README, `CONTRIBUTING.md`, `SECURITY.md`, this file and [plugins](plugins/README.md) were removed: one source of truth, no double maintenance, no drift. The Italian text stays in git history. Issues opened before this decision stay bilingual. There is no translation mechanism for the GUI yet (the console has an English-only string table, the dashboard hard-codes its strings): #125.
 
 ## Database: SQLite by default, PostgreSQL by configuration
 
@@ -184,7 +184,22 @@ Agreed in conversation on 2026-11-13, **proposed**, to be confirmed in the desig
 - **Console:** one `strs` table per language in `internal/console/strings.go`, chosen once at start by `UseLocale` from the first set of `LC_ALL`, `LC_MESSAGES` and `LANG` (C-library order); machine formats (`--plain`, `--json`) are never translated. Texts shown after an action became table fields (templates with `%s`). Left in the code: health-check names and details and a few literals (#191).
 - **Migration** is one pull request per page group; the first slice moved the header, the navigation and the database banner. The console gets an Italian table and a test in a later pull request. Still open: who reviews the Italian wording (a first draft was written by the assistant), and a per-user language setting stored on the hub.
 
+## Plugins: manifest and runtime (#19)
+
+Choices made while writing the runtime, so they are not rediscovered:
+
+- **Processes and gRPC on a Unix socket**, as #19 and the tech stack decided. Not the Go `plugin` package (same address space, a crash is the host's crash, exact build match needed) and not WebAssembly (no access to the system, which plugins such as Docker need).
+- **The plugin serves, the host connects.** The host names the socket path (`REGULUS_PLUGIN_SOCKET`) in a directory of its own, mode 0700, so no other user can reach the socket, and a plugin can be written in any language with a gRPC server. The host checks the plugin's identity (`Describe`) against the manifest before anything else.
+- **The contract is two calls** (`Describe`, `Health`). What a plugin can do is a separate design step (open question 1 in [plugins](plugins/README.md)), not invented here.
+- **Restart rules** like systemd's: exponential pause from 1 s to 1 min, reset after a minute of running, and **failed for good** after more than 5 stops in 10 minutes, until the agent restarts. A broken plugin then costs nothing more.
+- **Process group per plugin**, `SIGTERM` then `SIGKILL` after 10 s, and the group is killed also when the plugin exits by itself: a plugin cannot leave processes behind.
+- **Clean environment**: a plugin gets only the variables it needs, never the agent's (which may hold settings or, on the hub, the database password).
+- **The manifest is strict** (unknown keys refused), like the configuration file, and `<X.Y.Z` in `requires` also leaves out the pre-releases of X.Y.Z, unlike plain SemVer.
+- **Directory = id, links refused** for plugin directories, and a command that leads outside its plugin directory after following links is refused.
+- **Agent first.** The supervisor is wired into `regulus agent` (`plugins_dir`, off by default). The hub's wiring needs its settings and status pages and is left for a follow-up.
+- **Not done, on purpose:** signatures, installation, enforcement of permissions, a user per plugin. Until #20, the plugins directory must be writable by root only: who can write it decides what runs.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
-- Plugin dependencies, signatures and layout: see the open questions in [plugins](plugins.md).
+- Plugin features, dependencies, signatures and isolation: see the open questions in [plugins](plugins/README.md).

@@ -1,0 +1,17 @@
+# The smallest plugin: it serves the plugin contract and says it is healthy.
+# Build it into bin/ to try it (docs/plugins/writing-a-plugin.md):
+#   go build -o plugins/example-hello/bin/example-hello ./plugins/example-hello
+id: example-hello
+version: 0.1.0
+name: Hello example
+description: An example plugin that only proves it runs. It does nothing else.
+api: 1
+requires: ">=0.0.0"
+components:
+  agent:
+    command: bin/example-hello
+  hub:
+    command: bin/example-hello
+permissions:
+  - id: example-hello.read
+    description: See that the example plugin is running.

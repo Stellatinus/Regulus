@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/CodexCircle/Regulus/internal/agent"
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/logging"
+	"github.com/CodexCircle/Regulus/internal/plugin"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
 
@@ -84,7 +86,11 @@ func agentMain(ctx context.Context, args []string, getenv func(string) string, s
 		opts.UpdateDir = cfg.DataDir
 		opts.Verifier = &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(cfg.DataDir, "tuf"))}
 	}
+	// Plugins run beside the agent, each in its own process: nothing they do
+	// reaches agent.Run, and the agent stops them when it stops.
+	plugins := startPlugins(ctx, cfg, log)
 	err = agent.Run(ctx, conn, opts)
+	plugins()
 	var rejected *agent.RejectedError
 	if errors.As(err, &rejected) {
 		log.Error("the hub does not accept this agent: it was revoked or removed. To use this server again, remove the agent data directory and enroll with a new token", "dir", cfg.DataDir, "err", err)
@@ -95,4 +101,29 @@ func agentMain(ctx context.Context, args []string, getenv func(string) string, s
 		return 1
 	}
 	return 0
+}
+
+// startPlugins runs the plugins of cfg.PluginsDir, if set, until ctx ends.
+// The returned function stops them and waits until they are gone.
+func startPlugins(ctx context.Context, cfg config.Agent, log *slog.Logger) (stop func()) {
+	if cfg.PluginsDir == "" {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	sup := &plugin.Supervisor{
+		Dir:         cfg.PluginsDir,
+		RunDir:      filepath.Join(cfg.DataDir, "plugins-run"),
+		DataDir:     filepath.Join(cfg.DataDir, "plugins-data"),
+		Role:        plugin.RoleAgent,
+		CoreVersion: version,
+		Log:         log.With("component", "plugins"),
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := sup.Run(ctx); err != nil {
+			log.Error("plugins are not running", "err", err)
+		}
+	}()
+	return func() { cancel(); <-done }
 }

@@ -9,7 +9,7 @@ Everything an agent needs to work on Regulus is in this repository. Read these b
 - [docs/hub-redundancy.md](docs/hub-redundancy.md): the guide to the result of epic #103; a design issue of #103 is not complete until its section is here.
 - [docs/versioning.md](docs/versioning.md): the contracts between versions (agent protocol, the frozen update contract, helper files); read it before touching `proto/`.
 - [docs/decisions.md](docs/decisions.md): why things are the way they are, what is still open, what has not been verified on a real machine.
-- [docs/plugins.md](docs/plugins.md): the plugin design draft (milestone M6).
+- [docs/plugins/](docs/plugins/README.md): the plugin system (milestone M6): manifest, runtime, writing a plugin, and what is still design only.
 
 If you learn something that matters for future work and it is not written in one of these files, add it to the right one in the same pull request. Do not rely on context outside the repository.
 
