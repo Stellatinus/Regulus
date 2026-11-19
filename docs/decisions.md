@@ -80,6 +80,24 @@ The repository moved from `CodexCircle/Regulus` to `Stellatinus/Regulus`. Releas
 
 A rollback that put back only the program failed in the one case it exists for: the new version migrated the database and then did not come up, and the previous version refuses a database with a migration it does not know (`storage/migrate.go`). For SQLite the root helper now takes a consistent copy before the swap (`storage.SnapshotSQLite`), refuses the update if it cannot, and puts the copy back on a rollback only when the schema moved (`storage.RestoreSQLite`, after stopping the service and removing the write-ahead log, which belongs to the file being replaced). It accepts losing what the new version saved after the copy, and says so in the result. For PostgreSQL it does nothing and the documents tell the administrator to back up first: a server cannot be copied from the helper, and the real answer there is a rule that a release's migrations are ones the previous release can live with, which is not written yet (the strict "unknown migration" check stays).
 
+## Agents that are too old: an update-only session (audit issue #212)
+
+Before, an agent more than one release series behind (or speaking a protocol the hub dropped) was refused, and updates travel over that same connection: a server that was off for a few months could only be brought back with a terminal and a new enrollment token. Options weighed, and why:
+
+- **Force every agent to update before the hub** (the hub refuses to update while one is behind): one switched-off machine would freeze the updates of the whole network. Rejected.
+- **Widen the window** (accept 3 series instead of 2): only moves the cliff. Rejected.
+- **Let the agent fetch the newest release from the internet by itself**: agents need no internet today (they get the release from the hub over mTLS), and many are not allowed to reach it. Rejected.
+- **Chosen: an update-only session on a frozen update contract.** The hub admits an *enrolled* agent that is too old with `Welcome.update_only`; in that session only `Hello`, `Welcome`, `Heartbeat`, `Ping`, `ApplyUpdate`, `CommandResult` and `FetchUpdate` are used, and their meaning never changes in any protocol version (`protocol.UpdateContract` stays 1, tested). The update goes straight to the hub's version. An old agent that does not know the field keeps sending metrics; the hub drops them, because their format may have changed. The hub refuses every other command for that agent (`ErrUpdateOnly`).
+- **Still refused:** an agent with no certificate (nothing enrolled, nothing to update), and an agent newer than the hub (the hub is the one to update).
+- **Not solved by this:** an agent that cannot verify today's signatures (a build that trusts the old repository identity) or that has no update helper: `install.sh` once. Both are said in the documents and the dashboard.
+- **Not verified on a real machine:** a real agent of an old release against a new hub (#233 would add it as an end-to-end test).
+
+## Versioning: contracts instead of modules (#227)
+
+The maintainer asked whether Regulus should be split into more modules (for example a separate, long-lived communication module) to make downloads smaller and parts last longer. Decision: **one executable, and a list of contracts, each versioned and checked on its own** ([versioning.md](versioning.md)). A separate module would only last longer if its interface never changed, and that is a property of the contract, not of the file; with one file there is one signature and one install path, and the compatibility matrix is the short list of contracts instead of every pair of modules. Plugins are the exception, since they are released separately ([plugins](plugins.md)).
+
+CI now runs `buf breaking` against `main` (`make proto-breaking`), and golden files of protocol 1 messages are decoded by today's code (`internal/protocol/testdata/v1`). The golden files were written by the code of this pull request, while the protocol is still at version 1 and no field has changed number or type since the first release; they freeze that state from now on, they are not bytes captured from an old binary. The agent now checks that the protocol version the hub picks is one it speaks.
+
 ## Updates: an interrupted update is settled when the machine starts (audit issue #246)
 
 A power cut between the swap and the confirmation left a new version that nobody had watched; if it did not work, systemd restarted it for ever and the previous version came back only at the next update request. Choices:

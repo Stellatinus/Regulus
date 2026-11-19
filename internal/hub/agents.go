@@ -33,6 +33,9 @@ import (
 var (
 	ErrAgentNotFound     = errors.New("agent is not connected")
 	ErrAgentDisconnected = errors.New("agent disconnected before answering")
+	// ErrUpdateOnly: the agent is connected only to be updated and gets no
+	// other command (see AgentInfo.UpdateOnly).
+	ErrUpdateOnly = errors.New("agent is too old for this hub and connected only to be updated")
 )
 
 const (
@@ -56,6 +59,10 @@ type AgentInfo struct {
 	ProtocolVersion uint32
 	// Compat tells how the agent's release relates to the hub's.
 	Compat update.Compat
+	// UpdateOnly: the agent is too old for this hub and was admitted only to
+	// be updated (Welcome.update_only). Its metrics are ignored and the only
+	// commands it gets are Ping and ApplyUpdate.
+	UpdateOnly bool
 }
 
 // Rejection is the last time the hub refused an enrolled agent because its
@@ -142,6 +149,19 @@ func (s *agentServer) Connect(stream grpc.BidiStreamingServer[agentv1.AgentMessa
 	}
 	sanitizeHello(hello)
 	negotiated, ok := protocol.Negotiate(hello.GetMinProtocolVersion(), hello.GetProtocolVersion())
+	compat := update.CheckCompat(s.hubVersion, hello.GetAgentVersion())
+	// An agent that is too old for this hub (its release, or the protocols it
+	// speaks) is not turned away when it is enrolled: it is admitted to the
+	// update contract only, so that it can be brought up to date from the
+	// dashboard, however long it was off (#212). An agent that is newer than
+	// the hub, or that has no certificate, is refused as before.
+	updateOnly := false
+	if !ok || compat == update.CompatTooOld {
+		_, enrolled := identityFrom(ctx)
+		if v, uok := protocol.NegotiateUpdateOnly(hello.GetMinProtocolVersion(), hello.GetProtocolVersion()); enrolled && uok {
+			negotiated, ok, updateOnly = v, true, true
+		}
+	}
 	if !ok {
 		msg := fmt.Sprintf("protocol version %d is not supported by this hub (supported: %d to %d): update the agent", hello.GetProtocolVersion(), protocol.MinSupported, protocol.Version)
 		if hello.GetProtocolVersion() > protocol.Version {
@@ -154,8 +174,7 @@ func (s *agentServer) Connect(stream grpc.BidiStreamingServer[agentv1.AgentMessa
 			MaxProtocolVersion: protocol.Version,
 		})
 	}
-	compat := update.CheckCompat(s.hubVersion, hello.GetAgentVersion())
-	if compat == update.CompatTooOld {
+	if compat == update.CompatTooOld && !updateOnly {
 		return s.reject(ctx, stream, hello, &agentv1.Reject{
 			Reason:             agentv1.Reject_REASON_AGENT_TOO_OLD,
 			Message:            fmt.Sprintf("agent version %s is too far behind this hub (%s): only the same release series and the previous one are supported; update the agent", hello.GetAgentVersion(), s.hubVersion),
@@ -180,16 +199,23 @@ func (s *agentServer) Connect(stream grpc.BidiStreamingServer[agentv1.AgentMessa
 			return status.Errorf(codes.Internal, "cannot assign an agent id: %v", err)
 		}
 	}
-	sess := s.register(id, hello, negotiated, compat)
+	sess := s.register(id, hello, negotiated, compat, updateOnly)
 	defer s.unregister(sess)
-	s.log.Info("agent connected", "agent", id, "version", hello.GetAgentVersion(), "host", hello.GetSystem().GetHostname())
-
-	if err := stream.Send(&agentv1.HubMessage{Payload: &agentv1.HubMessage_Welcome{Welcome: &agentv1.Welcome{
+	welcome := &agentv1.Welcome{
 		ProtocolVersion:   negotiated,
 		AgentId:           id,
 		HeartbeatInterval: durationpb.New(s.heartbeatInterval),
 		MetricsInterval:   durationpb.New(s.metricsInterval),
-	}}}); err != nil {
+	}
+	if updateOnly {
+		welcome.UpdateOnly = true
+		welcome.Notice = fmt.Sprintf("agent version %s is too far behind this hub (%s); it is connected only to be updated: update it from the Updates page", hello.GetAgentVersion(), s.hubVersion)
+		s.log.Warn("agent connected for an update only", "agent", id, "version", hello.GetAgentVersion(), "protocol_version", negotiated, "host", hello.GetSystem().GetHostname())
+	} else {
+		s.log.Info("agent connected", "agent", id, "version", hello.GetAgentVersion(), "host", hello.GetSystem().GetHostname())
+	}
+
+	if err := stream.Send(&agentv1.HubMessage{Payload: &agentv1.HubMessage_Welcome{Welcome: welcome}}); err != nil {
 		return err
 	}
 
@@ -294,6 +320,11 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		s.mu.Unlock()
 		s.events.publish(heartbeatEvent{Type: "agent.heartbeat", ID: sess.info.ID, At: now.UTC()})
 	case *agentv1.AgentMessage_Metrics:
+		if sess.info.UpdateOnly {
+			// Its reports are in a format this hub may no longer read right;
+			// an update-only session carries nothing but the update.
+			return nil
+		}
 		now := time.Now()
 		if reportTooSoon(sess.lastReport, now, s.metricsInterval) {
 			s.logReportProblem(sess, "an agent sends metrics faster than the interval; extra reports are dropped")
@@ -330,7 +361,7 @@ func (s *agentServer) logReportProblem(sess *session, msg string) {
 // register adds the agent to the registry. A previous connection with the same
 // id is replaced: an agent that reconnects after a network failure must not be
 // blocked by its own stale stream.
-func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint32, compat update.Compat) *session {
+func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint32, compat update.Compat, updateOnly bool) *session {
 	sess := &session{
 		info: AgentInfo{
 			ID:              id,
@@ -339,6 +370,7 @@ func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint3
 			ConnectedAt:     time.Now(),
 			ProtocolVersion: negotiated,
 			Compat:          compat,
+			UpdateOnly:      updateOnly,
 		},
 		out:      make(chan *agentv1.HubMessage),
 		replaced: make(chan struct{}),
@@ -433,6 +465,13 @@ func (s *agentServer) sendCommand(ctx context.Context, agentID string, cmd *agen
 	id, resc := sess.addPending()
 	defer sess.removePending(id)
 
+	if sess.info.UpdateOnly {
+		switch cmd.GetKind().(type) {
+		case *agentv1.Command_Ping, *agentv1.Command_ApplyUpdate:
+		default:
+			return nil, ErrUpdateOnly
+		}
+	}
 	out := &agentv1.Command{Id: id, Kind: cmd.GetKind()}
 	select {
 	case sess.out <- &agentv1.HubMessage{Payload: &agentv1.HubMessage_Command{Command: out}}:

@@ -8,8 +8,12 @@ export interface Agent {
   // that are not connected.
   status: "connected" | "stale" | "offline" | "revoked" | "incompatible";
   // How the agent's release relates to the hub's (connected agents only).
-  compatibility?: "current" | "behind" | "ahead" | "unknown";
+  // too_old only comes with update_only.
+  compatibility?: "current" | "behind" | "ahead" | "too_old" | "unknown";
   protocol_version?: number;
+  // The agent is too old for this hub and is connected only to be updated
+  // (from the Updates page); it sends no metrics.
+  update_only?: boolean;
   // Why the hub refused the agent, with the status "incompatible".
   incompatible_reason?: string;
   hostname?: string;

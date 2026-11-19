@@ -31,6 +31,7 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.list.version": "Versione",
   "servers.list.neverConnected": "mai connesso",
   "servers.list.noteTooOld": "troppo vecchio per questo hub: aggiornalo",
+  "servers.list.noteUpdateOnly": "troppo vecchio per questo hub: connesso solo per essere aggiornato (pagina Aggiornamenti)",
   "servers.list.noteBehind": "indietro rispetto all'hub",
   "servers.list.noteAhead": "più recente dell'hub: aggiorna l'hub",
 
@@ -43,6 +44,8 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.server.incompatibleNote":
     "L'hub rifiuta l'agente di questo server: {reason}. L'agente continua a riprovare e si connette appena viene aggiornato.",
   "servers.server.incompatibleFallback": "la sua versione non funziona con questo hub",
+  "servers.server.updateOnlyNote":
+    "L'agente di questo server ({version}) è troppo vecchio per questo hub. È connesso solo per poter essere aggiornato e fino ad allora non invia metriche. Aggiornalo dalla pagina Aggiornamenti.",
   "servers.server.offlineNote": "Questo server è offline. Le sue metriche ricompaiono qui quando il suo agente si riconnette.",
   "servers.server.nameLabel": "Nome",
   "servers.server.rename": "Rinomina",

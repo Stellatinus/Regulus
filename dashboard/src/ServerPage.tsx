@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { displayName, lastContact, statusLabel, versionNote } from "./AgentList";
-import { ApiError, can, fetchAgent, renameAgent, revokeAgent, type Agent } from "./api";
+import {
+  displayName,
+  lastContact,
+  statusLabel,
+  versionNote,
+} from "./AgentList";
+import {
+  ApiError,
+  can,
+  fetchAgent,
+  renameAgent,
+  revokeAgent,
+  type Agent,
+} from "./api";
 import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
@@ -13,10 +25,18 @@ const WIDGETS = ["system", "cpu", "memory", "network", "disk"];
 
 const REFRESH_MS = 5000;
 
-type State = { kind: "loading" } | { kind: "missing" } | { kind: "error"; message: string } | { kind: "ready"; agent: Agent };
+type State =
+  | { kind: "loading" }
+  | { kind: "missing" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; agent: Agent };
 
 // ServerPage shows one server: its state and the widgets bound to it.
-export function ServerPage({ id = serverIdFromHash(window.location.hash) }: { id?: string }) {
+export function ServerPage({
+  id = serverIdFromHash(window.location.hash),
+}: {
+  id?: string;
+}) {
   const t = useT();
   const session = useSession();
   const expired = session?.expired;
@@ -32,7 +52,8 @@ export function ServerPage({ id = serverIdFromHash(window.location.hash) }: { id
         (err: unknown) => {
           if (controller.signal.aborted) return;
           if (err instanceof ApiError && err.status === 401) return expired?.();
-          if (err instanceof ApiError && err.status === 404) return setState({ kind: "missing" });
+          if (err instanceof ApiError && err.status === 404)
+            return setState({ kind: "missing" });
           setState({ kind: "error", message: errorMessage(err) });
         },
       );
@@ -50,25 +71,50 @@ export function ServerPage({ id = serverIdFromHash(window.location.hash) }: { id
         <a href="#/servers">{t("servers.server.back")}</a>
       </p>
       {state.kind === "loading" && <p>{t("servers.loading")}</p>}
-      {state.kind === "error" && <p role="alert">{t("servers.server.loadError", { message: state.message })}</p>}
+      {state.kind === "error" && (
+        <p role="alert">
+          {t("servers.server.loadError", { message: state.message })}
+        </p>
+      )}
       {state.kind === "missing" && (
         <>
           <h2 id="server-heading">{t("servers.server.notFound")}</h2>
           <p>{t("servers.server.notFoundBody")}</p>
         </>
       )}
-      {state.kind === "ready" && <Details agent={state.agent} canManage={can(session?.user, "servers.manage")} onChanged={reload} />}
+      {state.kind === "ready" && (
+        <Details
+          agent={state.agent}
+          canManage={can(session?.user, "servers.manage")}
+          onChanged={reload}
+        />
+      )}
     </section>
   );
 }
 
-function Details({ agent, canManage, onChanged }: { agent: Agent; canManage: boolean; onChanged: () => void }) {
+function Details({
+  agent,
+  canManage,
+  onChanged,
+}: {
+  agent: Agent;
+  canManage: boolean;
+  onChanged: () => void;
+}) {
   const t = useT();
-  const online = agent.status === "connected" || agent.status === "stale";
+  // An agent connected only to be updated sends no metrics: the widgets would
+  // stay empty, so the page says why instead.
+  const online =
+    (agent.status === "connected" || agent.status === "stale") &&
+    !agent.update_only;
   return (
     <>
       <h2 id="server-heading">
-        {displayName(agent)} <span className={`status ${agent.status}`}>{statusLabel(agent, t)}</span>
+        {displayName(agent)}{" "}
+        <span className={`status ${agent.status}`}>
+          {statusLabel(agent, t)}
+        </span>
       </h2>
       <dl className="facts server-facts">
         <div>
@@ -81,13 +127,19 @@ function Details({ agent, canManage, onChanged }: { agent: Agent; canManage: boo
         </div>
         <div>
           <dt>{t("servers.fact.system")}</dt>
-          <dd>{[agent.os_version ?? agent.os, agent.arch].filter(Boolean).join(" ") || "-"}</dd>
+          <dd>
+            {[agent.os_version ?? agent.os, agent.arch]
+              .filter(Boolean)
+              .join(" ") || "-"}
+          </dd>
         </div>
         <div>
           <dt>{t("servers.fact.agentVersion")}</dt>
           <dd>
             {agent.version || "-"}
-            {versionNote(agent, t) && <span className="muted"> ({versionNote(agent, t)})</span>}
+            {versionNote(agent, t) && (
+              <span className="muted"> ({versionNote(agent, t)})</span>
+            )}
           </dd>
         </div>
         <div>
@@ -95,7 +147,9 @@ function Details({ agent, canManage, onChanged }: { agent: Agent; canManage: boo
           <dd>{lastContact(agent, t)}</dd>
         </div>
       </dl>
-      {canManage && agent.id !== "local" && <Manage agent={agent} onChanged={onChanged} />}
+      {canManage && agent.id !== "local" && (
+        <Manage agent={agent} onChanged={onChanged} />
+      )}
       {online ? (
         <div className="server-grid">
           {WIDGETS.map((w) => {
@@ -103,12 +157,20 @@ function Details({ agent, canManage, onChanged }: { agent: Agent; canManage: boo
             if (!def) return null;
             const Widget = def.component;
             return (
-              <section key={w} className="widget" aria-label={widgetTitle(def, t)}>
+              <section
+                key={w}
+                className="widget"
+                aria-label={widgetTitle(def, t)}
+              >
                 <header>
                   <h3 className="widget-title">{widgetTitle(def, t)}</h3>
                 </header>
                 <div className="widget-body">
-                  <Widget instanceId={`server-${w}`} config={{ agentId: agent.id, fixed: true }} setConfig={() => undefined} />
+                  <Widget
+                    instanceId={`server-${w}`}
+                    config={{ agentId: agent.id, fixed: true }}
+                    setConfig={() => undefined}
+                  />
                 </div>
               </section>
             );
@@ -116,11 +178,17 @@ function Details({ agent, canManage, onChanged }: { agent: Agent; canManage: boo
         </div>
       ) : (
         <p role="status" className="note warn">
-          {agent.status === "revoked"
-            ? t("servers.server.revokedNote")
-            : agent.status === "incompatible"
-              ? t("servers.server.incompatibleNote", { reason: agent.incompatible_reason ?? t("servers.server.incompatibleFallback") })
-              : t("servers.server.offlineNote")}
+          {agent.update_only
+            ? t("servers.server.updateOnlyNote", { version: agent.version })
+            : agent.status === "revoked"
+              ? t("servers.server.revokedNote")
+              : agent.status === "incompatible"
+                ? t("servers.server.incompatibleNote", {
+                    reason:
+                      agent.incompatible_reason ??
+                      t("servers.server.incompatibleFallback"),
+                  })
+                : t("servers.server.offlineNote")}
         </p>
       )}
     </>
@@ -152,7 +220,12 @@ function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
       >
         <label>
           {t("servers.server.nameLabel")}
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} placeholder={agent.hostname || agent.id} />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={64}
+            placeholder={agent.hostname || agent.id}
+          />
         </label>
         <button type="submit">{t("servers.server.rename")}</button>
       </form>
@@ -162,7 +235,13 @@ function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
           <button
             type="button"
             onClick={() => {
-              if (window.confirm(t("servers.server.revokeConfirm", { name: displayName(agent) }))) {
+              if (
+                window.confirm(
+                  t("servers.server.revokeConfirm", {
+                    name: displayName(agent),
+                  }),
+                )
+              ) {
                 void run(() => revokeAgent(agent.id));
               }
             }}

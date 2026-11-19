@@ -59,12 +59,16 @@ type agentJSON struct {
 	MetricsAt        *time.Time `json:"metrics_at"`
 	UptimeSeconds    *uint64    `json:"uptime_seconds"`
 	// Compatibility says how the agent's release relates to the hub's:
-	// current, behind, ahead or unknown (see update.Compat).
+	// current, behind, ahead, too_old (only with update_only) or unknown (see
+	// update.Compat).
 	Compatibility   string `json:"compatibility,omitempty"`
 	ProtocolVersion uint32 `json:"protocol_version,omitempty"`
 	// IncompatibleReason is why the hub refused the agent, with the status
 	// incompatible.
 	IncompatibleReason string `json:"incompatible_reason,omitempty"`
+	// UpdateOnly: the agent is too old for this hub and is connected only to
+	// be updated (compatibility "too_old"); it sends no metrics.
+	UpdateOnly bool `json:"update_only,omitempty"`
 }
 
 func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON {
@@ -77,6 +81,7 @@ func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON
 
 		Compatibility:   string(a.Compat),
 		ProtocolVersion: a.ProtocolVersion,
+		UpdateOnly:      a.UpdateOnly,
 	}
 	if s := a.System; s != nil {
 		out.Hostname = s.Hostname

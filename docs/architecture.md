@@ -68,8 +68,11 @@ flowchart LR
 
 **Versions: protocol, and N / N-1.** Two separate checks (#17):
 
-1. *Protocol version* (`internal/protocol`): the agent sends the range it speaks, the hub picks the highest both understand (`protocol.Negotiate`). Today `Version` and `MinSupported` are both `1`.
-2. *Release series* (`internal/update/compat.go`, `CheckCompat`): the hub accepts agents of its own release series and the previous one (same minor, one minor behind, or any release of the previous major). Anything older is refused with `Reject_REASON_AGENT_TOO_OLD`; the agent keeps asking every few seconds. A development build is never judged. The hub is therefore updated first.
+1. *Protocol version* (`internal/protocol`): the agent sends the range it speaks, the hub picks the highest both understand (`protocol.Negotiate`), and the agent checks that the hub picked one it speaks. Today `Version` and `MinSupported` are both `1`.
+2. *Release series* (`internal/update/compat.go`, `CheckCompat`): the hub gives full service to agents of its own release series and the previous one (same minor, one minor behind, or any release of the previous major). The hub is therefore updated first. A development build is never judged.
+3. *Update-only session* (#212): an **enrolled** agent that fails either check because it is too old (not because it is newer) is still admitted, with `Welcome.update_only`: it speaks only the frozen update contract (`protocol.UpdateContract`), its metrics are ignored, it gets no command but `Ping` and `ApplyUpdate`, and the rollout takes it straight to the hub's version. Only an agent newer than the hub, or one without a certificate, is refused (`Reject_REASON_UNSUPPORTED_PROTOCOL_VERSION`, `Reject_REASON_AGENT_TOO_OLD`); the agent keeps asking every few seconds.
+
+The list of all contracts between versions, and the rules and CI checks for changing them, is in [Versioning](versioning.md).
 
 ## 3. Trust and identity
 

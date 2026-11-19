@@ -210,10 +210,21 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 	default:
 		return false, errors.New("the hub did not answer Hello with Welcome or Reject")
 	}
+	// The hub must pick a version this agent speaks; anything else is a hub
+	// that does not follow the contract, and nothing it sends can be trusted
+	// to mean what this agent thinks.
+	if v := welcome.GetProtocolVersion(); v < protocol.MinSupported || v > protocol.Version {
+		return false, fmt.Errorf("the hub chose protocol version %d, but this agent speaks %d to %d", v, protocol.MinSupported, protocol.Version)
+	}
 	if welcome.GetAgentId() != "" {
 		a.id = welcome.GetAgentId()
 	}
-	a.log.Info("connected to the hub", "agent", a.id, "protocol_version", welcome.GetProtocolVersion())
+	updateOnly := welcome.GetUpdateOnly()
+	if updateOnly {
+		a.log.Warn("connected to the hub only to be updated: this agent is too old for it", "agent", a.id, "protocol_version", welcome.GetProtocolVersion(), "notice", welcome.GetNotice())
+	} else {
+		a.log.Info("connected to the hub", "agent", a.id, "protocol_version", welcome.GetProtocolVersion())
+	}
 	a.markConnected()
 
 	heartbeat := time.NewTicker(intervalOr(welcome.GetHeartbeatInterval().AsDuration(), defaultHeartbeatInterval))
@@ -262,7 +273,14 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 	if err := a.sendHeartbeat(stream); err != nil {
 		return true, sendErr(err)
 	}
-	a.startCollection(ctx, reports)
+	// A session that exists only to be updated carries no metrics: the hub
+	// ignores them, and an agent that cannot keep up with the hub's format
+	// should not spend the machine on collecting them.
+	if updateOnly {
+		metrics.Stop()
+	} else {
+		a.startCollection(ctx, reports)
+	}
 
 	// Only this goroutine sends on the stream, which gRPC requires.
 	for {
