@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg != Default() {
+	if !reflect.DeepEqual(cfg, Default()) {
 		t.Fatalf("got %+v, want defaults %+v", cfg, Default())
 	}
 }
@@ -299,5 +300,30 @@ func TestAgentAndHubUpdateSettings(t *testing.T) {
 	}
 	if hub, _ = Load(nil, env(nil), io.Discard); hub.Updates.Apply {
 		t.Error("the hub installs updates by default")
+	}
+}
+
+func TestTrustedProxies(t *testing.T) {
+	file := writeFile(t, "trusted_proxies:\n  - 127.0.0.1\n  - 10.0.0.0/8\n")
+	cfg, err := Load([]string{"-config", file}, env(nil), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.TrustedProxies; len(got) != 2 || got[0] != "127.0.0.1" || got[1] != "10.0.0.0/8" {
+		t.Fatalf("from the file: %v", got)
+	}
+	cfg, err = Load([]string{"-config", file}, env(map[string]string{"REGULUS_TRUSTED_PROXIES": "::1, 192.168.0.0/16"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.TrustedProxies; len(got) != 2 || got[0] != "::1" || got[1] != "192.168.0.0/16" {
+		t.Fatalf("the environment must replace the file: %v", got)
+	}
+	prefixes, err := ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil || prefixes[0].Bits() != 128 || prefixes[1].Bits() != 16 {
+		t.Fatalf("prefixes = %v, %v", prefixes, err)
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_TRUSTED_PROXIES": "proxy.example"}), io.Discard); err == nil || !strings.Contains(err.Error(), "trusted_proxies") {
+		t.Fatalf("a host name must be refused, got %v", err)
 	}
 }

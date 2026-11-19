@@ -80,6 +80,10 @@ The repository moved from `CodexCircle/Regulus` to `Stellatinus/Regulus`. Releas
 
 A rollback that put back only the program failed in the one case it exists for: the new version migrated the database and then did not come up, and the previous version refuses a database with a migration it does not know (`storage/migrate.go`). For SQLite the root helper now takes a consistent copy before the swap (`storage.SnapshotSQLite`), refuses the update if it cannot, and puts the copy back on a rollback only when the schema moved (`storage.RestoreSQLite`, after stopping the service and removing the write-ahead log, which belongs to the file being replaced). It accepts losing what the new version saved after the copy, and says so in the result. For PostgreSQL it does nothing and the documents tell the administrator to back up first: a server cannot be copied from the helper, and the real answer there is a rule that a release's migrations are ones the previous release can live with, which is not written yet (the strict "unknown migration" check stays).
 
+## The client address behind a reverse proxy: `trusted_proxies` (audit issue #196)
+
+`X-Forwarded-For` and `X-Forwarded-Proto` are believed only when the peer of the connection is listed in `trusted_proxies`; the client is the rightmost entry that is not a trusted proxy. The default is an empty list, so a hub with nothing in front of it ignores both headers, which also closes the old hole where any client could mark its own cookie `Secure` or not. The setting is a list, so it is read from the YAML file and `REGULUS_TRUSTED_PROXIES` but is not in the console settings table (`regulus config set` edits scalars). The `Forwarded` header (RFC 7239) is not read. The agent port is not affected: it has no proxy in front (mutual TLS).
+
 ## Agents that are too old: an update-only session (audit issue #212)
 
 Before, an agent more than one release series behind (or speaking a protocol the hub dropped) was refused, and updates travel over that same connection: a server that was off for a few months could only be brought back with a terminal and a new enrollment token. Options weighed, and why:
