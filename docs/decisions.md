@@ -93,6 +93,12 @@ A power cut between the swap and the confirmation left a new version that nobody
 - **`pending.json` is a contract between versions:** written by the version that was installed, possibly read by the one that replaced it. Fields are only added and a reader ignores what it does not know (the rule is written in `internal/update/pending.go`, with a test).
 - **Not verified on a real machine:** unit ordering, the condition, and a real hard power-off (#240).
 
+## Updates: reading the release list (audit issue #213)
+
+One page of 30 releases could be filled by plugin releases (planned in the same repository, `plugin/<id>/vX`) or by many pre-releases, and a stable hub would then report "up to date" for ever. The list is now read 100 at a time, until a page holds a stable release of the core (the newest stable is then known, and so is every pre-release published after it), the list ends, or 5 pages were read. Only the first page is asked conditionally: if it did not change, nothing did. `/releases/latest` was not used because the beta and alpha channels need the pre-releases too, and one paginated path is simpler than two.
+
+Withheld or stale answers (a "freeze") cannot be told from "no new release" without signed metadata that expires. That is **not done**: the hub now records when a check last **succeeded** and the Updates page warns after three days without one, which covers the common case (a hub that lost its internet access). A signed `latest.json` with an expiry is left for a later issue.
+
 ## Remote agents from the dashboard
 
 Remote agents can be turned on from the dashboard (#90), so that enrolling a second server needs no terminal on the hub. The choice is kept in the database, because the hub runs as `regulus` and cannot write `/etc/regulus/config.yaml`. `agent_listen` in the configuration always wins: when it is set the dashboard shows it and cannot change it. Turning the listener on needs `servers.manage`, the same permission as making enrollment tokens, since one is useless without the other; it is audited. Turning it off from the dashboard is not offered yet.

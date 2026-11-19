@@ -28,6 +28,11 @@ export const updates = {
   "updates.version.checked": "Checked {ago}.",
   "updates.version.notChecked": "Not checked yet.",
   "updates.version.checkFailed": "The last check failed: {error}",
+  "updates.version.stale":
+    "This hub has not been able to ask for new releases since {when}. It may not know about an update, a security fix included. Check that it can reach api.github.com.",
+  "updates.version.staleNever":
+    "This hub has never been able to ask for new releases. It may not know about an update, a security fix included. Check that it can reach api.github.com.",
+  "updates.version.lastSuccess": "Last successful check: {ago}.",
 
   "updates.staged.label": "Downloaded update",
   "updates.staged.version": "Version",
