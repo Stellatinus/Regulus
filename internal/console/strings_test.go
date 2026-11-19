@@ -2,12 +2,17 @@ package console
 
 import (
 	"reflect"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/CodexCircle/Regulus/internal/config"
 )
 
-// fields walks every string (and every string of a string array) of a table
-// with its field name.
+// fields walks every string (and every string of a string array or map) of a
+// table with its field name. SettingInfo is left out: English has none on
+// purpose (TestSettingDescriptions covers it).
 func fields(t *testing.T, s strs) map[string]string {
 	t.Helper()
 	out := map[string]string{}
@@ -15,12 +20,19 @@ func fields(t *testing.T, s strs) map[string]string {
 	for i := 0; i < v.NumField(); i++ {
 		name := v.Type().Field(i).Name
 		f := v.Field(i)
+		if name == "SettingInfo" {
+			continue
+		}
 		switch f.Kind() {
 		case reflect.String:
 			out[name] = f.String()
 		case reflect.Array:
 			for j := 0; j < f.Len(); j++ {
 				out[name+"["+string(rune('0'+j))+"]"] = f.Index(j).String()
+			}
+		case reflect.Map:
+			for _, k := range f.MapKeys() {
+				out[name+"["+k.String()+"]"] = f.MapIndex(k).String()
 			}
 		default:
 			t.Fatalf("field %s has an unexpected kind %s", name, f.Kind())
@@ -32,7 +44,12 @@ func fields(t *testing.T, s strs) map[string]string {
 func TestEveryTextExistsInBothLanguages(t *testing.T) {
 	en, it := fields(t, en), fields(t, it)
 	if len(en) != len(it) {
-		t.Fatalf("English has %d texts, Italian %d", len(en), len(it))
+		t.Errorf("English has %d texts, Italian %d", len(en), len(it))
+	}
+	for name := range it {
+		if _, ok := en[name]; !ok {
+			t.Errorf("Italian %s has no English text", name)
+		}
 	}
 	for name, text := range en {
 		if strings.TrimSpace(text) == "" {
@@ -44,11 +61,39 @@ func TestEveryTextExistsInBothLanguages(t *testing.T) {
 	}
 }
 
+var verbRE = regexp.MustCompile(`%[-+# 0-9.*]*[a-zA-Z%]`)
+
 func TestTemplatesKeepTheirVerbs(t *testing.T) {
 	en, it := fields(t, en), fields(t, it)
 	for name, text := range en {
-		if a, b := strings.Count(text, "%s"), strings.Count(it[name], "%s"); a != b {
-			t.Errorf("%s: English has %d %%s, Italian %d", name, a, b)
+		// The same verbs in the same order: %d %s is not %s %d.
+		if a, b := verbRE.FindAllString(text, -1), verbRE.FindAllString(it[name], -1); !slices.Equal(a, b) {
+			t.Errorf("%s: English has the verbs %q, Italian %q", name, a, b)
+		}
+	}
+}
+
+func TestSettingDescriptions(t *testing.T) {
+	if len(en.SettingInfo) != 0 {
+		t.Error("English descriptions belong in internal/config, not in the table")
+	}
+	keys := config.Keys()
+	for _, k := range keys {
+		if strings.TrimSpace(it.SettingInfo[k]) == "" {
+			t.Errorf("the setting %s has no Italian description", k)
+		}
+	}
+	for k := range it.SettingInfo {
+		if !slices.Contains(keys, k) {
+			t.Errorf("the Italian description of %s is for no setting", k)
+		}
+	}
+}
+
+func TestStatesCoverWhatTheHubReports(t *testing.T) {
+	for _, s := range []string{"active", "inactive", "failed", "unknown", "connected", "stale", "offline", "revoked"} {
+		if en.States[s] == "" || it.States[s] == "" {
+			t.Errorf("no word for the state %q", s)
 		}
 	}
 }
@@ -56,8 +101,8 @@ func TestTemplatesKeepTheirVerbs(t *testing.T) {
 func TestHelpLinesKeepTheirKeys(t *testing.T) {
 	// The keys that do something are the same letters in both languages.
 	for _, k := range []string{"r ", "p ", "q ", "y ", "n "} {
-		join := en.HelpMain + en.HelpConfirm
-		joinIt := it.HelpMain + it.HelpConfirm
+		join := en.HelpMain + en.HelpReset + en.HelpQuit + en.HelpConfirm
+		joinIt := it.HelpMain + it.HelpReset + it.HelpQuit + it.HelpConfirm
 		if strings.Contains(join, k) != strings.Contains(joinIt, k) {
 			t.Errorf("the key %q is documented in only one language", strings.TrimSpace(k))
 		}

@@ -418,7 +418,7 @@ func (m Model) edit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.snap.ConfigFile == "" {
-			m.editErr = "there is no configuration file to change: start the console with --config FILE"
+			m.editErr = T.NoConfigToChange
 			return m, nil
 		}
 		value, err := config.SetFile(m.snap.ConfigFile, e.Key, m.editVal)
@@ -477,7 +477,7 @@ func (m Model) height0() int {
 
 func (m Model) tabLabel(t tab) string {
 	name := [...]string{T.TabStatus, T.TabSettings, T.TabLogs, T.TabHealth, T.TabActions}[t]
-	label := fmt.Sprintf(" %d %s ", int(t)+1, name)
+	label := " " + fmt.Sprintf(T.TabLabel, int(t)+1, name) + " "
 	if t == m.tab {
 		return tabOn.Render(label)
 	}
@@ -499,7 +499,7 @@ func (m Model) View() string {
 		if m.snap.Running {
 			style, label = goodStyle, T.Running
 		} else if m.snap.Service == "active" {
-			style, label = warnStyle, T.Running+"?"
+			style, label = warnStyle, T.RunningUnsure
 		}
 		header.WriteString("  " + T.Hub + " " + style.Render(dot+" "+label))
 	}
@@ -570,12 +570,14 @@ func (m Model) footer(w int) []string {
 		status = warnStyle.Render(T.RestartHint)
 	}
 	help := T.HelpMain
+	if m.opt.Hooks.ResetAdmin != nil {
+		help += "  " + T.HelpReset
+	}
+	help += "  " + T.HelpQuit
 	if m.editing {
 		help = T.HelpEdit
 	} else if m.confirm != "" {
 		help = T.HelpConfirm
-	} else if m.opt.Hooks.ResetAdmin == nil {
-		help = strings.Replace(help, "  p reset admin password", "", 1)
 	}
 	if !m.opt.Unicode {
 		help = strings.NewReplacer("↑/↓", "up/down", "←/→", "left/right").Replace(help)
@@ -608,8 +610,18 @@ func (m Model) body(w int) []string {
 	return m.statusBody()
 }
 
+// labelWidth is the width of the labels of kv: 16, or more when a label of the
+// console language is longer.
+func labelWidth() int {
+	w := 16
+	for _, l := range []string{T.Hub, T.Version, T.Dashboard, T.AgentPort, T.BuiltinAgent, T.DataDir, T.Database, T.ConfigFile, T.Problem, T.NewAgentAddress, T.NewAgentFingerprint} {
+		w = max(w, lipgloss.Width(l)+2)
+	}
+	return w
+}
+
 func kv(k, v string) string {
-	return " " + headStyle.Render(fmt.Sprintf("%-16s", k)) + v
+	return " " + headStyle.Render(fmt.Sprintf("%-*s", labelWidth(), k)) + v
 }
 
 func (m Model) statusBody() []string {
@@ -618,11 +630,11 @@ func (m Model) statusBody() []string {
 	hub := T.Stopped
 	if s.Running {
 		hub = T.Running
-		if s.Uptime != "" {
-			hub += ", " + T.Uptime + " " + s.Uptime
+		if s.UptimeText != "" {
+			hub += ", " + T.Uptime + " " + s.UptimeText
 		}
 	}
-	out = append(out, kv(T.Hub, hub+mutedStyle.Render("  ("+T.Service+": "+s.Service+")")))
+	out = append(out, kv(T.Hub, hub+mutedStyle.Render("  ("+T.Service+": "+stateWord(s.Service)+")")))
 	out = append(out, kv(T.Version, s.Version))
 	out = append(out, kv(T.Dashboard, s.URL))
 	for _, u := range s.LANURLs {
@@ -640,7 +652,7 @@ func (m Model) statusBody() []string {
 	}
 	out = append(out, kv(T.ConfigFile, orDash(s.ConfigFile, T.None)))
 	if s.Problem != "" {
-		out = append(out, kv("Problem", badStyle.Render(s.Problem)))
+		out = append(out, kv(T.Problem, badStyle.Render(s.Problem)))
 	}
 
 	if s.SetupToken != "" {
@@ -655,6 +667,10 @@ func (m Model) statusBody() []string {
 		out = append(out, "   "+mutedStyle.Render(T.NoAgents))
 	}
 	now := m.opt.System.Now
+	stateW := 9
+	for _, a := range s.Agents {
+		stateW = max(stateW, lipgloss.Width(stateWord(a.Status)))
+	}
 	for _, a := range s.Agents {
 		at := time.Time{}
 		if now != nil {
@@ -664,7 +680,7 @@ func (m Model) statusBody() []string {
 		if a.Status != "connected" {
 			style = warnStyle
 		}
-		out = append(out, fmt.Sprintf("   %-14s %s  %-10s %s", a.ID, style.Render(fmt.Sprintf("%-9s", a.Status)), heartbeat(a, at), mutedStyle.Render(a.Hostname)))
+		out = append(out, fmt.Sprintf("   %-14s %s  %-10s %s", a.ID, style.Render(fmt.Sprintf("%-*s", stateW, stateWord(a.Status))), heartbeat(a, at, T), mutedStyle.Render(a.Hostname)))
 	}
 	return out
 }
@@ -675,7 +691,7 @@ func (m Model) settingsBody(w int) []string {
 	out := []string{" " + mutedStyle.Render(fmt.Sprintf("  %-22s %-26s %s", hdr[0], hdr[1], hdr[2]))}
 	for i, e := range entries {
 		marker := "  "
-		line := fmt.Sprintf("%-22s %-26s %s", e.Key, ansi.Truncate(displayValue(e.Value), 26, "…"), e.Origin)
+		line := fmt.Sprintf("%-22s %-26s %s", e.Key, ansi.Truncate(displayValue(e.Value), 26, "…"), originWord(e.Origin))
 		if i == m.sel {
 			marker = m.sym("▸ ", "> ")
 			line = selectStyle.Render(line)
@@ -689,7 +705,7 @@ func (m Model) settingsBody(w int) []string {
 	e := entries[m.sel]
 	def, _ := config.Default().Get(e.Key)
 	out = append(out, "", " "+headStyle.Render(e.Key)+mutedStyle.Render("  "+T.Default+": "+displayValue(def)))
-	out = append(out, " "+e.Description)
+	out = append(out, " "+describe(e))
 	apply := T.AppliesNow
 	if e.Restart {
 		apply = T.AppliesRestart
@@ -774,6 +790,10 @@ func (m Model) logsBody() []string {
 
 func (m Model) healthBody() []string {
 	var out []string
+	width := 16
+	for _, c := range m.snap.Health {
+		width = max(width, lipgloss.Width(c.Title)+1)
+	}
 	for _, c := range m.snap.Health {
 		var mark string
 		switch c.Status {
@@ -786,7 +806,7 @@ func (m Model) healthBody() []string {
 		default:
 			mark = mutedStyle.Render(m.sym("·", "--"))
 		}
-		out = append(out, fmt.Sprintf(" %s  %s  %s", mark, headStyle.Render(fmt.Sprintf("%-16s", c.Name)), c.Detail))
+		out = append(out, fmt.Sprintf(" %s  %s  %s", mark, headStyle.Render(fmt.Sprintf("%-*s", width, c.Title)), c.Text))
 	}
 	return out
 }
@@ -806,11 +826,11 @@ type action struct {
 func (m Model) actions() []action {
 	restart := action{key: "r", title: T.ActRestart, info: T.ActRestartInfo}
 	if m.opt.Hooks.Restart == nil {
-		restart.why = "run: sudo systemctl restart " + ServiceUnit
+		restart.why = fmt.Sprintf(T.WhyRestart, ServiceUnit)
 	}
 	reset := action{key: "p", title: T.ActReset, info: T.ActResetInfo}
 	if m.opt.Hooks.ResetAdmin == nil {
-		reset.why = "run the console as root, or run: sudo regulus hub reset-admin"
+		reset.why = T.WhyReset
 	}
 	agents := action{key: "a", title: T.ActAgents, info: T.ActAgentsInfo, why: m.agentsBlocker()}
 	return []action{restart, reset, agents}
@@ -823,13 +843,13 @@ func (m Model) agentsBlocker() string {
 	case !m.loaded:
 		return T.Loading
 	case m.snap.AgentListen != "":
-		return "already on (" + m.snap.AgentListen + ")"
+		return fmt.Sprintf(T.WhyAgentsOn, m.snap.AgentListen)
 	case m.snap.ConfigFile == "":
-		return "there is no configuration file: start the console with --config FILE"
+		return T.WhyNoConfig
 	}
 	for _, e := range m.snap.Settings {
 		if e.Key == "agent_listen" && e.Origin == config.OriginEnv {
-			return "REGULUS_AGENT_LISTEN overrides the configuration file"
+			return fmt.Sprintf(T.WhyEnvAgents, e.Env)
 		}
 	}
 	return ""
@@ -885,7 +905,7 @@ func (m Model) actionsBody() []string {
 	}
 	fp := m.snap.CAFingerprint
 	if fp == "" {
-		fp = mutedStyle.Render("shown while the hub runs")
+		fp = mutedStyle.Render(T.FingerprintLater)
 	}
 	out = append(out, kv(T.NewAgentFingerprint, fp))
 	out = append(out, " "+mutedStyle.Render(T.NewAgentToken))
