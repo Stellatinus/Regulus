@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,5 +53,55 @@ func TestLocalStatusGoneWithTheHub(t *testing.T) {
 	defer cancel()
 	if _, err := localstatus.Fetch(ctx, t.TempDir()); err == nil {
 		t.Error("a hub answered where none runs")
+	}
+}
+
+// A database that does not answer (#313): the status must still come back
+// well within the client's timeout, and name the problem once the watcher
+// recorded it. Holding the only connection of the SQLite pool makes every
+// ping and query block, like PostgreSQL behind a firewall that drops packets.
+func TestLocalStatusAnswersWhileTheDatabaseBlocks(t *testing.T) {
+	h := startHubWithConfig(t, config.Default())
+	if h.cfg.Storage().IsPostgres() {
+		t.Skip("blocks the single connection of the SQLite pool")
+	}
+	waitFor(t, "status socket", func() bool {
+		_, err := localstatus.Fetch(t.Context(), h.cfg.DataDir)
+		return err == nil
+	})
+	conn, err := h.db.Conn(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	fetch := func() localstatus.Status {
+		t.Helper()
+		start := time.Now()
+		st, err := localstatus.Fetch(t.Context(), h.cfg.DataDir)
+		if err != nil {
+			t.Fatalf("the status did not answer: %v", err)
+		}
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("the status took %v, want under 1s", d)
+		}
+		return st
+	}
+	if st := fetch(); st.Version != "9.9.9" || st.CertSoonest != nil {
+		t.Errorf("status with a blocked database = %+v", st)
+	}
+
+	// The watcher's ping blocks for its own timeout and records the problem;
+	// the status reports it without asking the database again.
+	h.checkDatabase(t.Context())
+	st := fetch()
+	if st.DatabaseProblem == "" || !strings.Contains(st.DatabaseProblem, "timed out") {
+		t.Errorf("database problem = %q", st.DatabaseProblem)
+	}
+
+	_ = conn.Close()
+	h.checkDatabase(t.Context())
+	if st := fetch(); st.DatabaseProblem != "" || st.CertSoonest == nil {
+		t.Errorf("after the database answers again: problem %q, certificates %+v", st.DatabaseProblem, st.CertSoonest)
 	}
 }
