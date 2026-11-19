@@ -2,7 +2,7 @@ import { Component, useState, type ErrorInfo, type ReactNode } from "react";
 import ReactGridLayout, { useContainerWidth, type Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { addWidget, applyPositions, GRID_COLS, removeWidget, setWidgetConfig, type DashboardLayout, type WidgetInstance } from "./layout";
+import { addWidget, applyPositions, GRID_COLS, moveWidget, orderOf, removeWidget, setWidgetConfig, type DashboardLayout, type WidgetInstance } from "./layout";
 import { useT } from "./i18n";
 import { useCan, useSession } from "./session";
 import { useDashboardLayout, type SaveState } from "./useDashboardLayout";
@@ -10,6 +10,10 @@ import { registry as defaultRegistry } from "./widgets";
 import { widgetDescription, widgetTitle, type WidgetRegistry } from "./widgets/registry";
 
 const ROW_HEIGHT = 56;
+
+// Below this width the grid gives way to a simple stack (one or two columns,
+// styles.css .stack) in reading order, without dragging.
+const NARROW_GRID = 1024;
 
 interface Props {
   registry?: WidgetRegistry;
@@ -151,6 +155,30 @@ function Grid({ layout, registry, editing, onChange }: GridProps) {
     if (updated !== layout) onChange(updated);
   };
 
+  // A width of 0 means not measured (no layout engine, as in tests): keep the grid.
+  if (mounted && width > 0 && width < NARROW_GRID) {
+    const order = orderOf(layout);
+    return (
+      <div ref={containerRef} className={editing ? "stack grid editing" : "stack grid"}>
+        {order.map((w, n) => (
+          <div key={w.i} className={w.h > 4 ? "tall" : undefined}>
+            <WidgetFrame
+              widget={w}
+              registry={registry}
+              editing={editing}
+              onRemove={() => onChange(removeWidget(layout, w.i))}
+              onConfig={(config) => onChange(setWidgetConfig(layout, w.i, config))}
+              onMove={{
+                up: n > 0 ? () => onChange(moveWidget(layout, w.i, -1)) : undefined,
+                down: n < order.length - 1 ? () => onChange(moveWidget(layout, w.i, 1)) : undefined,
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} className={editing ? "grid editing" : "grid"}>
       {mounted && (
@@ -185,11 +213,13 @@ interface FrameProps {
   editing: boolean;
   onRemove: () => void;
   onConfig: (config: Record<string, unknown>) => void;
+  // On narrow screens: move the widget in reading order (undefined at the ends).
+  onMove?: { up?: () => void; down?: () => void };
 }
 
 // WidgetFrame draws the title bar and isolates failures: a widget that throws
 // shows an error in its own frame and leaves the rest of the dashboard alone.
-function WidgetFrame({ widget, registry, editing, onRemove, onConfig }: FrameProps) {
+function WidgetFrame({ widget, registry, editing, onRemove, onConfig, onMove }: FrameProps) {
   const t = useT();
   const def = registry.get(widget.type);
   const title = def ? widgetTitle(def, t) : t("servers.dashboard.unavailable");
@@ -198,9 +228,21 @@ function WidgetFrame({ widget, registry, editing, onRemove, onConfig }: FramePro
       <header>
         <h3 className="widget-title">{title}</h3>
         {editing && (
-          <button type="button" className="widget-remove" onClick={onRemove} aria-label={t("servers.dashboard.removeNamed", { title })}>
-            ×
-          </button>
+          <div className="widget-tools">
+            {onMove && (
+              <>
+                <button type="button" disabled={!onMove.up} onClick={onMove.up} aria-label={t("servers.dashboard.moveUp", { title })}>
+                  ↑
+                </button>
+                <button type="button" disabled={!onMove.down} onClick={onMove.down} aria-label={t("servers.dashboard.moveDown", { title })}>
+                  ↓
+                </button>
+              </>
+            )}
+            <button type="button" className="widget-remove" onClick={onRemove} aria-label={t("servers.dashboard.removeNamed", { title })}>
+              ×
+            </button>
+          </div>
         )}
       </header>
       <div className="widget-body">

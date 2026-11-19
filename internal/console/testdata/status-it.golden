@@ -1,0 +1,30 @@
+Regulus v0.3.0  Hub ● in esecuzione
+
+ 1 Stato   2 Impostazioni   3 Log   4 Controlli   5 Azioni
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Hub                 in esecuzione, attivo da 3h 12m  (servizio: attivo)
+ Versione            v0.3.0
+ Dashboard           http://localhost:8080
+                     anche su http://192.168.1.20:8080
+ Porta degli agenti  :8443
+ Agente integrato    attivo
+ Directory dei dati  testdata/no-such-dir
+ Configurazione      testdata/config.yaml
+
+ Agenti connessi (2)
+   local          connesso    4s fa      ubuntu01
+   web1           in ritardo  1m 35s fa  web1.lan
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

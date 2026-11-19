@@ -17,52 +17,65 @@ import (
 // Certificate is one of the hub's certificates and when it ends.
 type Certificate = localstatus.Certificate
 
-// describeCert says which certificate it is and when it ends, in the console
-// language.
-func describeCert(c Certificate, now time.Time) string {
+// describeCert says which certificate it is and when it ends, in the
+// language of the table s.
+func describeCert(s strs, c Certificate, now time.Time) string {
 	var what string
 	switch c.Kind {
 	case "ca":
-		what = T.CertCA
+		what = s.CertCA
 	case "listener":
-		what = T.CertListener
+		what = s.CertListener
 	default:
 		agent := c.AgentID
 		if c.Name != "" {
 			agent = c.Name + " (" + c.AgentID + ")"
 		}
-		what = fmt.Sprintf(T.CertAgent, agent)
+		what = fmt.Sprintf(s.CertAgent, agent)
 	}
 	date := c.NotAfter.UTC().Format(time.DateOnly)
 	days := int(math.Floor(c.NotAfter.Sub(now).Hours() / 24))
 	if days < 0 {
-		return fmt.Sprintf(T.CertEnded, what, date)
+		return fmt.Sprintf(s.CertEnded, what, date)
 	}
-	return fmt.Sprintf(T.CertEnds, what, date, strconv.Itoa(days))
+	return fmt.Sprintf(s.CertEnds, what, date, strconv.Itoa(days))
 }
 
-// certCheck is the health check of the certificates, or false when the hub
-// did not report them (not running, or older than #245).
-func certCheck(snap Snapshot, now time.Time) (Check, bool) {
-	if snap.CertSoonest == nil {
-		return Check{}, false
-	}
+// certDetail is the detail of the certificates check in the language of s.
+func certDetail(s strs, snap Snapshot, now time.Time) string {
 	if len(snap.CertWarnings) == 0 {
-		return Check{"Certificates", OK, T.CertNoneSoon + " " + describeCert(*snap.CertSoonest, now)}, true
+		return s.CertNoneSoon + " " + describeCert(s, *snap.CertSoonest, now)
 	}
 	var parts []string
 	ca, agent := false, false
 	for _, w := range snap.CertWarnings {
-		parts = append(parts, describeCert(w, now))
+		parts = append(parts, describeCert(s, w, now))
 		ca = ca || w.Kind == "ca"
 		agent = agent || w.Kind == "agent"
 	}
 	detail := strings.Join(parts, "; ") + "."
 	if ca {
-		detail += " " + T.CertRenewCA
+		detail += " " + s.CertRenewCA
 	}
 	if agent {
-		detail += " " + T.CertRenewAgent
+		detail += " " + s.CertRenewAgent
 	}
-	return Check{"Certificates", Warn, detail}, true
+	return detail
+}
+
+// certCheck is the health check of the certificates, or false when the hub
+// did not report them (not running, or older than #245). Name and Detail are
+// English (--json); Title and Text follow the console language.
+func certCheck(snap Snapshot, now time.Time) (Check, bool) {
+	if snap.CertSoonest == nil {
+		return Check{}, false
+	}
+	status := OK
+	if len(snap.CertWarnings) > 0 {
+		status = Warn
+	}
+	return Check{
+		Name: en.Certificates, Status: status, Detail: certDetail(en, snap, now),
+		Key: "certificates", Title: T.Certificates, Text: certDetail(T, snap, now),
+	}, true
 }

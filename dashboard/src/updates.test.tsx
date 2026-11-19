@@ -782,7 +782,7 @@ describe("UpdatesPage", () => {
     mockHub({ "GET /api/updates": [{ data: base }] });
     renderPage();
     expect(
-      await screen.findByText(/Every connected server runs 0.2.0/),
+      await screen.findByText("All servers are up to date (0.2.0)."),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Update/ }),

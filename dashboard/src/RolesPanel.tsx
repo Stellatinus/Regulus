@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { createRole, deleteRole, updateRole, type PermissionInfo, type RoleInfo } from "./api";
 import { useT } from "./i18n";
+import { ConfirmButton, RowActions } from "./ui";
 import { errorMessage } from "./useApiList";
 
 interface Props {
@@ -18,7 +19,6 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
   const [error, setError] = useState("");
 
   const remove = async (role: RoleInfo) => {
-    if (!window.confirm(t("users.roles.confirmDelete", { name: role.name }))) return;
     setError("");
     try {
       await deleteRole(role.name);
@@ -32,7 +32,7 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
     <section aria-labelledby="roles-heading" className="panel">
       <h3 id="roles-heading">{t("users.roles.title")}</h3>
       {error && <p role="alert">{error}</p>}
-      <table>
+      <table className="cards">
         <thead>
           <tr>
             <th>{t("users.roles.colRole")}</th>
@@ -46,23 +46,42 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
         <tbody>
           {roles.map((r) => (
             <tr key={r.name}>
-              <td>
-                {r.name}
-                {r.builtin && t("users.roles.builtIn")}
-                {r.description && <div className="hint">{r.description}</div>}
+              <td data-label={t("users.roles.colRole")} className="wrap">
+                <div>
+                  <strong>{r.name}</strong>
+                  {r.builtin && t("users.roles.builtIn")}
+                  {r.description && <div className="hint">{r.description}</div>}
+                </div>
               </td>
-              <td>{r.permissions.join(", ") || t("users.roles.nothing")}</td>
-              <td>{r.users}</td>
-              <td className="row-actions">
+              <td data-label={t("users.roles.colCan")} className="chips-cell">
+                {r.permissions.length === 0 ? (
+                  t("users.roles.nothing")
+                ) : (
+                  <ul className="chips" aria-label={t("users.roles.permissionsOf", { name: r.name })}>
+                    {r.permissions.map((p) => (
+                      <li key={p}>{p}</li>
+                    ))}
+                  </ul>
+                )}
+              </td>
+              <td data-label={t("users.roles.colUsers")}>{r.users}</td>
+              <td>
                 {!r.builtin && (
-                  <>
+                  <RowActions name={r.name}>
                     <button type="button" onClick={() => setEditing(r)}>
                       {t("users.roles.edit", { name: r.name })}
                     </button>
-                    <button type="button" onClick={() => void remove(r)}>
-                      {t("users.roles.delete", { name: r.name })}
-                    </button>
-                  </>
+                    {r.users > 0 ? (
+                      <span className="hint">{t("users.roles.inUse", { count: r.users })}</span>
+                    ) : (
+                      <ConfirmButton
+                        label={t("users.roles.delete", { name: r.name })}
+                        message={t("users.roles.confirmDelete", { name: r.name })}
+                        confirmLabel={t("users.roles.confirm.delete")}
+                        onConfirm={() => void remove(r)}
+                      />
+                    )}
+                  </RowActions>
                 )}
               </td>
             </tr>

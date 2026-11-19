@@ -14,7 +14,7 @@ export class FakeSocket implements SocketLike {
 
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: unknown }) => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((event?: { code?: number; reason?: string }) => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
 
@@ -36,7 +36,8 @@ export class FakeSocket implements SocketLike {
     this.onmessage?.({ data: JSON.stringify(message) });
   }
 
-  drop() {
-    this.onclose?.();
+  // drop closes from the server side, optionally with a close code and reason.
+  drop(code?: number, reason?: string) {
+    this.onclose?.(code === undefined ? undefined : { code, reason });
   }
 }

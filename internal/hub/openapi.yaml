@@ -740,6 +740,13 @@ paths:
           in: query
           description: Return only points received after this time.
           schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          description: >-
+            Return only the newest this many points (after since, when both are
+            given). Rates are computed before the cut, so the first returned
+            point keeps its rate.
+          schema: { type: integer, minimum: 1 }
       responses:
         "200":
           description: The metrics.

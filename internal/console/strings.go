@@ -32,7 +32,12 @@ type strs struct {
 
 	Loading string
 
-	HelpMain, HelpEdit, HelpConfirm string
+	// The help line of the main screen is HelpMain, then HelpReset when the
+	// reset action is there, then HelpQuit.
+	HelpMain, HelpReset, HelpQuit string
+	HelpEdit, HelpConfirm         string
+	// TabLabel is a tab: %d its number (the key that opens it), %s its name.
+	TabLabel string
 
 	RestartAsk, ResetAsk string
 	RestartHint          string
@@ -54,6 +59,44 @@ type strs struct {
 	MsgRestarting, MsgRestarted                  string
 	MsgLinkFailed, MsgLinkReady, MsgMakingLink   string
 	MsgTurningOn, MsgSaved, ResetLinkTitle       string
+
+	// Small words of the status and settings screens and of the text output.
+	Problem       string // a configuration that cannot be loaded
+	Empty         string // an empty setting value
+	RunningUnsure string // the service is active but the hub does not answer
+	Ago           string // %s: a duration
+	// Durations: %d days, hours, minutes and seconds, largest unit first.
+	DurDays, DurHours, DurMinutes, DurSeconds string
+	// Where the value of a setting comes from (config.Origin*).
+	OriginDefault, OriginFile, OriginEnv string
+	// States are the words for the systemd state of the service and the
+	// state of an agent, by the value systemd or the hub reports. A value
+	// that is missing here is shown as it is.
+	States map[string]string
+	// SettingInfo describes the settings, by key. English has none: the
+	// descriptions in internal/config are the English text, and a key missing
+	// here falls back to them.
+	SettingInfo map[string]string
+
+	// Why an action of the Actions tab cannot run here.
+	WhyRestart       string // %s: the systemd unit
+	WhyReset         string
+	WhyAgentsOn      string // %s: the agent address
+	WhyNoConfig      string
+	WhyEnvAgents     string // %s: the environment variable
+	NoConfigToChange string
+	FingerprintLater string
+
+	// Health checks: the status words of the text output, the names of the
+	// checks and their details (the %s are documented where they are used,
+	// in internal/console/snapshot.go). --plain and --json always use English.
+	StatusOK, StatusWarn, StatusFail, StatusInfo                               string
+	ChkConfig, ChkHub, ChkDashboardPort, ChkAgentPort, ChkDataDir, ChkDatabase string
+	CfgMissing, CfgValid                                                       string
+	HubAnswers, HubNoPermission, HubSilent                                     string
+	PortServed, PortInUse, PortPrivileged, PortError, PortFree                 string
+	DataMissing, DataNotWritable, DataWritable                                 string
+	DBProblem, DBAnswers, DBLater, DBFile, DBNone                              string
 
 	// Certificate end dates (#245), kept in a block of their own. CertAgent
 	// takes the agent; CertEnds takes the certificate, the date and the days
@@ -111,9 +154,12 @@ var en = strs{
 
 	Loading: "Loading…",
 
-	HelpMain:    "tab/←/→ section  ↑/↓ move  enter edit  r restart  p reset admin password  q quit",
+	HelpMain:    "tab/←/→ section  ↑/↓ move  enter edit  r restart",
+	HelpReset:   "p reset admin password",
+	HelpQuit:    "q quit",
 	HelpEdit:    "enter save  esc cancel  tab next choice",
 	HelpConfirm: "y yes  n no",
+	TabLabel:    "%d %s",
 
 	RestartAsk:  "Restart the regulus service now?",
 	ResetAsk:    "Make a one-time link to choose a new administrator password?",
@@ -147,6 +193,62 @@ var en = strs{
 	MsgTurningOn:          "Turning on remote agents…",
 	MsgSaved:              "Saved %s = %s.",
 	ResetLinkTitle:        "Password reset link",
+
+	Problem:       "Problem",
+	Empty:         "(empty)",
+	RunningUnsure: "running?",
+	Ago:           "%s ago",
+	DurDays:       "%dd %dh %dm",
+	DurHours:      "%dh %dm",
+	DurMinutes:    "%dm %ds",
+	DurSeconds:    "%ds",
+	OriginDefault: "default",
+	OriginFile:    "file",
+	OriginEnv:     "environment",
+	States: map[string]string{
+		"active": "active", "inactive": "inactive", "failed": "failed", "unknown": "unknown",
+		"activating": "starting", "deactivating": "stopping", "reloading": "reloading",
+		"connected": "connected", "stale": "stale", "offline": "offline", "revoked": "revoked",
+	},
+
+	WhyRestart:       "run: sudo systemctl restart %s",
+	WhyReset:         "run the console as root, or run: sudo regulus hub reset-admin",
+	WhyAgentsOn:      "already on (%s)",
+	WhyNoConfig:      "there is no configuration file: start the console with --config FILE",
+	WhyEnvAgents:     "%s overrides the configuration file",
+	NoConfigToChange: "there is no configuration file to change: start the console with --config FILE",
+	FingerprintLater: "shown while the hub runs",
+
+	StatusOK:   "ok",
+	StatusWarn: "warn",
+	StatusFail: "fail",
+	StatusInfo: "info",
+
+	ChkConfig:        "Configuration",
+	ChkHub:           "Hub",
+	ChkDashboardPort: "Dashboard port",
+	ChkAgentPort:     "Agent port",
+	ChkDataDir:       "Data directory",
+	ChkDatabase:      "Database",
+
+	CfgMissing:      "no configuration file: showing the defaults; pass --config FILE to read and change one",
+	CfgValid:        "%s is valid",
+	HubAnswers:      "answers on its local socket",
+	HubNoPermission: "cannot read its local socket: run as the hub's user (for example sudo -u regulus regulus)",
+	HubSilent:       "the service is active but does not answer on %s",
+	PortServed:      "%s is served by the hub",
+	PortInUse:       "%s is in use by another program",
+	PortPrivileged:  "%s needs more privileges than yours (ports below 1024)",
+	PortError:       "%s: %s",
+	PortFree:        "%s is free",
+	DataMissing:     "%s does not exist yet (created at the first start)",
+	DataNotWritable: "you cannot write to %s (fine if the hub runs as another user)",
+	DataWritable:    "%s is writable",
+	DBProblem:       "%s: %s",
+	DBAnswers:       "%s answers",
+	DBLater:         "%s (checked while the hub runs; `regulus db check` tries it now)",
+	DBFile:          "%s, %s",
+	DBNone:          "none yet",
 
 	// Certificate end dates (#245).
 	Certificates:   "Certificates",

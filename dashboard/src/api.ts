@@ -1,3 +1,5 @@
+import { toMetricsPoints } from "./shapes";
+
 // Agent as returned by GET /api/agents (see internal/hub/api.go).
 export interface Agent {
   id: string;
@@ -62,8 +64,9 @@ export interface Me {
   two_factor_setup_required?: boolean;
 }
 
-// ApiError is thrown for any non-2xx answer; message is the hub's explanation
-// when it sent one.
+// ApiError is thrown for any non-2xx answer, and for a 2xx answer that is not
+// JSON (code INVALID_RESPONSE); message is the hub's explanation when it sent
+// one.
 export class ApiError extends Error {
   readonly status: number;
   // A machine-readable reason some answers carry, such as two_factor_setup_required.
@@ -111,8 +114,28 @@ async function request<T>(
     throw new ApiError(res.status, message, code);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  // The hub answers JSON. Anything else with a 2xx status comes from
+  // something in between (a proxy error page, a captive portal, a login
+  // page of a single sign-on gateway): say so with an ApiError instead of
+  // letting the JSON parser throw a bare SyntaxError.
+  const type = typeof res.headers?.get === "function" ? res.headers.get("Content-Type") : null;
+  if (type !== null && !/json/i.test(type)) {
+    throw new ApiError(res.status, notJSON(method, path, type), INVALID_RESPONSE);
+  }
+  try {
+    return (await res.json()) as T;
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    throw new ApiError(res.status, notJSON(method, path, type), INVALID_RESPONSE);
+  }
 }
+
+// INVALID_RESPONSE is the code of the ApiError thrown when a 2xx answer is not
+// the JSON the hub sends.
+export const INVALID_RESPONSE = "invalid_response";
+
+const notJSON = (method: string, path: string, type: string | null) =>
+  `${method} ${path}: the answer is not JSON (${type || "no content type"}); a proxy or captive portal may be in the way`;
 
 // fetchAgents lists the connected agents, or with all every enrolled agent.
 export const fetchAgents = (signal?: AbortSignal, all = false) =>
@@ -156,8 +179,11 @@ export const fetchAgentListener = () => request<AgentListener>("GET", "/api/agen
 
 export const enableRemoteAgents = (port: number) => request<AgentListener>("PUT", "/api/agents/listener", { port });
 
-export const createEnrollment = (name: string) =>
-  request<Enrollment>("POST", "/api/enrollment-tokens", { name });
+// createEnrollment makes a token; ttl is how long it can be used, a Go
+// duration such as "15m" or "24h" (1 minute to 7 days; the hub's default, one
+// hour, when empty).
+export const createEnrollment = (name: string, ttl = "") =>
+  request<Enrollment>("POST", "/api/enrollment-tokens", ttl ? { name, ttl } : { name });
 
 // A token that can still be used (see GET /api/enrollment-tokens). The secret
 // was shown once, when the token was made, and is not part of it.
@@ -309,20 +335,26 @@ export interface NetworkUsage {
 }
 
 // fetchMetrics returns the recent metrics of an agent, oldest first; with
-// since only the points received after that time.
+// since only the points received after that time, with limit only the newest
+// that many.
 export async function fetchMetrics(
   id: string,
   since?: string,
   signal?: AbortSignal,
+  limit?: number,
 ): Promise<MetricsPoint[]> {
-  const query = since ? `?since=${encodeURIComponent(since)}` : "";
-  const res = await request<{ agent: string; points: MetricsPoint[] }>(
+  const params = new URLSearchParams();
+  if (since) params.set("since", since);
+  if (limit !== undefined) params.set("limit", String(limit));
+  const query = params.toString() === "" ? "" : `?${params.toString()}`;
+  const res = await request<{ agent: string; points: unknown } | null>(
     "GET",
     `/api/agents/${encodeURIComponent(id)}/metrics${query}`,
     undefined,
     signal,
   );
-  return res.points;
+  // Reports the widgets could not read are dropped (see shapes.ts).
+  return toMetricsPoints(res?.points);
 }
 
 // One login session of the signed-in user (GET /api/account/sessions).

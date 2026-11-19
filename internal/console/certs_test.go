@@ -85,7 +85,7 @@ func TestCertificatesInStatus(t *testing.T) {
 	ca := Certificate{Kind: "ca", NotAfter: fixedNow.Add(60*day + time.Hour)}
 	snap = Collect(context.Background(), systemWithCerts(&ca, []Certificate{ca}), cfgFile, "v1")
 	c, _ = certCheckOf(t, snap)
-	if c.Status != Warn || !strings.Contains(c.Detail, "della CA: scade il 2026-12-24, tra 60 giorni") || !strings.Contains(c.Detail, "nuova CA") {
+	if c.Status != Warn || !strings.Contains(c.Text, "della CA: scade il 2026-12-24, tra 60 giorni") || !strings.Contains(c.Text, "nuova CA") || !strings.Contains(c.Detail, "new CA") {
 		t.Errorf("check = %+v", c)
 	}
 }

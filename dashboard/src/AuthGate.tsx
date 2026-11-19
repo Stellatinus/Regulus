@@ -142,10 +142,18 @@ function useSubmit<T>(action: () => Promise<T>, onDone: (result: T) => void) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    action().then(onDone, (err: unknown) => {
+    action().then(
+      (result) => {
+        // The form may stay on screen (a login that asks for a code, then
+        // Back): it must be usable again.
+        setBusy(false);
+        onDone(result);
+      },
+      (err: unknown) => {
       setError(err instanceof ApiError || err instanceof Error ? err.message : String(err));
       setBusy(false);
-    });
+      },
+    );
   };
   return { error, busy, submit };
 }

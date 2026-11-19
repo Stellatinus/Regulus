@@ -52,10 +52,10 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 	row := func(k, v string) { _, _ = fmt.Fprintf(tw, "%s\t%s\n", k, v) }
 
 	hub := state(snap)
-	if snap.Running && snap.Uptime != "" {
-		hub += ", " + T.Uptime + " " + snap.Uptime
+	if snap.Running && snap.UptimeText != "" {
+		hub += ", " + T.Uptime + " " + snap.UptimeText
 	}
-	row(T.Hub, hub+" ("+T.Service+": "+snap.Service+")")
+	row(T.Hub, hub+" ("+T.Service+": "+stateWord(snap.Service)+")")
 	row(T.Version, snap.Version)
 	row(T.Dashboard, snap.URL)
 	for _, u := range snap.LANURLs {
@@ -73,10 +73,10 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 	}
 	row(T.ConfigFile, orDash(snap.ConfigFile, T.None))
 	if snap.CertSoonest != nil {
-		row(T.Certificates, describeCert(*snap.CertSoonest, now))
+		row(T.Certificates, describeCert(T, *snap.CertSoonest, now))
 	}
 	if snap.Problem != "" {
-		row("Problem", snap.Problem)
+		row(T.Problem, snap.Problem)
 	}
 	if err := tw.Flush(); err != nil {
 		return err
@@ -89,7 +89,7 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 		_, _ = fmt.Fprintf(w, "\n%s (%d)\n", T.Agents, len(snap.Agents))
 		tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for _, a := range snap.Agents {
-			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", a.ID, a.Status, heartbeat(a, now), a.Hostname)
+			_, _ = fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\n", a.ID, stateWord(a.Status), heartbeat(a, now, T), a.Hostname)
 		}
 		if err := tw.Flush(); err != nil {
 			return err
@@ -99,7 +99,7 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 	_, _ = fmt.Fprintln(w)
 	tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, c := range snap.Health {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", c.Status, c.Name, c.Detail)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", statusWord(c.Status), c.Title, c.Text)
 	}
 	return tw.Flush()
 }
@@ -137,10 +137,10 @@ func writeStatusPlain(w io.Writer, snap Snapshot, now time.Time) error {
 	}
 	p("agents", len(snap.Agents))
 	for _, a := range snap.Agents {
-		p("agent."+a.ID, a.Status+" "+heartbeat(a, now))
+		p("agent."+a.ID, a.Status+" "+heartbeat(a, now, en))
 	}
 	for _, c := range snap.Health {
-		p("check."+strings.ToLower(strings.ReplaceAll(c.Name, " ", "_")), c.Status+" "+c.Detail)
+		p("check."+c.Key, c.Status+" "+c.Detail)
 	}
 	return nil
 }
@@ -174,14 +174,14 @@ func WriteSettings(w io.Writer, entries []config.Entry, f Format) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", strings.ToUpper(T.SettingHeader[0]), strings.ToUpper(T.SettingHeader[1]), strings.ToUpper(T.SettingHeader[2]))
 	for _, e := range entries {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", e.Key, displayValue(e.Value), e.Origin)
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", e.Key, displayValue(e.Value), originWord(e.Origin))
 	}
 	return tw.Flush()
 }
 
 func displayValue(v string) string {
 	if v == "" {
-		return "(empty)"
+		return T.Empty
 	}
 	return v
 }
@@ -200,10 +200,54 @@ func onOff(b bool) string {
 	return T.Off
 }
 
-// heartbeat describes when an agent was last heard from.
-func heartbeat(a Agent, now time.Time) string {
+// heartbeat describes when an agent was last heard from, in the language of s.
+func heartbeat(a Agent, now time.Time, s strs) string {
 	if a.LastHeartbeat.IsZero() {
 		return "-"
 	}
-	return formatDuration(now.Sub(a.LastHeartbeat)) + " ago"
+	return fmt.Sprintf(s.Ago, formatDuration(now.Sub(a.LastHeartbeat), s))
+}
+
+// stateWord is a state of the service or of an agent in the console language.
+func stateWord(v string) string {
+	if w := T.States[v]; w != "" {
+		return w
+	}
+	return v
+}
+
+// statusWord is the status of a health check in the console language.
+func statusWord(status string) string {
+	switch status {
+	case OK:
+		return T.StatusOK
+	case Warn:
+		return T.StatusWarn
+	case Fail:
+		return T.StatusFail
+	case Info:
+		return T.StatusInfo
+	}
+	return status
+}
+
+// originWord says where the value of a setting comes from.
+func originWord(origin string) string {
+	switch origin {
+	case config.OriginDefault:
+		return T.OriginDefault
+	case config.OriginFile:
+		return T.OriginFile
+	case config.OriginEnv:
+		return T.OriginEnv
+	}
+	return origin
+}
+
+// describe is the description of a setting in the console language.
+func describe(e config.Entry) string {
+	if d := T.SettingInfo[e.Key]; d != "" {
+		return d
+	}
+	return e.Description
 }

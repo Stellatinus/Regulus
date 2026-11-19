@@ -99,8 +99,9 @@ export const updates = {
   "updates.rollout.running":
     "Updating the servers, {size} at a time. It stops at the first failure.",
   "updates.rollout.progress": "Update progress",
-  "updates.rollout.allCurrent":
-    "Every connected server runs {target}, or is not managed by an agent that can be updated.",
+  "updates.rollout.allCurrent": "All servers are up to date ({target}).",
+  "updates.rollout.exceptions": "Except these, which cannot be updated from here:",
+  "updates.rollout.exceptionsLabel": "Servers that cannot be updated from here",
   "updates.rollout.behindOne": "1 server runs an older version.",
   "updates.rollout.behindMany": "{count} servers run an older version.",
   "updates.rollout.behindLabel": "Servers behind",

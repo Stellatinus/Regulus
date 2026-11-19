@@ -1,0 +1,30 @@
+Regulus v0.3.0  Hub ● in esecuzione
+
+ 1 Stato   2 Impostazioni   3 Log   4 Controlli   5 Azioni
+────────────────────────────────────────────────────────────────────────────────────────────────────
+   Impostazione           Valore                     Origine
+ ▸ listen                 :8080                      file
+   agent_listen           (vuoto)                    predefinito
+   data_dir               testdata/no-such-dir       file
+   database.type          sqlite                     predefinito
+   database.host          (vuoto)                    predefinito
+   database.port          5432                       predefinito
+   database.name          regulus                    predefinito
+   database.user          regulus                    predefinito
+   database.password      (vuoto)                    predefinito
+   database.sslmode       prefer                     predefinito
+   database.sslrootcert   (vuoto)                    predefinito
+   database.schema        (vuoto)                    predefinito
+   builtin_agent          true                       file
+   metrics_interval       10s                        file
+   log.level              info                       file
+   log.format             text                       file
+   updates.check          true                       predefinito
+   updates.apply          false                      predefinito
+   console.tui            true                       predefinito
+
+ listen  predefinito: :8080
+ Indirizzo della dashboard e dell'API: host:porta, oppure solo la porta (8080)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci
