@@ -52,6 +52,8 @@ It follows the two-key rule above, so what the dashboard can do depends on the n
 
 None of this exists in the code. Related: guided installation ([#165](https://github.com/Stellatinus/Regulus/issues/165): from the hub, "add a node of this type" gives the exact steps and checks each one) and a possible future **configurator**, a static web page where one describes a home lab or a company and gets the node list and the steps ([#167](https://github.com/Stellatinus/Regulus/issues/167), only evaluated, not decided).
 
+The proposed design is on its own page, [node-type-changes.md](node-type-changes.md): the single assignment operation behind the dashboard, the console and `regulus server type`; the node-side `allow` setting (empty by default, never changed by the hub); undo rules per type; what the dashboard shows and why an action is not offered; and, for #165, the step files shared by the wizard, the console, the documentation and the configurator. It is a proposal waiting for the maintainer.
+
 ## Capabilities (proposed)
 
 | Capability | Meaning | Used by |
