@@ -3,13 +3,17 @@
 // pure Go driver, and PostgreSQL through pgx; the choice is made by the
 // configuration. This is the one package that knows the differences between
 // the two: the other packages receive a *sql.DB, write their queries with ?
-// placeholders and own their own tables. It does not move data from one
-// backend to the other (#124).
+// placeholders and own their own tables. For the hub it also makes sure one
+// hub runs on a PostgreSQL database (OpenHub), and for tools beside the hub
+// it opens a database without migrating it (OpenExisting). It does not move
+// data from one backend to the other (#124), and it does not lock the data
+// directory (the hub does).
 package storage
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -28,33 +32,81 @@ const FileName = "regulus.db"
 const connectWait = 60 * time.Second
 
 // Open opens the database named by cfg and applies all pending migrations. For
-// SQLite the file is created if needed.
+// SQLite the file is created if needed. The hub itself uses OpenHub.
 func Open(ctx context.Context, cfg Config) (*sql.DB, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	db, _, err := open(ctx, cfg, false)
+	return db, err
+}
+
+// HubDB is the database as the running hub holds it.
+type HubDB struct {
+	// Write is the pool for everything that changes the database, and for
+	// reads that must see the caller's own transaction.
+	Write *sql.DB
+	// Read is the pool for reads. It is Write itself where the backend does
+	// not need a separate pool.
+	Read *sql.DB
+
+	unlock func()
+}
+
+// Close releases the lock of the active hub and closes the pools.
+func (d *HubDB) Close() error {
+	d.unlock()
+	var err error
+	if d.Read != d.Write {
+		err = d.Read.Close()
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		return nil, fmt.Errorf("create data directory: %w", err)
-	}
-	db, err := openPool(cfg)
+	return errors.Join(err, d.Write.Close())
+}
+
+// OpenHub opens the database for the hub: like Open, and on PostgreSQL it
+// first makes this process the one active hub on the database (an advisory
+// lock, see lockActiveHub), before any migration, so that a second hub, maybe
+// a newer one, does not migrate the schema under the first. On SQLite that
+// guarantee comes from the lock the hub holds on the data directory.
+func OpenHub(ctx context.Context, cfg Config) (*HubDB, error) {
+	db, unlock, err := open(ctx, cfg, true)
 	if err != nil {
 		return nil, err
 	}
+	return &HubDB{Write: db, Read: db, unlock: unlock}, nil
+}
+
+func open(ctx context.Context, cfg Config, active bool) (*sql.DB, func(), error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, nil, err
+	}
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return nil, nil, fmt.Errorf("create data directory: %w", err)
+	}
+	db, err := openPool(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := waitFor(ctx, db, cfg); err != nil {
 		_ = db.Close()
-		return nil, err
+		return nil, nil, err
 	}
 	if cfg.IsPostgres() {
 		if _, err := verifySchema(ctx, db, cfg); err != nil {
 			_ = db.Close()
-			return nil, err
+			return nil, nil, err
+		}
+	}
+	unlock := func() {}
+	if active {
+		if unlock, err = lockActiveHub(ctx, db, cfg); err != nil {
+			_ = db.Close()
+			return nil, nil, err
 		}
 	}
 	if err := Migrate(ctx, db, cfg.Type); err != nil {
+		unlock()
 		_ = db.Close()
-		return nil, err
+		return nil, nil, err
 	}
-	return db, nil
+	return db, unlock, nil
 }
 
 // OpenSQLite opens the SQLite database in dataDir. It is shorthand for the

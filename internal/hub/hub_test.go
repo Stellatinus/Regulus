@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -193,4 +195,42 @@ func TestRunningHubReportsItsDatabaseState(t *testing.T) {
 	if got := read(); got != `{"ok":true}` {
 		t.Fatalf("after recovery: %s", got)
 	}
+}
+
+// One data directory, one hub (#217): a second hub fails at once with a
+// message that says why, and starts once the first is closed.
+func TestSecondHubOnTheSameDataDirectoryFails(t *testing.T) {
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	useTestDatabase(t, &cfg)
+	ctx := context.Background()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	first, err := New(ctx, cfg, log, fstest.MapFS{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	second, err := New(ctx, cfg, log, fstest.MapFS{})
+	if err == nil {
+		_ = second.Close()
+		_ = first.Close()
+		t.Fatal("a second hub started on the same data directory")
+	}
+	if !errors.Is(err, ErrAlreadyRunning) || !strings.Contains(err.Error(), filepath.Join(cfg.DataDir, lockFileName)) ||
+		!strings.Contains(err.Error(), fmt.Sprintf("process %d", os.Getpid())) {
+		t.Errorf("error = %v; want ErrAlreadyRunning naming the lock file and the process", err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("the second hub took %s to give up; it must not wait", d)
+	}
+
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := New(ctx, cfg, log, fstest.MapFS{})
+	if err != nil {
+		t.Fatalf("after the first hub closed: %v", err)
+	}
+	_ = again.Close()
 }

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -749,5 +751,42 @@ func TestHTTPTwoFactorAdminActions(t *testing.T) {
 	}
 	if _, _, _, err := s.Login(context.Background(), "x", "eve", otherPassword); err != nil {
 		t.Fatalf("eve needs only the password after the reset: %v", err)
+	}
+}
+
+// Processes that start together (the hub and reset-admin, two hubs before the
+// lock refuses one) must all read the same, complete secret (#217).
+func TestSecretCreatedOnceUnderConcurrency(t *testing.T) {
+	dir := t.TempDir()
+	const n = 16
+	got := make([][]byte, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got[i], errs[i] = LoadOrCreateSecret(dir)
+		}()
+	}
+	wg.Wait()
+	for i := range n {
+		if errs[i] != nil {
+			t.Fatalf("caller %d: %v", i, errs[i])
+		}
+		if !bytes.Equal(got[i], got[0]) || len(got[i]) != secretLen {
+			t.Fatalf("caller %d got a different or short secret", i)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != secretFile {
+		names := []string{}
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("data directory holds %v; want only %s (no temporary file left)", names, secretFile)
 	}
 }

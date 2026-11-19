@@ -173,6 +173,7 @@ flowchart LR
 | `regulus.db` | everything in the tables above | contains hashes and encrypted TOTP secrets |
 | `secret.key` | master secret for TOTP encryption; created at first start | owner-only; **back up with the database** |
 | `pki/ca.crt`, `pki/ca.key` | the CA | `ca.key` owner-only; whoever has it can issue agent certificates |
+| `hub.lock` | held locked (`flock`) by the running hub, with its process id inside; a second hub on the same directory refuses to start (#217) | none; never delete it while a hub runs |
 | `regulus.sock` | Unix socket for local tools (console, `regulus status`), mode `0600`, owner = the user running the hub | no login; file permissions are the proof |
 | `updates/` | downloaded, verified releases | |
 | `tuf/` | cache of the Sigstore trusted root | |
@@ -270,7 +271,7 @@ There is no TLS on the dashboard port; put a reverse proxy in front outside a tr
 **Hub** (`regulus hub`, `cmd/regulus/main.go` then `internal/hub/hub.go`):
 
 1. Load the configuration: defaults, then the YAML file, then environment variables, then flags (`internal/config`).
-2. `hub.New`: open the database and apply migrations (`storage.Open`); load or create `secret.key`; create the account service; load or create the CA in `pki/`; create the fleet service, the agent service and the in-process transport; create the update manager and stager.
+2. `hub.New`: lock the data directory (`hub.lock`; a second hub fails here); open the database and apply migrations (`storage.OpenHub`, which on PostgreSQL first takes the "active hub" advisory lock); load or create `secret.key`; create the account service; load or create the CA in `pki/`; create the fleet service, the agent service and the in-process transport; create the update manager and stager.
 3. `Hub.Serve`: register the agent service on the in-process transport; if `agent_listen` is set, start the network listener (a new hub certificate is made now); if `builtin_agent` is true, start the built-in agent; start the local socket; start the rollout timer (every 5 minutes it checks whether the automatic mode should roll out) and the update manager loop; finally serve HTTP.
 4. On cancel (SIGINT/SIGTERM) the HTTP server shuts down gracefully; agent streams are stopped abruptly because they are long-lived.
 

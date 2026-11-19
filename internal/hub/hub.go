@@ -46,7 +46,11 @@ const shutdownTimeout = 10 * time.Second
 type Hub struct {
 	cfg config.Config
 	log *slog.Logger
-	db  *sql.DB
+	db  *sql.DB // store.Write
+	// store holds the database pools; unlockDir releases the lock of the
+	// data directory (see lockDataDir). Close does both.
+	store     *storage.HubDB
+	unlockDir func()
 
 	dbState dbHealth
 	ui      fs.FS
@@ -104,35 +108,46 @@ func WithAgentIntervals(heartbeat, metrics time.Duration) Option {
 	}
 }
 
-// New opens the database (applying migrations) and returns a Hub that serves
-// the dashboard from ui. Call Close when done.
+// New locks the data directory (a second hub on it fails at once with
+// ErrAlreadyRunning), opens the database (applying migrations) and returns a
+// Hub that serves the dashboard from ui. Call Close when done.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opts ...Option) (*Hub, error) {
-	db, err := storage.Open(ctx, cfg.Storage())
+	// One data directory, one hub: the lock comes before anything in the
+	// directory is touched (the database, its migrations, the secret, the
+	// local socket).
+	unlockDir, err := lockDataDir(cfg.DataDir)
 	if err != nil {
+		return nil, err
+	}
+	store, err := storage.OpenHub(ctx, cfg.Storage())
+	if err != nil {
+		unlockDir()
 		return nil, fmt.Errorf("storage: %w", err)
 	}
+	fail := func(err error) (*Hub, error) {
+		_ = store.Close()
+		unlockDir()
+		return nil, err
+	}
+	db := store.Write
 	log.Info("database ready", "backend", cfg.Storage().Describe())
 
 	secret, err := auth.LoadOrCreateSecret(cfg.DataDir)
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("hub secret: %w", err)
+		return fail(fmt.Errorf("hub secret: %w", err))
 	}
 	proxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
 	if err != nil {
-		_ = db.Close()
-		return nil, err
+		return fail(err)
 	}
 	authn, err := auth.New(ctx, db, log, auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
 	if err != nil {
-		_ = db.Close()
-		return nil, err
+		return fail(err)
 	}
 
 	ca, err := pki.LoadOrCreate(filepath.Join(cfg.DataDir, "pki"), time.Now())
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("certificate authority: %w", err)
+		return fail(fmt.Errorf("certificate authority: %w", err))
 	}
 
 	h := &Hub{
@@ -141,6 +156,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		fleet:     fleet.New(db, ca, authn),
 		log:       log,
 		db:        db,
+		store:     store,
+		unlockDir: unlockDir,
 		ui:        ui,
 		agents:    newAgentServer(log),
 		transport: inproc.New(),
@@ -232,7 +249,9 @@ func (h *Hub) AgentConn() (*grpc.ClientConn, error) {
 func (h *Hub) Close() error {
 	h.rollout.stop()
 	h.updates.Close()
-	return h.db.Close()
+	err := h.store.Close()
+	h.unlockDir()
+	return err
 }
 
 // Serve serves HTTP on ln until ctx is cancelled, then shuts down gracefully.

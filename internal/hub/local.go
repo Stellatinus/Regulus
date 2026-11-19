@@ -63,7 +63,10 @@ func (h *Hub) serveLocal(addr string) (stop func()) {
 		h.log.Warn("the data directory path is too long for the local status socket; `regulus status` will not see live data", "path", path)
 		return func() {}
 	}
-	_ = os.Remove(path) // left behind by a hub that was killed
+	// A socket here was left behind by a hub that was killed: a live hub
+	// holds the lock of the data directory, so this hub would not have
+	// started (see lockDataDir).
+	_ = os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		h.log.Warn("cannot open the local status socket", "path", path, "err", err)
