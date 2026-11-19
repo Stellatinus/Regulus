@@ -12,6 +12,7 @@ import { useT, type MessageKey } from "./i18n";
 import type { Session } from "./session";
 import { UpdatesPage } from "./UpdatesPage";
 import { UsersPage } from "./UsersPage";
+import { PluginsPage } from "./PluginsPage";
 
 // Icons are drawn inline (no icon library): 24-unit strokes in currentColor.
 const icon = (d: ReactNode) => (
@@ -50,6 +51,13 @@ const icons = {
       <path d="M12 8v5l3 2" />
     </>,
   ),
+  plugins: icon(
+    <>
+      <path d="M9 3v4M15 3v4" />
+      <path d="M6 7h12v4a6 6 0 0 1-12 0z" />
+      <path d="M12 17v4" />
+    </>,
+  ),
   menu: icon(<path d="M4 7h16M4 12h16M4 17h16" />),
   chevron: icon(<path d="M15 6l-6 6 6 6" />),
 };
@@ -58,6 +66,7 @@ const icons = {
 const nav: { route: Route; label: MessageKey; icon: ReactNode; section: "overview" | "admin"; permissions?: string[] }[] = [
   { route: "/", label: "nav.dashboard", icon: icons.dashboard, section: "overview" },
   { route: "/servers", label: "nav.servers", icon: icons.servers, section: "overview" },
+  { route: "/plugins", label: "nav.plugins", icon: icons.plugins, section: "overview", permissions: ["servers.read"] },
   { route: "/users", label: "nav.users", icon: icons.users, section: "admin", permissions: ["users.manage", "roles.manage", "audit.read"] },
   { route: "/updates", label: "nav.updates", icon: icons.updates, section: "admin", permissions: ["core.update"] },
 ];
@@ -66,6 +75,7 @@ const titles: Record<Route, MessageKey> = {
   "/": "nav.dashboard",
   "/servers": "nav.servers",
   "/server": "nav.servers",
+  "/plugins": "nav.plugins",
   "/users": "nav.users",
   "/updates": "nav.updates",
   "/account": "nav.account",
@@ -78,6 +88,8 @@ function Page({ route }: { route: Route }) {
       return <ServersPage />;
     case "/server":
       return <ServerPage />;
+    case "/plugins":
+      return <PluginsPage />;
     case "/users":
       return <UsersPage />;
     case "/updates":

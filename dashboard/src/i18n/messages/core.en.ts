@@ -15,6 +15,7 @@ export const core = {
   "nav.main": "Main",
   "nav.dashboard": "Dashboard",
   "nav.servers": "Servers",
+  "nav.plugins": "Plugins",
   "nav.users": "Users",
   "nav.updates": "Updates",
   "nav.signOut": "Sign out",

@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
 
-export type Route = "/" | "/servers" | "/server" | "/users" | "/updates" | "/account" | "/reset";
+export type Route = "/" | "/servers" | "/server" | "/plugins" | "/users" | "/updates" | "/account" | "/reset";
 
-const known: readonly Route[] = ["/", "/servers", "/users", "/updates", "/account"];
+const known: readonly Route[] = ["/", "/servers", "/plugins", "/users", "/updates", "/account"];
 
 const RESET_PREFIX = "/reset/";
 const SERVER_PREFIX = "/servers/";
