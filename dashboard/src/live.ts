@@ -1,4 +1,5 @@
 import type { Agent, MetricsPoint } from "./api";
+import { toAgent, toAgents, toMetricsPoint } from "./shapes";
 
 // How many reports are kept per agent; the hub keeps the same.
 export const MAX_POINTS = 3600;
@@ -331,25 +332,29 @@ export function parseStreamMessage(data: unknown): LiveAction | null {
     return null;
   }
   const str = (v: unknown): v is string => typeof v === "string" && v !== "";
+  // The payloads are checked: an agent without an id or a report with a
+  // missing number is dropped here rather than breaking a widget later.
   switch (msg.type) {
     case "snapshot":
       return Array.isArray(msg.agents)
         ? {
             type: "agents",
-            agents: msg.agents as Agent[],
+            agents: toAgents(msg.agents),
             staleAfterSeconds: typeof msg.stale_after_seconds === "number" ? msg.stale_after_seconds : undefined,
           }
         : null;
-    case "agent.connected":
-      return typeof msg.agent === "object" && msg.agent !== null ? { type: "connected", agent: msg.agent as Agent } : null;
+    case "agent.connected": {
+      const agent = toAgent(msg.agent);
+      return agent ? { type: "connected", agent } : null;
+    }
     case "agent.disconnected":
       return str(msg.id) ? { type: "disconnected", id: msg.id } : null;
     case "agent.heartbeat":
       return str(msg.id) && str(msg.at) ? { type: "heartbeat", id: msg.id, at: msg.at } : null;
-    case "agent.metrics":
-      return str(msg.id) && typeof msg.point === "object" && msg.point !== null
-        ? { type: "metrics", id: msg.id, point: msg.point as MetricsPoint }
-        : null;
+    case "agent.metrics": {
+      const point = toMetricsPoint(msg.point);
+      return str(msg.id) && point ? { type: "metrics", id: msg.id, point } : null;
+    }
     default:
       return null;
   }

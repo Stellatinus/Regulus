@@ -3,6 +3,10 @@ import type { core } from "./core.en";
 export const coreIt: Record<keyof typeof core, string> = {
   "app.brand": "Regulus",
   "app.language": "Lingua",
+  "app.crashed.title": "Qualcosa è andato storto",
+  "app.crashed.body": "La dashboard ha incontrato un errore che non è riuscita a gestire. Di solito basta ricaricare la pagina; i tuoi server non ne risentono.",
+  "app.crashed.reload": "Ricarica la pagina",
+  "app.crashed.details": "Dettagli tecnici",
 
   "nav.main": "Principale",
   "nav.dashboard": "Dashboard",

@@ -208,9 +208,13 @@ describe("parseStreamMessage", () => {
       staleAfterSeconds: 30,
     });
     expect(parseStreamMessage(json({ type: "agent.connected", agent: { id: "a" } }))).toMatchObject({ type: "connected" });
+    // A snapshot keeps the agents it can read.
+    expect(parseStreamMessage(json({ type: "snapshot", agents: [{ id: "a" }, { id: 7 }, null] }))).toMatchObject({
+      agents: [{ id: "a" }],
+    });
     expect(parseStreamMessage(json({ type: "agent.disconnected", id: "a" }))).toEqual({ type: "disconnected", id: "a" });
     expect(parseStreamMessage(json({ type: "agent.heartbeat", id: "a", at: "t" }))).toEqual({ type: "heartbeat", id: "a", at: "t" });
-    expect(parseStreamMessage(json({ type: "agent.metrics", id: "a", point: {} }))).toMatchObject({ type: "metrics", id: "a" });
+    expect(parseStreamMessage(json({ type: "agent.metrics", id: "a", point: point(at(1)) }))).toMatchObject({ type: "metrics", id: "a" });
   });
 
   it("ignores what it does not understand", () => {
@@ -222,6 +226,9 @@ describe("parseStreamMessage", () => {
       json({ type: "snapshot" }),
       json({ type: "agent.heartbeat", id: "a" }),
       json({ type: "agent.metrics", id: "a" }),
+      json({ type: "agent.metrics", id: "a", point: {} }),
+      json({ type: "agent.metrics", id: "a", point: { ...point(at(1)), cpu_percent: "high" } }),
+      json({ type: "agent.connected", agent: { name: "no id" } }),
       json({ type: "agent.connected" }),
       new ArrayBuffer(1),
     ]) {

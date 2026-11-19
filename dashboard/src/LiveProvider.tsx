@@ -15,6 +15,7 @@ import {
   type Connection,
 } from "./live";
 import { useSession } from "./session";
+import { toAgents } from "./shapes";
 
 export type { Connection } from "./live";
 
@@ -22,7 +23,8 @@ export type { Connection } from "./live";
 export interface SocketLike {
   onopen: (() => void) | null;
   onmessage: ((event: { data: unknown }) => void) | null;
-  onclose: (() => void) | null;
+  // The browser passes a CloseEvent; code and reason tell why the hub closed.
+  onclose: ((event?: { code?: number; reason?: string }) => void) | null;
   onerror: (() => void) | null;
   close(): void;
 }
@@ -33,13 +35,31 @@ const browserSocket: SocketFactory = (url) => new WebSocket(url) as unknown as S
 
 const MAX_RETRY_MS = 15000;
 const CLOCK_MS = 5000;
+// A connection counts as working, and the wait before reconnecting goes back
+// to the first one, only after it stayed open this long: a hub that accepts
+// and closes at once must not be hammered.
+export const STABLE_MS = 5000;
+// The hub closes the stream with this code and reason when the browser reads
+// too slowly (internal/hub/stream.go). Reconnecting at once would only repeat
+// it, so the first wait is at least this long.
+const POLICY_VIOLATION = 1008;
+const TOO_SLOW_RETRY_MS = 5000;
+
+// retryDelay is the wait before the next attempt after failures failed ones:
+// it doubles up to a ceiling, and a random half of it is left out so that
+// many dashboards cut off together do not come back together.
+export function retryDelay(firstMs: number, failures: number, random = Math.random): number {
+  const ceiling = Math.min(firstMs * 2 ** failures, MAX_RETRY_MS);
+  return Math.round(ceiling / 2 + (random() * ceiling) / 2);
+}
 
 const LiveContext = createContext<LiveStore | null>(null);
 
 interface Props {
   children: ReactNode;
   createSocket?: SocketFactory;
-  // First wait before reconnecting; it doubles after each failure.
+  // First wait before reconnecting; it doubles after each failure, and a
+  // random part of up to half of it is left out.
   retryMs?: number;
   // The store to fill; tests pass their own to look inside.
   store?: LiveStore;
@@ -71,13 +91,14 @@ export function LiveProvider({ children, createSocket = browserSocket, retryMs =
     let stopped = false;
     let socket: SocketLike | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let stable: ReturnType<typeof setTimeout> | undefined;
     let failures = 0;
     const controller = new AbortController();
 
-    const retry = () => {
+    const retry = (atLeastMs = 0) => {
       if (stopped) return;
       store.setConnection("offline");
-      const delay = Math.min(retryMs * 2 ** failures, MAX_RETRY_MS);
+      const delay = Math.max(retryDelay(retryMs, failures), atLeastMs);
       failures++;
       timer = setTimeout(() => {
         store.setConnection("connecting");
@@ -90,7 +111,9 @@ export function LiveProvider({ children, createSocket = browserSocket, retryMs =
       const ws = createSocket(`${scheme}://${window.location.host}/api/stream`);
       socket = ws;
       ws.onopen = () => {
-        failures = 0;
+        stable = setTimeout(() => {
+          failures = 0;
+        }, STABLE_MS);
         store.setConnection("live");
         setGeneration((g) => g + 1);
       };
@@ -99,9 +122,11 @@ export function LiveProvider({ children, createSocket = browserSocket, retryMs =
         if (action) store.dispatch(action);
       };
       ws.onerror = () => undefined; // a close always follows
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         socket = null;
-        retry();
+        clearTimeout(stable);
+        const tooSlow = event?.code === POLICY_VIOLATION && event.reason === "too slow";
+        retry(tooSlow ? TOO_SLOW_RETRY_MS : 0);
       };
     };
 
@@ -111,7 +136,7 @@ export function LiveProvider({ children, createSocket = browserSocket, retryMs =
       fetchAgents(controller.signal).then(
         (agents: Agent[]) => {
           if (stopped) return;
-          store.dispatch({ type: "agents", agents });
+          store.dispatch({ type: "agents", agents: toAgents(agents) });
           openSocket();
         },
         (err: unknown) => {
@@ -129,6 +154,7 @@ export function LiveProvider({ children, createSocket = browserSocket, retryMs =
     return () => {
       stopped = true;
       clearTimeout(timer);
+      clearTimeout(stable);
       controller.abort();
       if (socket) {
         socket.onclose = null;

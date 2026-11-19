@@ -655,3 +655,29 @@ label.choice {
   border-left: 4px solid var(--ok);
   color: var(--ok);
 }
+
+/* last-resort error screen (RootBoundary), shown when the app itself failed */
+.root-error {
+  max-width: 36rem;
+  margin: 4rem auto;
+  padding: 1.5rem;
+  background: var(--surface, #fff);
+  color: var(--text, #1c2330);
+  border: 1px solid var(--border, #d9dee7);
+  border-left: 4px solid var(--danger, #c0352b);
+  border-radius: 8px;
+}
+
+.root-error h1 {
+  margin-top: 0;
+  font-size: 1.3rem;
+}
+
+.root-error details {
+  margin-top: 1rem;
+}
+
+.root-error pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
