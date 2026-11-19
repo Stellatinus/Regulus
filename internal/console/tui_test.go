@@ -657,3 +657,60 @@ func TestFormatDuration(t *testing.T) {
 		t.Errorf("Italian days: %q", got)
 	}
 }
+
+// The errors of an invalid value and of a refused save come from the table,
+// in the console language (#318).
+func TestSettingErrorsAreTranslated(t *testing.T) {
+	defer func() { T = en }()
+	for name, tc := range map[string]struct {
+		table      strs
+		typed, err string
+	}{
+		"English":      {en, "nope", "use host:port, such as :8080 or 127.0.0.1:8080, or only the port"},
+		"Italian":      {it, "nope", "usa host:porta, come :8080 o 127.0.0.1:8080, oppure solo la porta"},
+		"English port": {en, "70000", "the port must be a number from 1 to 65535"},
+		"Italian port": {it, "70000", "la porta deve essere un numero da 1 a 65535"},
+	} {
+		T = tc.table
+		m := newModel(t, copyConfig(t), true, 100, 30)
+		m = sendKey(t, m, rune1('2'), key(tea.KeyEnter), key(tea.KeyCtrlU))
+		m = sendKey(t, m, typeText(tc.typed)...)
+		if m.editErr != tc.err {
+			t.Errorf("%s: while typing %q = %q, want %q", name, tc.typed, m.editErr, tc.err)
+		}
+		m = sendKey(t, m, key(tea.KeyEnter))
+		if !m.editing || m.editErr != tc.err {
+			t.Errorf("%s: after enter editing = %v, err = %q", name, m.editing, m.editErr)
+		}
+	}
+
+	// A value that is valid alone but not with the rest of the file: the
+	// save is refused with the translated reason.
+	for name, tc := range map[string]struct {
+		table strs
+		want  string
+	}{
+		"English": {en, en.SettingErrors["postgres_host"]},
+		"Italian": {it, it.SettingErrors["postgres_host"]},
+	} {
+		T = tc.table
+		path := copyConfig(t)
+		m := newModel(t, path, true, 100, 30)
+		keys := []tea.KeyMsg{rune1('2')}
+		for i := 0; i < slices.Index(config.Keys(), "database.type"); i++ {
+			keys = append(keys, key(tea.KeyDown))
+		}
+		m = sendKey(t, m, append(keys, key(tea.KeyEnter), key(tea.KeyCtrlU))...)
+		m = sendKey(t, m, typeText("postgres")...)
+		m = sendKey(t, m, key(tea.KeyEnter))
+		if !m.editing || m.editErr != tc.want {
+			t.Errorf("%s: editing = %v, err = %q, want %q", name, m.editing, m.editErr, tc.want)
+		}
+	}
+}
+
+func TestSettingErrorWithoutACodeIsShownAsItIs(t *testing.T) {
+	if got := settingError(errors.New("plain")); got != "plain" {
+		t.Errorf("got %q", got)
+	}
+}

@@ -9,6 +9,7 @@ package console
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -195,7 +196,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) operationDone(msg opMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.err != nil && msg.kind == "agents":
-		m.say(fmt.Sprintf(T.MsgAgentsFailed, msg.err.Error()), true)
+		m.say(fmt.Sprintf(T.MsgAgentsFailed, settingError(msg.err)), true)
 	case msg.kind == "agents-saved":
 		m.needsRestart = true
 		m.say(fmt.Sprintf(T.MsgAgentsSaved, remoteAgentsListen)+" "+T.RestartHint, false)
@@ -387,10 +388,29 @@ func (m *Model) validate() {
 	e := m.snap.Settings[m.sel]
 	v, err := config.Normalize(e.Key, m.input.Value())
 	if err != nil {
-		m.editErr, m.editVal = err.Error(), ""
+		m.editErr, m.editVal = settingError(err), ""
 		return
 	}
 	m.editErr, m.editVal = "", v
+}
+
+// settingError is the text of an error of config.Normalize or config.SetFile
+// in the console language: the template of its code in T.SettingErrors. An
+// error without a code, or a code the table lacks, is shown as it is.
+func settingError(err error) string {
+	var se *config.SettingError
+	if !errors.As(err, &se) {
+		return err.Error()
+	}
+	tpl, ok := T.SettingErrors[string(se.Code)]
+	if !ok {
+		return err.Error()
+	}
+	args := make([]any, len(se.Args))
+	for i, a := range se.Args {
+		args[i] = a
+	}
+	return fmt.Sprintf(tpl, args...)
 }
 
 func (m Model) edit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -424,7 +444,7 @@ func (m Model) edit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		value, err := config.SetFile(m.snap.ConfigFile, e.Key, m.editVal)
 		if err != nil {
-			m.editErr = err.Error()
+			m.editErr = settingError(err)
 			return m, nil
 		}
 		m.editing = false

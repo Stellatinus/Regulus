@@ -112,6 +112,12 @@ type strs struct {
 	PluginStarting, PluginRunning, PluginRestarting string
 	PluginFailed, PluginIncompatible, PluginStopped string
 	// --- end of the plugins block.
+
+	// --- Setting errors (#318): why config.Normalize or config.SetFile
+	// refused a value, by config.ErrorCode. Each %s takes the arguments of
+	// config.SettingError.Args, in order (documented in internal/config).
+	SettingErrors map[string]string
+	// --- end of the setting errors block.
 }
 
 var en = strs{
@@ -279,6 +285,30 @@ var en = strs{
 	PluginIncompatible: "incompatible",
 	PluginStopped:      "stopped",
 	// --- end of the plugins block.
+
+	// --- Setting errors (#318).
+	SettingErrors: map[string]string{
+		"unknown_setting":  "unknown setting %s (known: %s)",
+		"empty":            "must not be empty",
+		"address":          "use host:port, such as :8080 or 127.0.0.1:8080, or only the port",
+		"port":             "the port must be a number from 1 to 65535",
+		"schema":           "use letters, digits and underscore, not starting with a digit",
+		"password_in_file": "the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
+		"bool":             "use true or false",
+		"duration":         "use a duration such as 10s or 1m",
+		"too_short":        "too short (minimum %s)",
+		"choice":           "use one of: %s",
+		"read_file":        "cannot read the configuration file: %s",
+		"data_dir_move":    "%s holds the hub's data and %s holds none. Changing the setting does not move it: the hub would start with an empty database, a new secret key and a new CA. Stop the hub, copy the directory to the new place, then change the setting. To start fresh on purpose, run: sudo regulus config set data_dir PATH --force",
+		"unusual_line":     "cannot change this line automatically (%s): edit the file by hand",
+		"unreadable":       "the change would leave %s unreadable: %s",
+		"hand_edit":        "the setting is written in %s in a form the console does not change: edit the file by hand",
+		"postgres_host":    "set database.host first: PostgreSQL needs a host",
+		"invalid":          "the configuration would not be valid: %s",
+		"write_permission": "the configuration file belongs to another user: open the console with sudo (%s)",
+		"write_file":       "cannot write the configuration file: %s",
+	},
+	// --- end of the setting errors block.
 }
 
 // T is the language in use. It is English until UseLocale picks another.
