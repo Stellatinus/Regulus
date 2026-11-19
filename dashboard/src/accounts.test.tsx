@@ -57,7 +57,6 @@ function renderAs(user: User, page: React.ReactNode, expired = vi.fn()) {
 }
 
 beforeEach(() => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -139,6 +138,7 @@ describe("UsersPage", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: "Delete role helpdesk" }));
+    await user.click(screen.getByRole("button", { name: "Delete the role" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "DELETE", path: "/api/roles/helpdesk", body: {} }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Edit helpdesk" })).not.toBeInTheDocument());
   });
@@ -231,18 +231,23 @@ describe("UsersPage", () => {
     await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/users/eve", body: { disabled: true } }));
 
     await user.click(screen.getByRole("button", { name: "Delete eve" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false); // nothing before the confirmation
+    await user.click(screen.getByRole("button", { name: "Delete the account" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "DELETE", path: "/api/users/eve", body: {} }));
   });
 
-  it("does not delete when the confirmation is refused", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("does not delete when the confirmation is cancelled", async () => {
     const calls = mockHub({
       "GET /api/users": () => ({ data: [admin, viewer] }),
       "GET /api/audit?limit=100": () => ({ data: [] }),
     });
     renderAs(admin, <UsersPage />);
     await screen.findByText("eve");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Delete eve" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Delete eve" }));
+    expect(screen.getByText("Delete the account eve? This cannot be undone.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Delete eve" })).toBeInTheDocument();
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
   });
 
@@ -269,6 +274,7 @@ describe("UsersPage", () => {
     expect(screen.getByRole("button", { name: "Reset password of admin" })).toBeDisabled();
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Reset password of eve" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Make the link" }));
     const link = await screen.findByLabelText("Reset link");
     expect(link).toHaveValue(`${window.location.origin}${window.location.pathname}#/reset/tok_123`);
     expect(calls).toContainEqual({ method: "POST", path: "/api/users/eve/reset", body: {} });
@@ -301,7 +307,7 @@ describe("UsersPage", () => {
 describe("AccountPage", () => {
   const sessions: SessionInfo[] = [
     { id: "aaa", remote_addr: "10.0.0.1", user_agent: "Firefox", created_at: now, last_used_at: now, expires_at: now, current: true },
-    { id: "bbb", remote_addr: "10.0.0.9", user_agent: "Safari", created_at: now, last_used_at: now, expires_at: now, current: false },
+    { id: "bbb", remote_addr: "10.0.0.9", user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", created_at: now, last_used_at: now, expires_at: now, current: false },
   ];
 
   it("changes the password and clears the form", async () => {
@@ -343,12 +349,12 @@ describe("AccountPage", () => {
       },
     });
     renderAs(viewer, <AccountPage />);
-    const row = (await screen.findByText("Safari")).closest("tr")!;
+    const row = (await screen.findByText("Safari 17 on iOS")).closest("tr")!;
     expect(screen.getByText("now (this session)")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Sign out/ })).toHaveLength(1);
 
-    await userEvent.setup().click(within(row).getByRole("button", { name: "Sign out 10.0.0.9" }));
-    await waitFor(() => expect(screen.queryByText("Safari")).not.toBeInTheDocument());
+    await userEvent.setup().click(within(row).getByRole("button", { name: /^Sign out Safari 17 on iOS, 10\.0\.0\.9, / }));
+    await waitFor(() => expect(screen.queryByText("Safari 17 on iOS")).not.toBeInTheDocument());
     expect(calls).toContainEqual({ method: "DELETE", path: "/api/account/sessions/bbb", body: {} });
   });
 });

@@ -301,3 +301,42 @@ func TestAuthorizeAndRevoke(t *testing.T) {
 		t.Errorf("agents = %+v", list)
 	}
 }
+
+func TestTheEndOfAnAgentCertificateIsKept(t *testing.T) {
+	s, _ := newService(t)
+	ctx := context.Background()
+	token, _, err := s.CreateToken(ctx, "admin", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Enroll(ctx, "10.0.0.5", token, csr(t), "web1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, _ := x509.ParseCertificate(got.CertificateDER)
+	list, _ := s.Agents(ctx)
+	if len(list) != 1 || !list[0].CertNotAfter.Equal(cert.NotAfter) {
+		t.Fatalf("CertNotAfter = %v, want %v", list[0].CertNotAfter, cert.NotAfter)
+	}
+
+	// An agent enrolled before the hub kept the date: it is filled in from the
+	// certificate it connects with, and only for the serial issued to it.
+	if _, err := s.db.ExecContext(ctx, `UPDATE agents SET cert_not_after = NULL`); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ = s.Agents(ctx); !list[0].CertNotAfter.IsZero() {
+		t.Fatalf("CertNotAfter = %v, want zero", list[0].CertNotAfter)
+	}
+	if err := s.CertificateSeen(ctx, got.AgentID, "not-the-serial", cert.NotAfter.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ = s.Agents(ctx); !list[0].CertNotAfter.IsZero() {
+		t.Fatalf("a certificate with another serial set the date: %v", list[0].CertNotAfter)
+	}
+	if err := s.CertificateSeen(ctx, got.AgentID, cert.SerialNumber.Text(16), cert.NotAfter); err != nil {
+		t.Fatal(err)
+	}
+	if list, _ = s.Agents(ctx); !list[0].CertNotAfter.Equal(cert.NotAfter) {
+		t.Fatalf("CertNotAfter = %v, want %v", list[0].CertNotAfter, cert.NotAfter)
+	}
+}

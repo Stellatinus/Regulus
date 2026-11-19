@@ -24,6 +24,9 @@ func TestCAIsCreatedOnceAndReloaded(t *testing.T) {
 	if first.Fingerprint() != second.Fingerprint() {
 		t.Error("the CA changed between loads")
 	}
+	if want := now.Add(caValidity).Truncate(time.Second); !second.NotAfter().Equal(want) {
+		t.Errorf("CA NotAfter = %v, want %v", second.NotAfter(), want)
+	}
 	if !strings.HasPrefix(first.Fingerprint(), "sha256:") || len(first.Fingerprint()) != len("sha256:")+64 {
 		t.Errorf("fingerprint = %q", first.Fingerprint())
 	}
@@ -162,8 +165,9 @@ func TestMutualTLSHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = conn.Close()
-	if id := <-got; id.AgentID != "agent-1" || id.Serial != serial {
-		t.Errorf("identity = %+v, want agent-1 / %s", id, serial)
+	leaf, _ := x509.ParseCertificate(der)
+	if id := <-got; id.AgentID != "agent-1" || id.Serial != serial || !id.NotAfter.Equal(leaf.NotAfter) {
+		t.Errorf("identity = %+v, want agent-1 / %s / %v", id, serial, leaf.NotAfter)
 	}
 
 	// Without a certificate the handshake works but there is no identity.

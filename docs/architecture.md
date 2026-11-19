@@ -79,13 +79,14 @@ The list of all contracts between versions, and the rules and CI checks for chan
 Everything here is in `internal/pki` (certificates) and `internal/fleet` (tokens and the registry). *Implemented; unverified on a real second server (#81).*
 
 - **Certificate authority.** At the first start with a database the hub creates a CA in `<data_dir>/pki/` (`ca.crt`, `ca.key`; the key is readable by the owner only). The CA is valid for 20 years (`pki.go` `caValidity`). Elliptic-curve P-256.
-- **Hub certificate.** The agent listener's certificate is made at every start, is valid for one year, is not stored (`ServerCertificate`) and is **replaced 30 days before it ends** while the hub keeps running (`ServerTLSRenewing`, the hub logs the new end date), so a hub that is not restarted for a year does not lock its agents out. The certificate of an agent is another matter: it lasts five years and has no renewal yet (#128), and the end dates of the CA and of the agent certificates are not shown anywhere yet.
+- **Hub certificate.** The agent listener's certificate is made at every start, is valid for one year, is not stored (`ServerCertificate`) and is **replaced 30 days before it ends** while the hub keeps running (`ServerTLSRenewing`, the hub logs the new end date), so a hub that is not restarted for a year does not lock its agents out. The certificate of an agent is another matter: it lasts five years and has no renewal yet (#128).
+- **End dates (#245).** The hub keeps the end of each agent's certificate in `agents.cert_not_after` (written at enrollment; for an agent enrolled before the column existed, filled in by `fleet.CertificateSeen` from the certificate it presents on its next stream, in `requireAgent`), reads the CA's from `ca.crt` (`CA.NotAfter`) and remembers the listener's current one in memory. `Hub.Certificates` (`internal/hub/certs.go`) puts them together for `GET /api/certificates`, `cert_not_after` in `GET /api/agents` and the local status socket (`regulus status` shows the soonest one and a Health check). While the CA or an agent certificate (not revoked) ends within 90 days, the hub logs one warning a day (`certificates end within 90 days`, with the way to renew); the listener is never warned about, it renews itself. *Unverified on a real machine.*
 - **Fingerprint pinning.** The agent does not use public certificate authorities. It is given the SHA-256 fingerprint of the hub's CA (`sha256:…`, shown by the dashboard and in the hub log as `ca`) and accepts a connection only if the chain contains a CA with that fingerprint (`pki.PinnedClientTLS`, `verifyPinned`). This is why the token is never sent to an impostor.
 - **Enrollment token.** Made by a user with `servers.manage` (`fleet.CreateToken`): 24 random bytes, shown once, stored only as a SHA-256 hash, valid for one hour by default (`TokenTTL`; the API takes a `ttl` from 1 minute to 7 days), **single use**. It can be listed (id, name, creator, expiry, never the secret: `GET /api/enrollment-tokens`) and cancelled (`DELETE /api/enrollment-tokens/{id}`) until it is used. Enrolling checks the token, signs the certificate, and only then deletes the token and inserts the agent in one transaction, so a malformed request or a database error leaves the token usable and two requests with the same token cannot both enroll. Wrong tokens count against a limit of 10 per 15 minutes per address (`maxFailures`, `failWindow`). Every unknown, expired or used token gets the same answer (`ErrInvalidToken`).
 - **Client certificate.** The agent makes its own ECDSA key and sends a certificate request; the key never leaves the machine. The hub **ignores the subject** of the request, picks the agent id and signs a certificate whose common name is that id (`CA.SignClient`). It is valid for **5 years** (`ClientValidity`). **Renewal is not implemented** (a comment in `pki.go` says so; tracked in #128).
 - **Identity.** On every stream the hub reads the agent id and certificate serial number from the verified certificate, never from what the agent says, and calls `fleet.Authorize`: the agent must exist, not be revoked, and the serial must be the one issued for it (`requireAgent` in `internal/hub/agent_net.go`). `Enroll` is the only call that works without a certificate; the TLS server asks for a client certificate "if given" and verifies it against the CA (`VerifyClientCertIfGiven`).
 - **Revocation.** `fleet.Revoke` marks the agent in the database; the hub closes its connection; the agent can never connect again (`DELETE /api/agents/{id}`). There is no revocation list to distribute, because the hub checks the registry on every connection.
-- **Registry.** Table `agents` (id, name, hostname, certificate serial, `last_seen`, revoked time…). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
+- **Registry.** Table `agents` (id, name, hostname, certificate serial and end, `last_seen`, revoked time…). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
 
 ### Diagram: enrolling an agent
 
@@ -150,7 +151,7 @@ flowchart LR
     K["secret.key and pki in data_dir"] -.stays on the hub's disk.- Hub
 ```
 
-**Migrations.** `internal/storage/migrations/0001` to `0009`, embedded in the binary, applied in order at startup and recorded:
+**Migrations.** `internal/storage/migrations/0001` to `0010`, embedded in the binary, applied in order at startup and recorded:
 
 | Migration | Adds |
 |---|---|
@@ -163,6 +164,7 @@ flowchart LR
 | 0007 | agent presence (columns on `agents`) |
 | 0008 | `user_totp`, `recovery_codes`, `pending_logins` |
 | 0009 | `roles`, `role_permissions` (recreates `users`) |
+| 0010 | `agents.cert_not_after`, the end of each agent's certificate (#245) |
 
 **The data directory** (`data_dir`; `/var/lib/regulus` with the package, `data` by default):
 

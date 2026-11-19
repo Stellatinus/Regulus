@@ -6,7 +6,20 @@ import { countedInterfaces } from "../networkInterfaces";
 import { AgentView, Waiting } from "./AgentView";
 import type { WidgetProps } from "./registry";
 
-const times = (points: MetricsPoint[]) => points.map((p) => Date.parse(p.at));
+// derive computes a value from a widget's window of reports once: the window
+// array stays the same until a report of that agent arrives, so it keys the
+// cache, and a report of another agent costs nothing here.
+const derived = new WeakMap<MetricsPoint[], Map<string, unknown>>();
+function derive<T>(points: MetricsPoint[], key: string, compute: () => T): T {
+  let cache = derived.get(points);
+  if (!cache) {
+    cache = new Map();
+    derived.set(points, cache);
+  }
+  if (!cache.has(key)) cache.set(key, compute());
+  return cache.get(key) as T;
+}
+
 const percent = (used: number, total: number) => (total > 0 ? (100 * used) / total : 0);
 
 function Stat({ value, caption }: { value: string; caption?: string }) {
@@ -59,7 +72,7 @@ export function CpuWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ agent, points, latest }) =>
+      {({ agent, points, times, latest }) =>
         !latest ? (
           <Waiting />
         ) : (
@@ -75,8 +88,8 @@ export function CpuWidget(props: WidgetProps) {
             />
             <Chart
               title={t("servers.widget.cpuChart")}
-              times={times(points)}
-              series={[{ label: t("servers.widget.cpuSeries"), values: points.map((p) => p.cpu_percent) }]}
+              times={times}
+              series={[{ label: t("servers.widget.cpuSeries"), values: derive(points, "cpu", () => points.map((p) => p.cpu_percent)) }]}
               max={100}
               formatValue={(v) => `${v}%`}
             />
@@ -92,7 +105,7 @@ export function MemoryWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ points, latest }) =>
+      {({ points, times, latest }) =>
         !latest ? (
           <Waiting />
         ) : (
@@ -108,8 +121,13 @@ export function MemoryWidget(props: WidgetProps) {
             />
             <Chart
               title={t("servers.widget.memoryChart")}
-              times={times(points)}
-              series={[{ label: t("servers.fact.memory"), values: points.map((p) => percent(p.memory_used_bytes, p.memory_total_bytes)) }]}
+              times={times}
+              series={[
+                {
+                  label: t("servers.fact.memory"),
+                  values: derive(points, "memory", () => points.map((p) => percent(p.memory_used_bytes, p.memory_total_bytes))),
+                },
+              ]}
               max={100}
               formatValue={(v) => `${v}%`}
             />
@@ -171,12 +189,17 @@ export function NetworkWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ points, latest }) => {
+      {({ points, times, latest }) => {
         if (!latest) return <Waiting />;
         // The total leaves out bridges, container ports and tunnels, whose bytes
         // are already counted on the physical interface; the table lists all.
-        const down = points.map((p) => total(countedInterfaces(p.networks).map((n) => n.rx_bytes_per_sec)));
-        const up = points.map((p) => total(countedInterfaces(p.networks).map((n) => n.tx_bytes_per_sec)));
+        const { down, up } = derive(points, "network", () => {
+          const counted = points.map((p) => countedInterfaces(p.networks));
+          return {
+            down: counted.map((nics) => total(nics.map((n) => n.rx_bytes_per_sec))),
+            up: counted.map((nics) => total(nics.map((n) => n.tx_bytes_per_sec))),
+          };
+        });
         return (
           <>
             <Stat
@@ -185,7 +208,7 @@ export function NetworkWidget(props: WidgetProps) {
             />
             <Chart
               title={t("servers.widget.networkChart")}
-              times={times(points)}
+              times={times}
               series={[
                 { label: t("servers.widget.received"), values: down },
                 { label: t("servers.widget.sent"), values: up },

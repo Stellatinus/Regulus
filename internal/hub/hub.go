@@ -67,6 +67,11 @@ type Hub struct {
 	// pluginTune, if set, changes the plugin supervisor before it starts
 	// (tests).
 	pluginTune func(*plugin.Supervisor)
+
+	// listenerCertEnd is when the current certificate of the agent listener
+	// ends (time.Time), zero while the listener is off.
+	listenerCertEnd atomic.Value
+	certLog         certLogState // the daily warning about certificates that end soon
 }
 
 // Option customizes a Hub.
@@ -238,7 +243,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Version: h.version, DatabaseProblem: h.dbState.get}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -280,6 +285,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 
 	defer h.serveLocal(ln.Addr().String())()
 	h.watchDatabase(ctx)
+	h.watchCertificates(ctx)
 
 	h.rollout.mu.Lock()
 	h.rollout.base = ctx
@@ -339,11 +345,13 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 // only Enroll works without one. The returned function stops it.
 func (h *Hub) serveAgents(addr string) (stop func(), err error) {
 	tlsConfig, validUntil, err := h.fleet.CA().ServerTLSRenewing(time.Now, func(notAfter time.Time) {
+		h.listenerCertEnd.Store(notAfter)
 		h.log.Info("the certificate of the agent listener was renewed", "valid_until", notAfter.UTC().Format(time.RFC3339))
 	})
 	if err != nil {
 		return nil, fmt.Errorf("agent listener certificate: %w", err)
 	}
+	h.listenerCertEnd.Store(validUntil)
 	h.log.Info("agent listener certificate", "valid_until", validUntil.UTC().Format(time.RFC3339), "renewed_before_end", "30 days")
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -446,6 +454,9 @@ type Deps struct {
 	// is. Nil means "no problem", as for SQLite and in tests. Only whether
 	// there is a problem is ever sent to a client, never the text.
 	DatabaseProblem func() string
+	// Certificates reports when the hub's certificates end. May be nil in
+	// tests; the endpoint then answers 404.
+	Certificates CertificateSource
 }
 
 // route is a protected API endpoint.
@@ -496,6 +507,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "POST /api/updates/rollout", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(r.start))), needsAuth: true},
 		{pattern: "POST /api/updates/rollout/stop", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(r.stop))), needsAuth: true},
 		{pattern: "POST /api/updates/apply", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(u.apply))), needsAuth: true},
+		{pattern: "GET /api/certificates", handler: need(auth.PermServersManage, certificatesHandler(d.Certificates)), needsAuth: true},
 		{pattern: "GET /api/openapi.yaml", handler: http.HandlerFunc(serveOpenAPI)},
 	}
 	for _, r := range auth.APIRoutes(d.Auth) {

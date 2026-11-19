@@ -49,7 +49,7 @@ describe("the account page in Italian", () => {
     expect(screen.getByLabelText("Password attuale")).toBeInTheDocument();
     expect(await screen.findByText("adesso (questa sessione)")).toBeInTheDocument();
     expect(screen.getByText("Safari")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Disconnetti 10.0.0.9" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Disconnetti Safari, 10\.0\.0\.9, / })).toBeInTheDocument();
 
     await user.type(await screen.findByLabelText("La tua password"), "correct horse battery");
     await user.click(screen.getByRole("button", { name: "Configura l'autenticazione a due fattori" }));

@@ -47,6 +47,12 @@ type Status struct {
 	PluginsEnabled bool     `json:"plugins_enabled,omitempty"`
 	PluginsProblem string   `json:"plugins_problem,omitempty"`
 	Plugins        []Plugin `json:"plugins,omitempty"`
+	// CertSoonest is the certificate that ends first (the CA, the agent
+	// listener's or an agent's); CertWarnings are the CA and agent
+	// certificates that end within 90 days, soonest first. Both are empty
+	// from a hub older than #245.
+	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
+	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
 }
 
 // Plugin is one plugin of the hub (docs/plugins/runtime.md).
@@ -57,6 +63,16 @@ type Plugin struct {
 	Restarts  int       `json:"restarts"`
 	LastError string    `json:"last_error,omitempty"`
 	Since     time.Time `json:"since,omitzero"`
+}
+
+// Certificate is one of the hub's certificates and when it ends.
+type Certificate struct {
+	// Kind is "ca", "listener" or "agent".
+	Kind string `json:"kind"`
+	// AgentID and Name are set for an agent's certificate.
+	AgentID  string    `json:"agent_id,omitempty"`
+	Name     string    `json:"name,omitempty"`
+	NotAfter time.Time `json:"not_after"`
 }
 
 // Agent is a connected agent.

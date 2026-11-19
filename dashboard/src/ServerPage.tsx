@@ -16,6 +16,8 @@ import {
 import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
+import { ConfirmButton } from "./ui";
+import { daysLeft } from "./CertificateBanner";
 import { useT } from "./i18n";
 import { registry } from "./widgets";
 import { widgetTitle } from "./widgets/registry";
@@ -110,12 +112,17 @@ function Details({
     !agent.update_only;
   return (
     <>
-      <h2 id="server-heading">
-        {displayName(agent)}{" "}
+      <div className="page-title">
+        <h2 id="server-heading" className="mono" style={{ margin: 0 }}>
+          {displayName(agent)}
+        </h2>
         <span className={`status ${agent.status}`}>
           {statusLabel(agent, t)}
         </span>
-      </h2>
+        {agent.id === "local" && (
+          <span className="status hub">{t("servers.server.hubBadge")}</span>
+        )}
+      </div>
       <dl className="facts server-facts">
         <div>
           <dt>{t("servers.fact.id")}</dt>
@@ -146,6 +153,12 @@ function Details({
           <dt>{t("servers.fact.lastContact")}</dt>
           <dd>{lastContact(agent, t)}</dd>
         </div>
+        {agent.id !== "local" && (
+          <div>
+            <dt>{t("servers.fact.certificate")}</dt>
+            <dd>{certificateEnd(agent.cert_not_after, t)}</dd>
+          </div>
+        )}
       </dl>
       {canManage && agent.id !== "local" && (
         <Manage agent={agent} onChanged={onChanged} />
@@ -177,7 +190,7 @@ function Details({
           })}
         </div>
       ) : (
-        <p role="status" className="note warn">
+        <p role="status" className="notice warn">
           {agent.update_only
             ? t("servers.server.updateOnlyNote", { version: agent.version })
             : agent.status === "revoked"
@@ -193,6 +206,19 @@ function Details({
       )}
     </>
   );
+}
+
+// certificateEnd says when an agent's certificate ends (#245).
+function certificateEnd(
+  notAfter: string | undefined,
+  t: ReturnType<typeof useT>,
+): string {
+  if (!notAfter) return t("servers.fact.certificateUnknown");
+  const date = new Date(notAfter).toLocaleDateString();
+  const days = daysLeft(notAfter);
+  return days < 0
+    ? t("servers.fact.certificateEnded", { date })
+    : t("servers.fact.certificateIn", { date, days });
 }
 
 function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
@@ -211,7 +237,8 @@ function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
   };
 
   return (
-    <div className="panel">
+    <section className="panel" aria-labelledby="manage-heading">
+      <h3 id="manage-heading">{t("servers.server.manage")}</h3>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -231,25 +258,17 @@ function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
       </form>
       {error && <p role="alert">{error}</p>}
       {agent.status !== "revoked" && (
-        <p>
-          <button
-            type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  t("servers.server.revokeConfirm", {
-                    name: displayName(agent),
-                  }),
-                )
-              ) {
-                void run(() => revokeAgent(agent.id));
-              }
-            }}
-          >
-            {t("servers.server.revoke")}
-          </button>
-        </p>
+        <div style={{ marginTop: 12 }}>
+          <ConfirmButton
+            label={t("servers.server.revoke")}
+            message={t("servers.server.revokeConfirm", {
+              name: displayName(agent),
+            })}
+            confirmLabel={t("servers.server.revokeYes")}
+            onConfirm={() => void run(() => revokeAgent(agent.id))}
+          />
+        </div>
       )}
-    </div>
+    </section>
   );
 }

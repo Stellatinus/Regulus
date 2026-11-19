@@ -29,11 +29,17 @@ const (
 	Info = "info"
 )
 
-// Check is one health check.
+// Check is one health check. Name and Detail are always English, because
+// --json and --plain are for programs; Title and Text are the same in the
+// language of the console (T), for people.
 type Check struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 	Detail string `json:"detail"`
+	// Key names the check in --plain (check.<key>); it never changes.
+	Key   string `json:"-"`
+	Title string `json:"-"`
+	Text  string `json:"-"`
 }
 
 // Agent is a connected agent as the hub reports it.
@@ -74,10 +80,16 @@ type Snapshot struct {
 	// LogLevel and Format are shown in the header of the logs.
 	LogLevel string `json:"log_level"`
 
-	StartedAt  time.Time `json:"started_at,omitzero"`
-	Uptime     string    `json:"uptime,omitempty"`
-	SetupToken string    `json:"setup_token,omitempty"`
-	Agents     []Agent   `json:"agents"`
+	StartedAt time.Time `json:"started_at,omitzero"`
+	// Uptime is in English, for programs; UptimeText in the console language.
+	Uptime     string  `json:"uptime,omitempty"`
+	UptimeText string  `json:"-"`
+	SetupToken string  `json:"setup_token,omitempty"`
+	Agents     []Agent `json:"agents"`
+	// CertSoonest is the hub's certificate that ends first, and CertWarnings
+	// the CA and agent certificates that end within 90 days (see certs.go).
+	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
+	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
 	// PluginsEnabled is true when the running hub has a plugins directory;
 	// Plugins is the state of its plugins and PluginsProblem why none runs.
 	PluginsEnabled bool     `json:"plugins_enabled,omitempty"`
@@ -193,7 +205,8 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 	if fetchErr == nil {
 		snap.Running = true
 		snap.StartedAt = live.StartedAt
-		snap.Uptime = formatDuration(sys.Now().Sub(live.StartedAt))
+		snap.Uptime = formatDuration(sys.Now().Sub(live.StartedAt), en)
+		snap.UptimeText = formatDuration(sys.Now().Sub(live.StartedAt), T)
 		snap.SetupToken = live.SetupToken
 		snap.Agents = live.Agents
 		if live.Version != "" {
@@ -205,87 +218,122 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 		snap.CAFingerprint = live.CAFingerprint
 		snap.DatabaseProblem = live.DatabaseProblem
 		snap.PluginsEnabled, snap.PluginsProblem, snap.Plugins = live.PluginsEnabled, live.PluginsProblem, live.Plugins
+		snap.CertSoonest, snap.CertWarnings = live.CertSoonest, live.CertWarnings
 	}
 	snap.Health = healthChecks(snap, cfg, fetchErr)
+	if c, ok := certCheck(snap, sys.Now()); ok {
+		snap.Health = append(snap.Health, c)
+	}
 	return snap
 }
 
+// text is a text of the table, filled in, so that a check can be written in
+// English (for --json and --plain) and in the console language.
+type text func(strs) string
+
+// tr fills the template that pick chooses with args.
+func tr(pick func(strs) string, args ...any) text {
+	return func(s strs) string {
+		if len(args) == 0 {
+			return pick(s)
+		}
+		return fmt.Sprintf(pick(s), args...)
+	}
+}
+
+// verbatim is data that is the same in every language (an error message).
+func verbatim(v string) text { return func(strs) string { return v } }
+
 func healthChecks(snap Snapshot, cfg config.Config, fetchErr error) []Check {
 	var checks []Check
-	add := func(name, status, detail string) { checks = append(checks, Check{name, status, detail}) }
+	add := func(key string, name func(strs) string, status string, detail text) {
+		checks = append(checks, Check{
+			Name: name(en), Status: status, Detail: detail(en),
+			Key: key, Title: name(T), Text: detail(T),
+		})
+	}
+	cfgName := func(s strs) string { return s.ChkConfig }
+	hubName := func(s strs) string { return s.ChkHub }
+	dataName := func(s strs) string { return s.ChkDataDir }
+	dbName := func(s strs) string { return s.ChkDatabase }
 
 	switch {
 	case snap.Problem != "":
-		add("Configuration", Fail, snap.Problem)
+		add("configuration", cfgName, Fail, verbatim(snap.Problem))
 	case snap.ConfigFile == "":
-		add("Configuration", Warn, "no configuration file: showing the defaults; pass --config FILE to read and change one")
+		add("configuration", cfgName, Warn, tr(func(s strs) string { return s.CfgMissing }))
 	default:
-		add("Configuration", OK, snap.ConfigFile+" is valid")
+		// %s: the configuration file.
+		add("configuration", cfgName, OK, tr(func(s strs) string { return s.CfgValid }, snap.ConfigFile))
 	}
 
 	switch {
 	case snap.Running:
-		add("Hub", OK, "answers on its local socket")
+		add("hub", hubName, OK, tr(func(s strs) string { return s.HubAnswers }))
 	case fetchErr != nil && errors.Is(fetchErr, fs.ErrPermission):
-		add("Hub", Warn, "cannot read its local socket: run as the hub's user (for example sudo -u regulus regulus)")
+		add("hub", hubName, Warn, tr(func(s strs) string { return s.HubNoPermission }))
 	case snap.Service == "active":
-		add("Hub", Warn, "the service is active but does not answer on "+localstatus.SocketPath(snap.DataDir))
+		// %s: the path of the local socket.
+		add("hub", hubName, Warn, tr(func(s strs) string { return s.HubSilent }, localstatus.SocketPath(snap.DataDir)))
 	default:
-		add("Hub", Warn, "not running")
+		add("hub", hubName, Warn, tr(func(s strs) string { return s.Stopped }))
 	}
 
 	st, detail := portCheck(cfg.Listen, snap.Running)
-	add("Dashboard port", st, detail)
+	add("dashboard_port", func(s strs) string { return s.ChkDashboardPort }, st, detail)
 	if cfg.AgentListen != "" {
 		st, detail = portCheck(cfg.AgentListen, snap.Running)
-		add("Agent port", st, detail)
+		add("agent_port", func(s strs) string { return s.ChkAgentPort }, st, detail)
 	}
 
+	// %s: the data directory.
 	switch err := writable(snap.DataDir); {
 	case errors.Is(err, fs.ErrNotExist):
-		add("Data directory", Warn, snap.DataDir+" does not exist yet (created at the first start)")
+		add("data_directory", dataName, Warn, tr(func(s strs) string { return s.DataMissing }, snap.DataDir))
 	case err != nil:
-		add("Data directory", Warn, "you cannot write to "+snap.DataDir+" (fine if the hub runs as another user)")
+		add("data_directory", dataName, Warn, tr(func(s strs) string { return s.DataNotWritable }, snap.DataDir))
 	default:
-		add("Data directory", OK, snap.DataDir+" is writable")
+		add("data_directory", dataName, OK, tr(func(s strs) string { return s.DataWritable }, snap.DataDir))
 	}
 
+	// The first %s is the database (PostgreSQL at host:port/name), then the
+	// problem; for SQLite the file name and its size.
 	switch {
 	case cfg.Storage().IsPostgres():
 		switch {
 		case snap.DatabaseProblem != "":
-			add("Database", Fail, snap.Database+": "+snap.DatabaseProblem)
+			add("database", dbName, Fail, tr(func(s strs) string { return s.DBProblem }, snap.Database, snap.DatabaseProblem))
 		case snap.Running:
-			add("Database", OK, snap.Database+" answers")
+			add("database", dbName, OK, tr(func(s strs) string { return s.DBAnswers }, snap.Database))
 		default:
-			add("Database", Info, snap.Database+" (checked while the hub runs; `regulus db check` tries it now)")
+			add("database", dbName, Info, tr(func(s strs) string { return s.DBLater }, snap.Database))
 		}
 	case fileExists(filepath.Join(snap.DataDir, storage.FileName)):
-		add("Database", OK, fmt.Sprintf("%s, %s", storage.FileName, FormatBytes(snap.DatabaseSize)))
+		add("database", dbName, OK, tr(func(s strs) string { return s.DBFile }, storage.FileName, FormatBytes(snap.DatabaseSize)))
 	default:
-		add("Database", Info, "none yet")
+		add("database", dbName, Info, tr(func(s strs) string { return s.DBNone }))
 	}
 	return checks
 }
 
 // portCheck says whether the address can be used. While the hub runs it is
-// the hub that holds it.
-func portCheck(addr string, hubRunning bool) (string, string) {
+// the hub that holds it. The %s of the details is the address (and the error).
+func portCheck(addr string, hubRunning bool) (string, text) {
 	if hubRunning {
-		return OK, addr + " is served by the hub"
+		return OK, tr(func(s strs) string { return s.PortServed }, addr)
 	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		if errors.Is(err, syscall.EADDRINUSE) {
-			return Fail, addr + " is in use by another program"
+			return Fail, tr(func(s strs) string { return s.PortInUse }, addr)
 		}
 		if errors.Is(err, fs.ErrPermission) {
-			return Warn, addr + " needs more privileges than yours (ports below 1024)"
+			return Warn, tr(func(s strs) string { return s.PortPrivileged }, addr)
 		}
-		return Warn, addr + ": " + err.Error()
+		return Warn, tr(func(s strs) string { return s.PortError }, addr, err.Error())
 	}
 	_ = ln.Close()
-	return OK, addr + " is free"
+	return OK, tr(func(s strs) string { return s.PortFree }, addr)
 }
 
 func writable(dir string) error {
@@ -345,7 +393,8 @@ func FormatBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGT"[exp])
 }
 
-func formatDuration(d time.Duration) string {
+// formatDuration writes a duration for people, in the language of s: 3h 12m.
+func formatDuration(d time.Duration, s strs) string {
 	if d < 0 {
 		d = 0
 	}
@@ -355,16 +404,16 @@ func formatDuration(d time.Duration) string {
 	h := int(d / time.Hour)
 	d -= time.Duration(h) * time.Hour
 	m := int(d / time.Minute)
-	s := int((d - time.Duration(m)*time.Minute) / time.Second)
+	sec := int((d - time.Duration(m)*time.Minute) / time.Second)
 	switch {
 	case days > 0:
-		return fmt.Sprintf("%dd %dh %dm", days, h, m)
+		return fmt.Sprintf(s.DurDays, days, h, m)
 	case h > 0:
-		return fmt.Sprintf("%dh %dm", h, m)
+		return fmt.Sprintf(s.DurHours, h, m)
 	case m > 0:
-		return fmt.Sprintf("%dm %ds", m, s)
+		return fmt.Sprintf(s.DurMinutes, m, sec)
 	}
-	return fmt.Sprintf("%ds", s)
+	return fmt.Sprintf(s.DurSeconds, sec)
 }
 
 func fileExists(path string) bool {

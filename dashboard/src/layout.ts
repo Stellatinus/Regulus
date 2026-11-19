@@ -109,3 +109,30 @@ export function defaultLayout(registry: WidgetRegistry): DashboardLayout {
   }
   return layout;
 }
+
+// orderOf is the reading order of a layout: by row, then by column. Narrow
+// screens show widgets in this order, one or two per row.
+export function orderOf(layout: DashboardLayout): WidgetInstance[] {
+  return [...layout.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+// moveWidget swaps a widget with its neighbour in reading order (dir -1: the
+// one before, +1: the one after), exchanging their positions, so that a
+// widget can be moved without dragging (touch screens, keyboard). The grid
+// compacts any overlap on a wide screen. It returns the same layout when
+// there is nothing to swap with.
+export function moveWidget(layout: DashboardLayout, i: string, dir: -1 | 1): DashboardLayout {
+  const order = orderOf(layout);
+  const at = order.findIndex((w) => w.i === i);
+  const other = order[at + dir];
+  if (at < 0 || !other) return layout;
+  const self = order[at];
+  return {
+    ...layout,
+    widgets: layout.widgets.map((w) => {
+      if (w.i === self.i) return { ...w, x: other.x, y: other.y };
+      if (w.i === other.i) return { ...w, x: self.x, y: self.y };
+      return w;
+    }),
+  };
+}

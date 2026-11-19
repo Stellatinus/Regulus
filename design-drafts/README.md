@@ -7,7 +7,7 @@ When a direction is agreed, it goes through a design issue (see AGENTS.md, "New 
 | File | What it is | Status |
 |---|---|---|
 | `machine-room-v1.html` | The "machine room": an isometric room that shows each node where it physically is (rack, desk, cloud), cabled to the hub; a queue of what needs attention; an inspector with the node's front panel; a per-minute CPU load wall. | Chosen direction (first draft). |
-| `machine-room-v2.html` | Second iteration of the machine room: left sidebar navigation, alerts moved onto the nodes and into a drawer, uniform 2U nodes named only by their node name. | Work in progress. |
+| `machine-room-v2.html` | Second iteration of the machine room: left sidebar navigation, alerts moved onto the nodes and into a drawer, uniform 2U nodes named only by their node name. | Chosen direction: its look is built in the dashboard (#91); the room, alert pins and load wall are not. |
 
 ## Notes for whoever turns this into the real dashboard
 
