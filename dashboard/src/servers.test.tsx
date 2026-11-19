@@ -336,6 +336,17 @@ describe("ServerPage", () => {
     await waitFor(() => expect(calls.filter((c) => c.path === "/api/agents/web1" && c.method === "GET").length).toBeGreaterThan(1));
   });
 
+  it("shows when the server's certificate ends, or that it is not known yet", async () => {
+    const end = new Date(Date.now() + 40 * 86_400_000 + 3_600_000).toISOString();
+    mockHub({ "GET /api/agents/web1": () => ({ data: { ...online, cert_not_after: end } }) });
+    const first = renderAs(admin, <ServerPage id="web1" />);
+    expect(await screen.findByText(/\(in 40 days\)/)).toBeInTheDocument();
+    first.unmount();
+    mockHub({ "GET /api/agents/web1": () => ({ data: online }) });
+    renderAs(admin, <ServerPage id="web1" />);
+    expect(await screen.findByText(/not known yet/)).toBeInTheDocument();
+  });
+
   it("revokes a server after confirmation only", async () => {
     const calls = mockHub({
       "GET /api/agents/web1": () => ({ data: online }),
