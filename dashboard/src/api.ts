@@ -152,8 +152,11 @@ export const fetchAgentListener = () => request<AgentListener>("GET", "/api/agen
 
 export const enableRemoteAgents = (port: number) => request<AgentListener>("PUT", "/api/agents/listener", { port });
 
-export const createEnrollment = (name: string) =>
-  request<Enrollment>("POST", "/api/enrollment-tokens", { name });
+// createEnrollment makes a token; ttl is how long it can be used, a Go
+// duration such as "15m" or "24h" (1 minute to 7 days; the hub's default, one
+// hour, when empty).
+export const createEnrollment = (name: string, ttl = "") =>
+  request<Enrollment>("POST", "/api/enrollment-tokens", ttl ? { name, ttl } : { name });
 
 // A token that can still be used (see GET /api/enrollment-tokens). The secret
 // was shown once, when the token was made, and is not part of it.

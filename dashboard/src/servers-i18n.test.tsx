@@ -63,7 +63,7 @@ describe("the servers pages in Italian", () => {
     mockHub([online, revoked]);
     renderAdmin(<ServersPage />);
 
-    expect(await screen.findByRole("heading", { name: "Agenti" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Server", level: 2 })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Ultimo contatto" })).toBeInTheDocument();
     expect(screen.getByText("online")).toBeInTheDocument();
     expect(screen.getByText("revocato")).toBeInTheDocument();

@@ -181,7 +181,7 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
 
     await user.click(screen.getByRole("link", { name: "Servers" }));
-    expect(await screen.findByRole("heading", { name: "Agents" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Servers", level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "Servers" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Servers" })).toHaveAttribute("aria-current", "page");
   });

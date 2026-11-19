@@ -12,6 +12,7 @@ import {
 } from "./api";
 import { useT } from "./i18n";
 import { useCan } from "./session";
+import { ConfirmButton, CopyButton } from "./ui";
 import { errorMessage, useApiList, type ListState } from "./useApiList";
 
 // ServersPage lists the servers and, for those who may manage servers, adds new
@@ -121,9 +122,19 @@ export function agentCommand(grant: Enrollment, hubHost: string): string {
   return `regulus agent ${enrollOptions(grant, hubHost)} --data-dir /var/lib/regulus-agent`;
 }
 
+// The lifetimes the Add a server form offers (#280); the hub accepts 1 minute
+// to 7 days.
+export const TOKEN_LIFETIMES = [
+  { ttl: "15m", label: "servers.add.ttl15m" },
+  { ttl: "1h", label: "servers.add.ttl1h" },
+  { ttl: "24h", label: "servers.add.ttl24h" },
+  { ttl: "168h", label: "servers.add.ttl7d" },
+] as const;
+
 function AddServer({ onAdded }: { onAdded: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
+  const [ttl, setTtl] = useState<string>("1h");
   const [grant, setGrant] = useState<Enrollment | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -134,7 +145,7 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
     setError("");
     setBusy(true);
     try {
-      setGrant(await createEnrollment(name.trim()));
+      setGrant(await createEnrollment(name.trim(), ttl));
       setName("");
       reloadPending();
       onAdded();
@@ -155,13 +166,26 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
           {t("servers.add.nameLabel")}
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoComplete="off" />
         </label>
+        <label>
+          {t("servers.add.ttlLabel")}
+          <select value={ttl} onChange={(e) => setTtl(e.target.value)}>
+            {TOKEN_LIFETIMES.map((l) => (
+              <option key={l.ttl} value={l.ttl}>
+                {t(l.label)}
+              </option>
+            ))}
+          </select>
+        </label>
         {error && <p role="alert">{error}</p>}
         <button type="submit" disabled={busy}>
           {t("servers.add.createToken")}
         </button>
       </form>
       {grant && (
-        <div role="status" aria-label={t("servers.add.tokenLabel")}>
+        <div role="status" aria-label={t("servers.add.tokenLabel")} className="notice">
+          <p>
+            <strong>{t("servers.add.shownOnce")}</strong>
+          </p>
           <p>
             {grant.hub_version
               ? t("servers.add.instructionsVersion", { version: grant.hub_version, expires: new Date(grant.expires_at).toLocaleString() })
@@ -191,8 +215,6 @@ function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollmen
   if (state.kind !== "ready" || state.items.length === 0) return null;
 
   const cancel = async (token: PendingEnrollment) => {
-    const name = token.name || t("servers.pending.noName");
-    if (!window.confirm(t("servers.pending.confirm", { name }))) return;
     setError("");
     try {
       await revokeEnrollmentToken(token.id);
@@ -216,9 +238,12 @@ function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollmen
               <span className="muted">
                 {t("servers.pending.detail", { user: token.created_by, expires: new Date(token.expires_at).toLocaleString() })}
               </span>{" "}
-              <button type="button" onClick={() => void cancel(token)}>
-                {t("servers.pending.cancel", { name })}
-              </button>
+              <ConfirmButton
+                label={t("servers.pending.cancel", { name })}
+                message={t("servers.pending.confirm", { name })}
+                confirmLabel={t("servers.pending.confirmCancel")}
+                onConfirm={() => void cancel(token)}
+              />
             </li>
           );
         })}
@@ -229,21 +254,10 @@ function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollmen
 
 function CommandBox({ label, copyLabel, command }: { label: string; copyLabel: string; command: string }) {
   const t = useT();
-  const [copied, setCopied] = useState(false);
   return (
-    <p>
-      <input readOnly value={command} aria-label={label} onFocus={(e) => e.target.select()} />{" "}
-      <button
-        type="button"
-        onClick={() => {
-          navigator.clipboard.writeText(command).then(
-            () => setCopied(true),
-            () => setCopied(false),
-          );
-        }}
-      >
-        {copied ? t("servers.add.copied") : copyLabel}
-      </button>
+    <p className="command">
+      <input readOnly value={command} aria-label={label} onFocus={(e) => e.target.select()} className="mono" />{" "}
+      <CopyButton text={command} label={copyLabel} copiedLabel={t("servers.add.copied")} />
     </p>
   );
 }

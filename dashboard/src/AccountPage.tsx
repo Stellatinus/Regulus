@@ -3,9 +3,22 @@ import { changePassword, fetchSessions, revokeSession, type SessionInfo } from "
 import { formatAgo } from "./format";
 import { TwoFactor } from "./TwoFactor";
 import { useT } from "./i18n";
+import { LanguageSelect, ThemeSwitch } from "./Appearance";
+import { describeUserAgent } from "./userAgent";
 import { errorMessage, useApiList } from "./useApiList";
 
-// AccountPage is where users change their password, set up two-factor authentication and end their sessions.
+// deviceName says which browser on which system a session comes from
+// ("Chrome 156 on Windows"), or the raw text when it is not recognised.
+function deviceName(ua: string, t: ReturnType<typeof useT>): string {
+  if (!ua) return t("account.sessions.unknown");
+  const d = describeUserAgent(ua);
+  if (!d.browser) return ua;
+  const browser = d.version ? `${d.browser} ${d.version}` : d.browser;
+  return d.os ? t("account.sessions.device", { browser, os: d.os }) : browser;
+}
+
+// AccountPage is where users change their password, set up two-factor
+// authentication, end their sessions and choose the theme and the language.
 export function AccountPage() {
   const t = useT();
   return (
@@ -14,6 +27,29 @@ export function AccountPage() {
       <PasswordForm />
       <TwoFactor />
       <Sessions />
+      <Appearance />
+    </section>
+  );
+}
+
+// Appearance holds the same theme and language switches as the top bar; both
+// are saved in this browser.
+function Appearance() {
+  const t = useT();
+  return (
+    <section aria-labelledby="appearance-heading" className="panel">
+      <h3 id="appearance-heading">{t("account.appearance.title")}</h3>
+      <p className="label" id="theme-label">
+        {t("app.theme")}
+      </p>
+      <ThemeSwitch />
+      <label htmlFor="account-language" style={{ marginTop: 12 }}>
+        {t("app.language")}
+      </label>
+      <div style={{ maxWidth: "16rem" }}>
+        <LanguageSelect id="account-language" />
+      </div>
+      <p className="hint">{t("account.appearance.hint")}</p>
     </section>
   );
 }
@@ -83,7 +119,7 @@ function Sessions() {
       {sessions.kind === "error" && <p role="alert">{t("account.sessions.loadError", { message: sessions.message })}</p>}
       {error && <p role="alert">{error}</p>}
       {sessions.kind === "ready" && (
-        <table>
+        <table className="cards">
           <thead>
             <tr>
               <th>{t("account.sessions.browser")}</th>
@@ -95,20 +131,29 @@ function Sessions() {
             </tr>
           </thead>
           <tbody>
-            {sessions.items.map((s) => (
-              <tr key={s.id}>
-                <td className="wrap">{s.user_agent || t("account.sessions.unknown")}</td>
-                <td>{s.remote_addr || t("account.sessions.unknown")}</td>
-                <td>{s.current ? t("account.sessions.thisOne") : formatAgo(s.last_used_at, undefined, t)}</td>
-                <td>
-                  {!s.current && (
-                    <button type="button" onClick={() => void end(s.id)}>
-                      {s.remote_addr ? t("account.sessions.signOutFrom", { from: s.remote_addr }) : t("account.sessions.signOutSession")}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {sessions.items.map((s) => {
+              const device = deviceName(s.user_agent, t);
+              const from = s.remote_addr || t("account.sessions.unknown");
+              const used = s.current ? t("account.sessions.thisOne") : formatAgo(s.last_used_at, undefined, t);
+              return (
+                <tr key={s.id}>
+                  <td data-label={t("account.sessions.browser")} className="wrap" title={s.user_agent || undefined}>
+                    {device}
+                  </td>
+                  <td data-label={t("account.sessions.from")} className="mono">
+                    {from}
+                  </td>
+                  <td data-label={t("account.sessions.lastUsed")}>{used}</td>
+                  <td>
+                    {!s.current && (
+                      <button type="button" aria-label={t("account.sessions.signOutNamed", { device, from, used })} onClick={() => void end(s.id)}>
+                        {t("account.sessions.signOut")}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

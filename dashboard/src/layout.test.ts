@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addWidget, applyPositions, defaultLayout, parseLayout, removeWidget, setWidgetConfig, type DashboardLayout } from "./layout";
+import { addWidget, applyPositions, defaultLayout, moveWidget, orderOf, parseLayout, removeWidget, setWidgetConfig, type DashboardLayout } from "./layout";
 import { WidgetRegistry } from "./widgets/registry";
 
 const empty: DashboardLayout = { version: 1, widgets: [] };
@@ -105,5 +105,32 @@ describe("defaultLayout", () => {
       { i: "one", type: "one", x: 0, y: 0, w: 6, h: 2 },
       { i: "two", type: "two", x: 6, y: 0, w: 6, h: 3 },
     ]);
+  });
+});
+
+describe("moveWidget", () => {
+  const layout: DashboardLayout = {
+    version: 1,
+    widgets: [
+      { i: "c", type: "t", x: 0, y: 4, w: 6, h: 4 },
+      { i: "a", type: "t", x: 0, y: 0, w: 6, h: 4 },
+      { i: "b", type: "t", x: 6, y: 0, w: 6, h: 4 },
+    ],
+  };
+
+  it("orders by row, then column", () => {
+    expect(orderOf(layout).map((w) => w.i)).toEqual(["a", "b", "c"]);
+  });
+
+  it("swaps positions with the neighbour", () => {
+    const moved = moveWidget(layout, "c", -1);
+    expect(orderOf(moved).map((w) => w.i)).toEqual(["a", "c", "b"]);
+    expect(orderOf(moveWidget(moved, "c", 1)).map((w) => w.i)).toEqual(["a", "b", "c"]);
+  });
+
+  it("does nothing at the ends", () => {
+    expect(moveWidget(layout, "a", -1)).toBe(layout);
+    expect(moveWidget(layout, "c", 1)).toBe(layout);
+    expect(moveWidget(layout, "nope", 1)).toBe(layout);
   });
 });

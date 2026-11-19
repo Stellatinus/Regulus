@@ -14,6 +14,8 @@ import {
   type UpdateChannel,
   type UpdateMode,
   type UpdateStatus,
+  fetchAgents,
+  type Agent,
 } from "./api";
 import { formatAgo, formatBytes } from "./format";
 import { useT, type MessageKey } from "./i18n";
@@ -491,6 +493,15 @@ function Servers() {
     return () => controller.abort();
   }, [fail]);
 
+  // The connected servers, to name those the rollout cannot update. A list
+  // that cannot be loaded leaves the exceptions out; it is not an error.
+  const [agents, setAgents] = useState<Agent[] | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAgents(controller.signal).then(setAgents, () => undefined);
+    return () => controller.abort();
+  }, [rollout?.state]);
+
   const running = rollout?.state === "running";
   useEffect(() => {
     if (!running) return;
@@ -519,6 +530,12 @@ function Servers() {
   if (rollout === null) return error ? <p role="alert">{error}</p> : null;
 
   const behind = rollout.candidates;
+  // Connected servers on another version that the rollout cannot update (an
+  // agent without the update helper, or not managed by an agent that can be
+  // updated): listed as exceptions under "all up to date".
+  const exceptions = (Array.isArray(agents) ? agents : []).filter(
+    (a) => a.version && a.version !== rollout.target && !behind.some((b) => b.id === a.id) && a.status !== "revoked",
+  );
   const finished = rollout.state !== "idle" && rollout.state !== "running";
   return (
     <section className="panel" aria-labelledby="servers-heading">
@@ -554,9 +571,26 @@ function Servers() {
       {rollout.state !== "running" && (
         <>
           {behind.length === 0 ? (
-            <p role="status">
-              {t("updates.rollout.allCurrent", { target: rollout.target })}
-            </p>
+            <>
+              <p role="status">
+                {t("updates.rollout.allCurrent", { target: rollout.target })}
+              </p>
+              {exceptions.length > 0 && (
+                <>
+                  <p>{t("updates.rollout.exceptions")}</p>
+                  <ul aria-label={t("updates.rollout.exceptionsLabel")}>
+                    {exceptions.map((a) => (
+                      <li key={a.id}>
+                        {t("updates.rollout.runs", {
+                          name: a.name || a.hostname || a.id,
+                          version: a.version,
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
           ) : (
             <>
               <p role="status">

@@ -314,7 +314,6 @@ describe("Two-factor administration", () => {
   }
 
   it("lets an admin remove the second factor of a user", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     let users = [admin, eve];
     const calls = mockHub({
       "GET /api/users": () => ({ data: users }),
@@ -329,6 +328,7 @@ describe("Two-factor administration", () => {
     renderUsers();
 
     await user.click(await screen.findByRole("button", { name: "Reset two-factor of eve" }));
+    await user.click(screen.getByRole("button", { name: "Reset two-factor" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Reset two-factor of eve" })).not.toBeInTheDocument());
     // Nothing to reset for users without it, nor for oneself.
