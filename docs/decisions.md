@@ -144,6 +144,10 @@ One page of 30 releases could be filled by plugin releases (planned in the same 
 
 Withheld or stale answers (a "freeze") cannot be told from "no new release" without signed metadata that expires. That is **not done**: the hub now records when a check last **succeeded** and the Updates page warns after three days without one, which covers the common case (a hub that lost its internet access). A signed `latest.json` with an expiry is left for a later issue.
 
+## Updates: concurrent stagings share the cache (audit issue #314)
+
+The hub stages releases from two places that can run at once: its own download (the background cycle or the **Download** button, serialised by the manager) and `EnsureRelease`, called when a rollout to the agents starts. Each staging ended with a prune that removed every entry it did not keep, the other staging's `.stage-*` work directory included. The `Stager` now remembers the work directories of the stagings in progress and the prune skips them; the move into place and the prune are one step under a mutex. The downloads themselves are **not** serialised: a slow download of a new release must not hold up a rollout that needs only the archives of the running version. What is still possible, and accepted: two stagings of two versions that are both neither kept (`Keep`, the running version) nor the newest can prune each other's finished directory; the hub never stages two such versions at once.
+
 ## Certificate end dates: kept, shown and warned about (audit issue #245)
 
 Agent certificates last five years and the CA twenty, with no renewal (#128), and nobody was told when one ends. Choices:
