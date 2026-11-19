@@ -847,7 +847,9 @@ paths:
         chooses the new password; the admin never sees it. The token is shown only
         in this answer, works once and expires after an hour; a new one replaces
         the earlier one. Creating it ends all sessions of the account. The request
-        needs a JSON body (`{}`). Disabled accounts cannot be reset (400).
+        needs a JSON body (`{}`). Disabled accounts cannot be reset (400), and nobody can make a token for
+        their own account (403): use the password change of the account, or
+        `regulus hub reset-admin` on the machine.
       parameters:
         - $ref: "#/components/parameters/Username"
       requestBody:
@@ -1115,7 +1117,9 @@ paths:
     delete:
       tags: [accounts]
       summary: Remove the second factor of a user (needs users.manage)
-      description: For someone who lost the app and the recovery codes. Ends the user's sessions and is audited.
+      description: >-
+        For someone who lost the app and the recovery codes. Ends the user's sessions and is audited.
+        Nobody can remove their own (403); `POST /api/account/two-factor/disable` asks for the password and a code.
       parameters:
         - $ref: "#/components/parameters/Username"
       requestBody:
