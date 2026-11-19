@@ -12,6 +12,12 @@ listen: ":8080"
 # in the firewall only towards the servers you manage.
 # agent_listen: ":8443"
 
+# Behind a reverse proxy: the proxy addresses (single addresses or CIDR blocks)
+# whose X-Forwarded-For and X-Forwarded-Proto headers the hub believes. Without
+# it every client shares the proxy's address in the login limit, the audit log
+# and the session list. Leave it empty when nothing sits in front of the hub.
+# trusted_proxies: ["127.0.0.1"]
+
 # Where the hub keeps its database. Created by the service unit.
 data_dir: /var/lib/regulus
 

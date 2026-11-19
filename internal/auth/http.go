@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -70,14 +71,14 @@ func (s *Service) Require(next http.Handler) http.Handler {
 			})
 			return
 		}
-		ctx := context.WithValue(withRequestClient(r), ctxKey{}, user)
+		ctx := context.WithValue(s.withRequestClient(r), ctxKey{}, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // withRequestClient returns the request context with the client recorded.
-func withRequestClient(r *http.Request) context.Context {
-	return WithClient(r.Context(), Client{Remote: remoteIP(r), UserAgent: clip(r.UserAgent(), 200)})
+func (s *Service) withRequestClient(r *http.Request) context.Context {
+	return WithClient(r.Context(), Client{Remote: s.remoteIP(r), UserAgent: clip(r.UserAgent(), 200)})
 }
 
 func (s *Service) userOf(r *http.Request) (User, error) {
@@ -114,7 +115,7 @@ func (s *Service) handleSetup(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &c) {
 		return
 	}
-	user, token, expires, err := s.Setup(withRequestClient(r), c.SetupToken, c.Username, c.Password)
+	user, token, expires, err := s.Setup(s.withRequestClient(r), c.SetupToken, c.Username, c.Password)
 	s.finishLogin(w, r, user, token, expires, err)
 }
 
@@ -123,7 +124,7 @@ func (s *Service) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &c) {
 		return
 	}
-	user, token, expires, err := s.Login(withRequestClient(r), remoteIP(r), c.Username, c.Password)
+	user, token, expires, err := s.Login(s.withRequestClient(r), s.remoteIP(r), c.Username, c.Password)
 	var need *TwoFactorRequiredError
 	if errors.As(err, &need) {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -151,7 +152,7 @@ func (s *Service) handleLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	res, err := s.CompleteLogin(withRequestClient(r), remoteIP(r), req.Pending, req.Code)
+	res, err := s.CompleteLogin(s.withRequestClient(r), s.remoteIP(r), req.Pending, req.Code)
 	switch {
 	case err == nil:
 		s.setSessionCookie(w, r, res.Token, res.Expires)
@@ -170,7 +171,7 @@ func (s *Service) setSessionCookie(w http.ResponseWriter, r *http.Request, token
 		Path:     "/",
 		Expires:  expires,
 		HttpOnly: true,
-		Secure:   isHTTPS(r),
+		Secure:   s.isHTTPS(r),
 		SameSite: http.SameSiteLaxMode,
 	})
 }
@@ -208,7 +209,7 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: CookieName, Value: "", Path: "/", MaxAge: -1,
-		HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode,
+		HttpOnly: true, Secure: s.isHTTPS(r), SameSite: http.SameSiteLaxMode,
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -262,7 +263,8 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-func remoteIP(r *http.Request) string {
+// peerIP is the address of the other end of the connection.
+func peerIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
@@ -270,8 +272,69 @@ func remoteIP(r *http.Request) string {
 	return host
 }
 
+// trusted reports whether addr is one of the configured reverse proxies.
+func (s *Service) trusted(addr string) bool {
+	a, err := netip.ParseAddr(addr)
+	if err != nil {
+		return false
+	}
+	a = a.Unmap()
+	for _, p := range s.proxies {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteIP is the address of the client: the peer of the connection, unless
+// the peer is a trusted proxy, in which case it is the rightmost entry of
+// X-Forwarded-For that is not itself a trusted proxy. The entries to the left
+// of that one are written by the client and are never used. When every entry
+// is a trusted proxy, the leftmost is the client (an internal one); when an
+// entry is not an address, the walk stops at the hop that forwarded it.
+func (s *Service) remoteIP(r *http.Request) string {
+	peer := peerIP(r)
+	if !s.trusted(peer) {
+		return peer
+	}
+	var hops []string
+	for _, v := range r.Header.Values("X-Forwarded-For") {
+		for _, h := range strings.Split(v, ",") {
+			hops = append(hops, strings.TrimSpace(h))
+		}
+	}
+	hop := peer
+	for i := len(hops) - 1; i >= 0; i-- {
+		a, err := netip.ParseAddr(hops[i])
+		if err != nil {
+			return hop
+		}
+		hop = a.Unmap().String()
+		if !s.trusted(hop) {
+			return hop
+		}
+	}
+	return hop
+}
+
 // isHTTPS reports whether the client reached the hub over TLS, directly or
-// through a reverse proxy that says so.
-func isHTTPS(r *http.Request) bool {
-	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+// through a trusted reverse proxy that says so in X-Forwarded-Proto (the proxy
+// is the rightmost value). From any other peer the header is ignored.
+func (s *Service) isHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if !s.trusted(peerIP(r)) {
+		return false
+	}
+	vals := r.Header.Values("X-Forwarded-Proto")
+	if len(vals) == 0 {
+		return false
+	}
+	last := vals[len(vals)-1]
+	if i := strings.LastIndex(last, ","); i >= 0 {
+		last = last[i+1:]
+	}
+	return strings.EqualFold(strings.TrimSpace(last), "https")
 }

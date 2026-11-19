@@ -186,16 +186,12 @@ type AuditEntry struct {
 	Detail string    `json:"detail"`
 }
 
-// maxAuditRows is how many events are kept; older ones are dropped.
-const maxAuditRows = 10000
-
+// addAudit writes one event. It never deletes anything: old events are removed
+// by pruneAudit, on a timer (see audit.go).
 func (s store) addAudit(ctx context.Context, e AuditEntry) error {
-	if _, err := s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO audit_log (at, actor, event, target, remote, detail) VALUES (?, ?, ?, ?, ?, ?)`,
-		e.At.UTC().Format(timeLayout), e.Actor, e.Event, e.Target, e.Remote, e.Detail); err != nil {
-		return err
-	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM audit_log WHERE id <= (SELECT MAX(id) FROM audit_log) - ?`, maxAuditRows)
+		e.At.UTC().Format(timeLayout), e.Actor, e.Event, e.Target, e.Remote, e.Detail)
 	return err
 }
 

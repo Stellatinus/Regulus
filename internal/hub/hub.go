@@ -108,7 +108,12 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		_ = db.Close()
 		return nil, fmt.Errorf("hub secret: %w", err)
 	}
-	authn, err := auth.New(ctx, db, log, auth.WithSecret(secret))
+	proxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	authn, err := auth.New(ctx, db, log, auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
 	if err != nil {
 		_ = db.Close()
 		return nil, err
@@ -289,6 +294,13 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 		h.updates.Run(ctx)
 	}()
 	defer func() { <-updatesDone }()
+
+	auditDone := make(chan struct{})
+	go func() {
+		defer close(auditDone)
+		h.auth.Run(ctx)
+	}()
+	defer func() { <-auditDone }()
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
@@ -531,7 +543,7 @@ func NewHandler(d Deps) http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
-	return mux
+	return withSecurityHeaders(mux)
 }
 
 // stillAllowed makes the check an open stream repeats (see streamHandler); nil
