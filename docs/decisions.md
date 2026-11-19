@@ -83,6 +83,9 @@ A rollback that put back only the program failed in the one case it exists for: 
 ## Resetting one's own credentials is refused (audit issue #203)
 
 `CreateReset` and `ResetTwoFactor` refuse the caller's own account (`403`). Both used `mayManage`, which lets a user manage themselves, so a stolen admin session could make its own reset link or strip its own second factor without the password the normal flows ask for. We chose to refuse rather than to ask for password and code in these paths, because the normal flows already exist (`ChangePassword`, `DisableTwoFactor`), the dashboard already disables these buttons for oneself, and an admin who lost everything has `regulus hub reset-admin` on the machine (it does not go through these two methods). A stolen session can still create another admin; step-up re-authentication for users, roles, enrollment and updates is not done and is tracked in its own issue.
+## The client address behind a reverse proxy: `trusted_proxies` (audit issue #196)
+
+`X-Forwarded-For` and `X-Forwarded-Proto` are believed only when the peer of the connection is listed in `trusted_proxies`; the client is the rightmost entry that is not a trusted proxy. The default is an empty list, so a hub with nothing in front of it ignores both headers, which also closes the old hole where any client could mark its own cookie `Secure` or not. The setting is a list, so it is read from the YAML file and `REGULUS_TRUSTED_PROXIES` but is not in the console settings table (`regulus config set` edits scalars). The `Forwarded` header (RFC 7239) is not read. The agent port is not affected: it has no proxy in front (mutual TLS).
 
 ## Agents that are too old: an update-only session (audit issue #212)
 

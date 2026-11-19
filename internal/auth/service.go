@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync"
@@ -42,6 +43,10 @@ type Service struct {
 	// turns two-factor off.
 	box *sealer
 
+	// proxies are the reverse proxies whose forwarding headers are believed
+	// (see clientIP); empty trusts none.
+	proxies []netip.Prefix
+
 	mu         sync.Mutex
 	setupToken string // empty once the first admin exists
 	failures   map[string]*failure
@@ -68,6 +73,14 @@ func WithSecret(secret []byte) Option {
 			s.box = box
 		}
 	}
+}
+
+// WithTrustedProxies sets the reverse proxies whose X-Forwarded-For and
+// X-Forwarded-Proto headers the service believes. From any other peer the
+// headers are ignored, so a client cannot choose the address the login limit,
+// the audit log and the session list record.
+func WithTrustedProxies(p []netip.Prefix) Option {
+	return func(s *Service) { s.proxies = p }
 }
 
 // New returns the service for the hub database. If there is no user yet it
