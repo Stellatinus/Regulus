@@ -5,6 +5,7 @@ import { formatAgo, formatDuration } from "./format";
 import { useSession } from "./session";
 import { useT, type MessageKey } from "./i18n";
 import type { Translator } from "./widgets/registry";
+import { isLimited } from "./limits";
 
 const REFRESH_MS = 5000;
 
@@ -148,7 +149,10 @@ function AgentTable({ agents }: { agents: Agent[] }) {
               </span>
             </td>
             <td data-label={t("servers.fact.status")}>
-              <span className={`status ${a.status}`}>{statusLabel(a, t)}</span>
+              <span>
+                <span className={`status ${a.status}`}>{statusLabel(a, t)}</span>
+                {isLimited(a) && <span className="muted"> {t("servers.metrics.limited")}</span>}
+              </span>
             </td>
             <td data-label={t("servers.fact.lastContact")}>{lastContact(a, t)}</td>
             <td data-label={t("servers.fact.uptime")}>{a.uptime_seconds === null ? "-" : formatDuration(a.uptime_seconds, t)}</td>

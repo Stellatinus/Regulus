@@ -86,6 +86,39 @@ func TestAgentsEndpointFields(t *testing.T) {
 	if a.LastHeartbeat == nil || a.MetricsAt == nil || a.UptimeSeconds == nil || *a.UptimeSeconds != 42 {
 		t.Errorf("heartbeat and metrics not mapped: %+v", a)
 	}
+	if a.Collector != "" || a.Unavailable != nil || a.Container != "" {
+		t.Errorf("an agent that reports no limits must show none: %+v", a)
+	}
+}
+
+// An agent that cannot read part of the machine says so, and the API passes
+// it on, so that the dashboard shows "not available" instead of zeros (#230).
+func TestAgentsEndpointLimitedAgent(t *testing.T) {
+	now := time.Now()
+	report := &agentv1.MetricsReport{
+		CollectedAt: timestamppb.New(now), Collector: "basic",
+		Unavailable: []string{"cpu", "load", "memory", "disks", "network"},
+	}
+	src := fakeSource{staleAfter: time.Minute, agents: []AgentInfo{{
+		ID: "a1", System: &agentv1.SystemInfo{Os: "freebsd", Container: "lxc"},
+		ConnectedAt: now, LastHeartbeat: now, LastMetrics: report,
+	}}, metrics: map[string][]MetricsSample{"a1": {{At: now, Report: report}}}}
+
+	a := getAgents(t, src)[0]
+	if a.Collector != "basic" || len(a.Unavailable) != 5 || a.Container != "lxc" {
+		t.Errorf("limits not mapped: %+v", a)
+	}
+
+	rec := get(t, NewHandler(Deps{UI: fstest.MapFS{}, Agents: src}), "/api/agents/a1/metrics")
+	var body struct {
+		Points []pointJSON `json:"points"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || len(body.Points) != 1 {
+		t.Fatalf("metrics: %v %q", err, rec.Body.String())
+	}
+	if got := body.Points[0].Unavailable; len(got) != 5 || got[2] != "memory" {
+		t.Errorf("point unavailable = %v", got)
+	}
 }
 
 func TestAgentsEndpointStatus(t *testing.T) {
