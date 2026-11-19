@@ -290,6 +290,13 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	}()
 	defer func() { <-updatesDone }()
 
+	auditDone := make(chan struct{})
+	go func() {
+		defer close(auditDone)
+		h.auth.Run(ctx)
+	}()
+	defer func() { <-auditDone }()
+
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	h.log.Info("hub listening", "addr", ln.Addr().String())

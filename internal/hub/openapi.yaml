@@ -875,7 +875,9 @@ paths:
     get:
       tags: [accounts]
       summary: Recent account events, newest first (needs audit.read)
-      description: The hub keeps the last 10000 events.
+      description: >-
+        The hub keeps events for 90 days. Failed logins and invalid enrollment
+        tokens, which anyone can cause, are limited to the newest 5000.
       parameters:
         - name: limit
           in: query

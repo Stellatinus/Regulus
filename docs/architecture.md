@@ -132,7 +132,7 @@ Everything is in `internal/auth`. *Implemented.*
 - **Roles and permissions.** A user has a role; a role is a set of named permissions (`servers.read`, `servers.manage`, `layout.edit`, `users.manage`, `roles.manage`, `audit.read`, `core.update`). Endpoints check permissions, not role names. Built-in roles: `admin`, `operator`, `viewer`; custom roles are stored in the `roles` tables (`permissions.go`, `roles.go`). **"Role" here is a different thing from the node role of section 1.**
 - **Two-factor (TOTP).** Optional per user, or required by policy; ten single-use recovery codes stored as hashes. The TOTP secrets are encrypted with AES-256-GCM under a key derived (HKDF) from `secret.key` in the data directory (`secret.go`). Without `secret.key` two-factor is unavailable (`ErrTwoFactorUnavailable`). A copy of the database alone does not reveal the secrets, so back up both.
 - **Reset of lost credentials.** An admin makes a one-time reset link (token hashed, valid one hour). If the admin is locked out, `regulus hub reset-admin` on the machine does the same; access to the data directory is the proof of ownership.
-- **Audit log.** Table `audit_log`, newest 10,000 kept; agent enrollment and update events go there too.
+- **Audit log.** Table `audit_log`, kept 90 days and pruned once an hour by `auth.Service.Run`, not on every insert; failed logins and invalid enrollment tokens (anyone can cause them) keep only the newest 5,000, so a flood cannot push out the history of user and role changes; agent enrollment and update events go there too.
 - **Passkeys** (WebAuthn) are **planned** (#50).
 
 Agents do not use any of this: they authenticate with client certificates (section 3).
