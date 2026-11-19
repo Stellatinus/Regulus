@@ -59,7 +59,7 @@ Releases are published from the Actions tab (**Publish release**), not by typing
 
 ## Updates
 
-**Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, #20) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file).
+**Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, #20) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file, #254).
 
 **One piece at a time.** It must be possible to update an agent, the hub or a plugin on its own. Versions may require others: agents and hub negotiate the protocol and the hub accepts agents of its own release series and the previous one (#17, [remote agents](remote-agents.md), "Versions"); plugins declare the core versions they need with `requires` (#19, [plugins](plugins.md)).
 
@@ -79,6 +79,19 @@ The repository moved from `CodexCircle/Regulus` to `Stellatinus/Regulus`. Releas
 ## Updates: the rollback restores the SQLite database (audit issue #205)
 
 A rollback that put back only the program failed in the one case it exists for: the new version migrated the database and then did not come up, and the previous version refuses a database with a migration it does not know (`storage/migrate.go`). For SQLite the root helper now takes a consistent copy before the swap (`storage.SnapshotSQLite`), refuses the update if it cannot, and puts the copy back on a rollback only when the schema moved (`storage.RestoreSQLite`, after stopping the service and removing the write-ahead log, which belongs to the file being replaced). It accepts losing what the new version saved after the copy, and says so in the result. For PostgreSQL it does nothing and the documents tell the administrator to back up first: a server cannot be copied from the helper, and the real answer there is a rule that a release's migrations are ones the previous release can live with, which is not written yet (the strict "unknown migration" check stays).
+
+## Updates: an interrupted update is settled when the machine starts (audit issue #246)
+
+A power cut between the swap and the confirmation left a new version that nobody had watched; if it did not work, systemd restarted it for ever and the previous version came back only at the next update request. Choices:
+
+- **Two steps, because of systemd ordering.** A unit ordered before `regulus.service` cannot restart or start it (the job would wait for the unit that asks), and a service that has not started cannot be judged. So `regulus-update-recover.service` (before) does only what needs no running service, and `regulus-update-confirm.service` (after) runs the existing `update-apply --recover`, unchanged: the health check after a power cut is the same code path as after a killed helper, not a second implementation.
+- **A shell script in front** (`/usr/lib/regulus/update-recover`), because the recovery must not depend on the file it may have to repair. It does one thing without the executable: put the kept copy back when `/usr/bin/regulus` does not answer `version` (an empty file counts as broken, although a shell "runs" it). Everything else stays in Go, where it is tested.
+- **Why not always roll back at boot** (simpler, no second step): it would throw away an update that is fine, and with it what the new version saved, each time the power fails during the 90 seconds of the health check.
+- **A new version gets two starts of the machine, within an hour.** Without a limit, a version that takes the machine down would do so for ever. Without the hour, a marker left for days by a confirm step that never ran (masked, or broken on a system we did not test) would make the third reboot restore a database that is weeks old. Counting only close starts keeps the first protection without the second risk. A clock that went backwards counts as close.
+- **A lock** in the state directory serialises the helpers, now that one can be started at boot while a request arrives.
+- **Both new units run as root without the sandbox** of `regulus-update.service`, like its `ExecStopPost`: they exist to repair, and a sandbox mistake that cannot be seen without a real systemd (#81) would disable the repair exactly when it is needed.
+- **`pending.json` is a contract between versions:** written by the version that was installed, possibly read by the one that replaced it. Fields are only added and a reader ignores what it does not know (the rule is written in `internal/update/pending.go`, with a test).
+- **Not verified on a real machine:** unit ordering, the condition, and a real hard power-off (#240).
 
 ## Updates: reading the release list (audit issue #213)
 
