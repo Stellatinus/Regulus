@@ -35,7 +35,8 @@ type Choice struct {
 // UseTUI decides whether to open the full-screen console and says why not
 // when it does not. The order is: command-line flags, then environment
 // variables, then the configuration file (console.tui), then what the
-// terminal looks like.
+// terminal looks like. The reason is always English: the command prints it on
+// standard error, which is CLI, not GUI (docs/decisions.md, #191).
 func UseTUI(c Choice, configTUI bool, getenv func(string) string, term Terminal) (use bool, reason string, err error) {
 	if c.TUI != nil && *c.TUI && (c.NoInput || c.Plain || c.JSON) {
 		return false, "", errors.New("--tui cannot be combined with --no-input, --plain or --json")

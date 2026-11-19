@@ -1,0 +1,30 @@
+Regulus v0.3.0  Hub ● in esecuzione
+
+ 1 Stato   2 Impostazioni   3 Log   4 Controlli   5 Azioni
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ ✓  Configurazione          testdata/config.yaml è valido
+ ✓  Hub                     risponde sul suo socket locale
+ ✓  Porta della dashboard   l'hub è in ascolto su :8080
+ !  Directory dei dati      testdata/no-such-dir non esiste ancora (viene creata al primo avvio)
+ ·  Database                ancora nessuno
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci
