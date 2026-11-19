@@ -41,6 +41,22 @@ type Status struct {
 	// empty while the database answers.
 	Database        string `json:"database,omitempty"`
 	DatabaseProblem string `json:"database_problem,omitempty"`
+	// CertSoonest is the certificate that ends first (the CA, the agent
+	// listener's or an agent's); CertWarnings are the CA and agent
+	// certificates that end within 90 days, soonest first. Both are empty
+	// from a hub older than #245.
+	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
+	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
+}
+
+// Certificate is one of the hub's certificates and when it ends.
+type Certificate struct {
+	// Kind is "ca", "listener" or "agent".
+	Kind string `json:"kind"`
+	// AgentID and Name are set for an agent's certificate.
+	AgentID  string    `json:"agent_id,omitempty"`
+	Name     string    `json:"name,omitempty"`
+	NotAfter time.Time `json:"not_after"`
 }
 
 // Agent is a connected agent.

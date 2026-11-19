@@ -1,0 +1,30 @@
+Regulus v0.3.0  Hub ● in esecuzione
+
+ 1 Stato   2 Impostazioni   3 Log   4 Controlli   5 Azioni
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Premi il tasto di un'azione, oppure selezionala con ↑/↓ e premi invio. Ognuna chiede conferma prim…
+
+ ▸ r  Riavvia il servizio
+      Riavvia regulus.service, per applicare le impostazioni lette all'avvio. Servono root o sudo s…
+      non disponibile: esegui: sudo systemctl restart regulus
+   p  Reimposta la password dell'amministratore
+      Crea un link monouso per scegliere una nuova password, quando nessuno riesce ad accedere. Ser…
+      non disponibile: avvia la console come root, oppure esegui: sudo regulus hub reset-admin
+   a  Attiva gli agent remoti
+      Imposta agent_listen a :8443 e riavvia l'hub, così altri server possono collegarsi. Serve roo…
+      non disponibile: già attivi (:8443)
+
+ Aggiungere un server
+ Gli agent remoti sono attivi. Sul nuovo server l'installer richiede:
+ Indirizzo dell'hub  192.168.1.20:8443
+ Impronta della CA   visibile mentre l'hub è in esecuzione
+ Token: crealo nella dashboard, Server → Aggiungi un server (mostra il comando completo).
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

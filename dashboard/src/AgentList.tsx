@@ -15,7 +15,7 @@ type State =
 
 interface Props {
   refreshMs?: number;
-  // Show the "Agents" heading; a widget has its own title.
+  // Show the "Servers" heading; a widget has its own title.
   heading?: boolean;
   // Called when the hub answers 401: the session has ended.
   onUnauthorized?: () => void;
@@ -96,10 +96,29 @@ export function lastContact(a: Agent, t: Translator): string {
   return a.last_seen_at ? formatAgo(a.last_seen_at, undefined, t) : t("servers.list.neverConnected");
 }
 
+// StatusCounts says how many servers are in each state ("3 online, 1 offline").
+function StatusCounts({ agents }: { agents: Agent[] }) {
+  const t = useT();
+  const order: Agent["status"][] = ["connected", "stale", "offline", "incompatible", "revoked"];
+  const counts = order.map((s) => [s, agents.filter((a) => a.status === s).length] as const).filter(([, n]) => n > 0);
+  if (agents.length < 2) return null;
+  return (
+    <p className="row-actions" aria-label={t("servers.list.counts")}>
+      {counts.map(([s, n]) => (
+        <span key={s} className={`status ${s}`}>
+          {n} {t(STATUS_LABEL[s])}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function AgentTable({ agents }: { agents: Agent[] }) {
   const t = useT();
   return (
-    <table>
+    <>
+    <StatusCounts agents={agents} />
+    <table className="cards">
       <thead>
         <tr>
           <th>{t("servers.fact.server")}</th>
@@ -113,23 +132,30 @@ function AgentTable({ agents }: { agents: Agent[] }) {
       <tbody>
         {agents.map((a) => (
           <tr key={a.id}>
-            <td>
-              <a href={serverHref(a.id)}>{displayName(a)}</a>
-              {a.name && a.hostname && a.name !== a.hostname ? <span className="muted"> {a.hostname}</span> : null}
+            <td data-label={t("servers.fact.server")}>
+              <span>
+                <a href={serverHref(a.id)} className="mono">
+                  {displayName(a)}
+                </a>
+                {a.name && a.hostname && a.name !== a.hostname ? <span className="muted"> {a.hostname}</span> : null}
+              </span>
             </td>
-            <td>{[a.os_version ?? a.os, a.arch].filter(Boolean).join(" ") || "-"}</td>
-            <td>
-              {a.version || "-"}
-              {versionNote(a, t) && <span className="muted"> {versionNote(a, t)}</span>}
+            <td data-label={t("servers.fact.system")}>{[a.os_version ?? a.os, a.arch].filter(Boolean).join(" ") || "-"}</td>
+            <td data-label={t("servers.list.version")}>
+              <span>
+                <span className="mono">{a.version || "-"}</span>
+                {versionNote(a, t) && <span className="muted"> {versionNote(a, t)}</span>}
+              </span>
             </td>
-            <td>
+            <td data-label={t("servers.fact.status")}>
               <span className={`status ${a.status}`}>{statusLabel(a, t)}</span>
             </td>
-            <td>{lastContact(a, t)}</td>
-            <td>{a.uptime_seconds === null ? "-" : formatDuration(a.uptime_seconds, t)}</td>
+            <td data-label={t("servers.fact.lastContact")}>{lastContact(a, t)}</td>
+            <td data-label={t("servers.fact.uptime")}>{a.uptime_seconds === null ? "-" : formatDuration(a.uptime_seconds, t)}</td>
           </tr>
         ))}
       </tbody>
     </table>
+    </>
   );
 }

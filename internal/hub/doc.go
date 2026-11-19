@@ -20,6 +20,9 @@
 //   - metrics.go, events.go, stream.go: samples kept in memory and the live
 //     stream sent to the dashboard.
 //   - rollout.go: the update of the agents in waves, driven by an administrator.
+//   - certs.go: when the CA, the agent listener and each agent certificate end
+//     (GET /api/certificates, the local status, a daily warning in the log).
+//     It only reports: renewing them (#128) is not done here.
 //
 // The hub does not own the details of accounts and sessions (package auth),
 // certificates (pki), the registry of agents (fleet), release download and

@@ -27,7 +27,20 @@ export const servers = {
   "servers.status.incompatible": "incompatible",
 
   // The list of servers (AgentList).
-  "servers.list.heading": "Agents",
+  "servers.list.heading": "Servers",
+  "servers.list.counts": "Servers by status",
+  "servers.certs.title": "Certificates end soon",
+  "servers.certs.ca": "The hub's CA certificate",
+  "servers.certs.listener": "The agent listener certificate",
+  "servers.certs.agent": "The certificate of {name}",
+  "servers.certs.ends": "{what} ends on {date}, in {days} days.",
+  "servers.certs.ended": "{what} ended on {date}.",
+  "servers.certs.renewAgent": "Agent certificates are not renewed automatically yet (#128): revoke the server and enroll it again with a new token.",
+  "servers.certs.renewCA": "The CA is not renewed automatically yet (#128): a new CA means every agent must enroll again.",
+  "servers.fact.certificate": "Certificate ends",
+  "servers.fact.certificateIn": "{date} (in {days} days)",
+  "servers.fact.certificateEnded": "{date} (ended)",
+  "servers.fact.certificateUnknown": "not known yet: the hub learns it at the next connection",
   "servers.list.loadError": "Could not load agents: {message}",
   "servers.list.noServers": "No servers yet.",
   "servers.list.noneConnected": "No agents connected.",
@@ -55,6 +68,9 @@ export const servers = {
   "servers.server.rename": "Rename",
   "servers.server.revoke": "Revoke this server",
   "servers.server.revokeConfirm": "Revoke {name}? It will be disconnected and can never connect again.",
+  "servers.server.revokeYes": "Revoke the server",
+  "servers.server.manage": "Manage",
+  "servers.server.hubBadge": "hub",
 
   // Remote agents are off (ServersPage).
   "servers.remoteOff.title": "Remote agents are off",
@@ -72,10 +88,16 @@ export const servers = {
   // before the translation, kept as it was.
   "servers.add.title": "Add a server",
   "servers.add.nameLabel": "Name (optional)",
+  "servers.add.ttlLabel": "Valid for",
+  "servers.add.ttl15m": "15 minutes",
+  "servers.add.ttl1h": "1 hour",
+  "servers.add.ttl24h": "24 hours",
+  "servers.add.ttl7d": "7 days",
+  "servers.add.shownOnce": "This token is shown only now: copy the command before leaving the page.",
   "servers.add.createToken": "Create enrollment token",
   "servers.add.tokenLabel": "Enrollment token",
   "servers.add.instructions":
-    "Run this on the server you want to add (Ubuntu or Debian, as a user that can use sudo). It installs Regulus enrolls the server and starts the agent. The token works once and expires at {expires}. It is not shown again.",
+    "Run this on the server you want to add (Ubuntu or Debian, as a user that can use sudo). It installs Regulus, enrolls the server and starts the agent. The token works once and expires at {expires}. It is not shown again.",
   "servers.add.instructionsVersion":
     "Run this on the server you want to add (Ubuntu or Debian, as a user that can use sudo). It installs Regulus {version}, the version of this hub, enrolls the server and starts the agent. The token works once and expires at {expires}. It is not shown again.",
   "servers.add.installCommand": "Install command",
@@ -95,6 +117,7 @@ export const servers = {
   "servers.pending.detail": "made by {user}, expires {expires}",
   "servers.pending.cancel": "Cancel token {name}",
   "servers.pending.confirm": "Cancel the token {name}? A server that has not used it yet will not be able to enroll with it.",
+  "servers.pending.confirmCancel": "Cancel the token",
   "servers.pending.loadError": "The pending enrollment tokens could not be loaded.",
 
   // Widgets: titles and descriptions shown in the picker and the frames.
@@ -155,6 +178,8 @@ export const servers = {
   "servers.dashboard.add": "Add",
   "servers.dashboard.addNamed": "Add {title}",
   "servers.dashboard.removeNamed": "Remove {title}",
+  "servers.dashboard.moveUp": "Move {title} up",
+  "servers.dashboard.moveDown": "Move {title} down",
   "servers.dashboard.unavailable": "Unavailable widget",
   "servers.dashboard.notInstalledBefore": "The widget type",
   "servers.dashboard.notInstalledAfter": "is not installed. You can remove it.",

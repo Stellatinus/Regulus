@@ -101,6 +101,43 @@ func TestStatusFormats(t *testing.T) {
 	}
 }
 
+func TestStatusAndConfigListFollowTheLanguage(t *testing.T) {
+	f := newFixture(t, true, false, map[string]string{"LANG": "it_IT.UTF-8"})
+	defer console.UseLocale(func(string) string { return "" })
+
+	if code := consoleCommand([]string{"--config", f.file}, f.env, false); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut)
+	}
+	for _, want := range []string{"in esecuzione, attivo da 1h 0m", "connesso", "3s fa", "Porta della dashboard"} {
+		if !strings.Contains(f.out.String(), want) {
+			t.Errorf("the Italian status lacks %q:\n%s", want, f.out)
+		}
+	}
+
+	// Machine formats never change with the language.
+	f.out.Reset()
+	if code := consoleCommand([]string{"--config", f.file, "--plain"}, f.env, false); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	for _, want := range []string{"uptime=1h 0m\n", "agent.local=connected 3s ago\n", "check.dashboard_port=ok :8080 is served by the hub\n"} {
+		if !strings.Contains(f.out.String(), want) {
+			t.Errorf("--plain lacks %q:\n%s", want, f.out)
+		}
+	}
+
+	f.out.Reset()
+	if code := configCommand([]string{"list", "--config", f.file}, f.env); code != 0 {
+		t.Fatalf("exit %d: %s", code, f.errOut)
+	}
+	if !strings.Contains(f.out.String(), "IMPOSTAZIONE") || !strings.Contains(f.out.String(), "predefinito") {
+		t.Errorf("config list is not in Italian:\n%s", f.out)
+	}
+	f.out.Reset()
+	if code := configCommand([]string{"list", "--plain", "--config", f.file}, f.env); code != 0 || !strings.Contains(f.out.String(), "listen=:8080\n") {
+		t.Errorf("config list --plain: %d\n%s", code, f.out)
+	}
+}
+
 func TestStatusExitCodeWhenTheHubIsNotRunning(t *testing.T) {
 	f := newFixture(t, false, false, nil)
 	if code := consoleCommand([]string{"--config", f.file, "--plain"}, f.env, false); code != exitNotRunning {

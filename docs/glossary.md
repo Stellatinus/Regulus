@@ -111,4 +111,4 @@ Alphabetical. "Closest other term" says what it is most often confused with.
 
 ## Italian UI labels
 
-This is the only place in the documentation that has Italian. The GUI must support English and Italian (#120), but **it has no Italian text yet** (#125), so the right-hand column above is a **proposal** to keep future translations consistent. Where a term is a technical word that Italian users also say in English (hub, plugin, widget, dashboard), the label stays in English.
+This is the only place in the documentation that has Italian. The GUI supports English and Italian (#120): the texts live in the catalogs `dashboard/src/i18n/messages/<area>.{en,it}.ts` and in the console tables `internal/console/strings.go` and `strings_it.go` (#125, #191). The right-hand column above is the reference those translations should follow; the Italian is a draft the maintainer has not reviewed yet. Where a term is a technical word that Italian users also say in English (hub, plugin, widget, dashboard), the label stays in English.

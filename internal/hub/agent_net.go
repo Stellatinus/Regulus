@@ -77,6 +77,11 @@ func (h *Hub) requireAgent(srv any, ss grpc.ServerStream, _ *grpc.StreamServerIn
 			return status.Error(codes.Internal, "cannot check the agent")
 		}
 	}
+	// Agents enrolled before the hub kept the end of their certificate get it
+	// filled in here (#245); a failure only leaves the date unknown.
+	if err := h.fleet.CertificateSeen(ctx, id.AgentID, id.Serial, id.NotAfter); err != nil {
+		h.log.Warn("recording the end of an agent certificate", "agent", id.AgentID, "err", err)
+	}
 	return handler(srv, wrappedStream{ss, context.WithValue(ctx, identityKey{}, id)})
 }
 

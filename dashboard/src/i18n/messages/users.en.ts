@@ -29,6 +29,9 @@ export const users = {
     "Remove the two-factor authentication of {name}? {name} is signed out everywhere and can sign in with the password alone.",
   "users.delete": "Delete {name}",
   "users.confirmDelete": "Delete the account {name}? This cannot be undone.",
+  "users.confirm.resetPassword": "Make the link",
+  "users.confirm.resetTwoFactor": "Reset two-factor",
+  "users.confirm.delete": "Delete the account",
 
   "users.resetLink.label": "Reset link for {name}",
   "users.resetLink.text":
@@ -53,6 +56,8 @@ export const users = {
 
   "users.audit.title": "Recent activity",
   "users.audit.refresh": "Refresh",
+  "users.audit.filter": "Filter by user, event or target",
+  "users.audit.noMatch": "No entry matches the filter.",
   "users.audit.loadFailed": "Could not load the activity: {message}",
   "users.audit.empty": "Nothing yet.",
   "users.audit.when": "When",
@@ -64,6 +69,9 @@ export const users = {
 
   "users.roles.title": "Roles",
   "users.roles.confirmDelete": "Delete the role {name}?",
+  "users.roles.inUse": "In use by {count}: move them to another role to delete it.",
+  "users.roles.permissionsOf": "Permissions of {name}",
+  "users.roles.confirm.delete": "Delete the role",
   "users.roles.colRole": "Role",
   "users.roles.colCan": "Can",
   "users.roles.colUsers": "Users",

@@ -31,6 +31,13 @@ func (h *Hub) localStatus(addr string) localstatus.Status {
 		st.DatabaseProblem = h.dbState.get()
 	}
 	now := time.Now()
+	if certs, err := h.Certificates(context.Background()); err == nil {
+		soonest := toLocalCert(certs.Soonest())
+		st.CertSoonest = &soonest
+		for _, w := range certs.Warnings(now) {
+			st.CertWarnings = append(st.CertWarnings, toLocalCert(w))
+		}
+	}
 	for _, a := range h.Agents() {
 		j := toAgentJSON(a, now, h.StaleAfter())
 		agent := localstatus.Agent{ID: j.ID, Hostname: j.Hostname, Version: j.Version, Status: j.Status}

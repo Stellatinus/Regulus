@@ -10,6 +10,7 @@ import {
   type TwoFactorStatus,
 } from "./api";
 import { useT } from "./i18n";
+import { copyText } from "./ui";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
 
@@ -271,11 +272,12 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
   const [copied, setCopied] = useState(false);
   const text = codes.join("\n");
 
+  const [manual, setManual] = useState(false);
   const copy = () => {
-    navigator.clipboard.writeText(text).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
+    void copyText(text).then((ok) => {
+      setCopied(ok);
+      setManual(!ok);
+    });
   };
   const download = () => {
     const url = URL.createObjectURL(new Blob([`${t("account.recovery.fileHeader")}\n\n${text}\n`], { type: "text/plain" }));
@@ -306,6 +308,11 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
           {t("account.recovery.download")}
         </button>
       </p>
+      {manual && (
+        <p role="status" className="hint">
+          {t("ui.copyManual")}
+        </p>
+      )}
       <label className="check">
         <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />{" "}
         {t("account.recovery.saved")}

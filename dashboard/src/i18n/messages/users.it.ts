@@ -30,6 +30,9 @@ export const usersIt: Record<keyof typeof users, string> = {
     "Rimuovere l'autenticazione a due fattori di {name}? {name} verrà disconnesso ovunque e potrà accedere solo con la password.",
   "users.delete": "Elimina {name}",
   "users.confirmDelete": "Eliminare l'account {name}? L'operazione non si può annullare.",
+  "users.confirm.resetPassword": "Crea il link",
+  "users.confirm.resetTwoFactor": "Reimposta il doppio fattore",
+  "users.confirm.delete": "Elimina l'account",
 
   "users.resetLink.label": "Link di reimpostazione per {name}",
   "users.resetLink.text":
@@ -54,6 +57,8 @@ export const usersIt: Record<keyof typeof users, string> = {
 
   "users.audit.title": "Attività recente",
   "users.audit.refresh": "Aggiorna",
+  "users.audit.filter": "Filtra per utente, evento o destinatario",
+  "users.audit.noMatch": "Nessuna voce corrisponde al filtro.",
   "users.audit.loadFailed": "Impossibile caricare l'attività: {message}",
   "users.audit.empty": "Ancora niente.",
   "users.audit.when": "Quando",
@@ -65,6 +70,9 @@ export const usersIt: Record<keyof typeof users, string> = {
 
   "users.roles.title": "Ruoli",
   "users.roles.confirmDelete": "Eliminare il ruolo {name}?",
+  "users.roles.inUse": "Usato da {count}: spostali su un altro ruolo per eliminarlo.",
+  "users.roles.permissionsOf": "Permessi di {name}",
+  "users.roles.confirm.delete": "Elimina il ruolo",
   "users.roles.colRole": "Ruolo",
   "users.roles.colCan": "Può",
   "users.roles.colUsers": "Utenti",

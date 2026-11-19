@@ -23,6 +23,7 @@ import { formatAgo } from "./format";
 import { RolesPanel } from "./RolesPanel";
 import { useT } from "./i18n";
 import { useSession } from "./session";
+import { ConfirmButton, CopyButton, RowActions } from "./ui";
 import { errorMessage, useApiList } from "./useApiList";
 
 // UsersPage is where accounts, roles and the audit log are managed; each part
@@ -110,7 +111,7 @@ function UserTable({ self, roles }: { self: string; roles: RoleInfo[] }) {
       {users.kind === "error" && <p role="alert">{t("users.loadFailed", { message: users.message })}</p>}
       {error && <p role="alert">{error}</p>}
       {users.kind === "ready" && (
-        <table>
+        <table className="cards">
           <thead>
             <tr>
               <th>{t("users.col.user")}</th>
@@ -126,11 +127,13 @@ function UserTable({ self, roles }: { self: string; roles: RoleInfo[] }) {
           <tbody>
             {users.items.map((u) => (
               <tr key={u.username}>
-                <td>
-                  {u.username}
-                  {u.username === self && t("users.you")}
+                <td data-label={t("users.col.user")}>
+                  <span>
+                    {u.username}
+                    {u.username === self && t("users.you")}
+                  </span>
                 </td>
-                <td>
+                <td data-label={t("users.col.role")}>
                   <select
                     aria-label={t("users.roleOf", { name: u.username })}
                     value={u.role}
@@ -140,51 +143,50 @@ function UserTable({ self, roles }: { self: string; roles: RoleInfo[] }) {
                     <RoleOptions roles={roles} current={u.role} />
                   </select>
                 </td>
-                <td>{u.disabled ? t("users.status.disabled") : t("users.status.active")}</td>
-                <td>{u.two_factor ? t("users.twoFactor.on") : t("users.twoFactor.off")}</td>
-                <td>{formatAgo(u.created_at, undefined, t)}</td>
-                <td className="row-actions">
-                  <button
-                    type="button"
-                    disabled={u.username === self}
-                    onClick={() => void run(() => updateUser(u.username, { disabled: !u.disabled }))}
-                  >
-                    {u.disabled ? t("users.enable", { name: u.username }) : t("users.disable", { name: u.username })}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={u.username === self || u.disabled}
-                    onClick={() => {
-                      if (window.confirm(t("users.confirmResetPassword", { name: u.username }))) {
-                        void run(async () => setReset(await createReset(u.username)));
-                      }
-                    }}
-                  >
-                    {t("users.resetPassword", { name: u.username })}
-                  </button>
-                  {u.two_factor && u.username !== self && (
+                <td data-label={t("users.col.status")}>
+                  <span className={`status ${u.disabled ? "disabled" : "active"}`}>
+                    {u.disabled ? t("users.status.disabled") : t("users.status.active")}
+                  </span>
+                </td>
+                <td data-label={t("users.col.twoFactor")}>
+                  <span className={`status ${u.two_factor ? "on" : "off"}`}>
+                    {u.two_factor ? t("users.twoFactor.on") : t("users.twoFactor.off")}
+                  </span>
+                </td>
+                <td data-label={t("users.col.created")}>{formatAgo(u.created_at, undefined, t)}</td>
+                <td>
+                  <RowActions name={u.username}>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(t("users.confirmResetTwoFactor", { name: u.username }))) {
-                          void run(() => resetUserTwoFactor(u.username));
-                        }
-                      }}
+                      disabled={u.username === self}
+                      onClick={() => void run(() => updateUser(u.username, { disabled: !u.disabled }))}
                     >
-                      {t("users.resetTwoFactor", { name: u.username })}
+                      {u.disabled ? t("users.enable", { name: u.username }) : t("users.disable", { name: u.username })}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={u.username === self}
-                    onClick={() => {
-                      if (window.confirm(t("users.confirmDelete", { name: u.username }))) {
-                        void run(() => deleteUser(u.username));
-                      }
-                    }}
-                  >
-                    {t("users.delete", { name: u.username })}
-                  </button>
+                    <ConfirmButton
+                      danger={false}
+                      disabled={u.username === self || u.disabled}
+                      label={t("users.resetPassword", { name: u.username })}
+                      message={t("users.confirmResetPassword", { name: u.username })}
+                      confirmLabel={t("users.confirm.resetPassword")}
+                      onConfirm={() => void run(async () => setReset(await createReset(u.username)))}
+                    />
+                    {u.two_factor && u.username !== self && (
+                      <ConfirmButton
+                        label={t("users.resetTwoFactor", { name: u.username })}
+                        message={t("users.confirmResetTwoFactor", { name: u.username })}
+                        confirmLabel={t("users.confirm.resetTwoFactor")}
+                        onConfirm={() => void run(() => resetUserTwoFactor(u.username))}
+                      />
+                    )}
+                    <ConfirmButton
+                      disabled={u.username === self}
+                      label={t("users.delete", { name: u.username })}
+                      message={t("users.confirmDelete", { name: u.username })}
+                      confirmLabel={t("users.confirm.delete")}
+                      onConfirm={() => void run(() => deleteUser(u.username))}
+                    />
+                  </RowActions>
                 </td>
               </tr>
             ))}
@@ -202,22 +204,14 @@ function UserTable({ self, roles }: { self: string; roles: RoleInfo[] }) {
 function ResetLink({ reset, onClose }: { reset: PasswordReset; onClose: () => void }) {
   const t = useT();
   const link = `${window.location.origin}${window.location.pathname}#/reset/${reset.token}`;
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(link).then(
-      () => setCopied(true),
-      () => setCopied(false),
-    );
-  };
+
   return (
     <div className="panel" role="status" aria-label={t("users.resetLink.label", { name: reset.username })}>
       <h3>{t("users.resetLink.label", { name: reset.username })}</h3>
       <p>{t("users.resetLink.text", { name: reset.username, expires: new Date(reset.expires_at).toLocaleString() })}</p>
       <input readOnly value={link} aria-label={t("users.resetLink.input")} onFocus={(e) => e.target.select()} />
       <p className="row-actions">
-        <button type="button" onClick={copy}>
-          {copied ? t("users.resetLink.copied") : t("users.resetLink.copy")}
-        </button>
+        <CopyButton text={link} label={t("users.resetLink.copy")} copiedLabel={t("users.resetLink.copied")} />
         <button type="button" onClick={onClose}>
           {t("users.resetLink.done")}
         </button>
@@ -326,17 +320,34 @@ function Audit() {
   const t = useT();
   const load = useCallback((signal: AbortSignal) => fetchAudit(100, signal), []);
   const [entries, reload] = useApiList(load);
+  const [filter, setFilter] = useState("");
+  const needle = filter.trim().toLowerCase();
+  const shown =
+    entries.kind === "ready"
+      ? entries.items.filter((a) => !needle || [a.actor, a.event, a.target].some((v) => (v ?? "").toLowerCase().includes(needle)))
+      : [];
   return (
     <section aria-labelledby="audit-heading" className="panel">
       <h3 id="audit-heading">{t("users.audit.title")}</h3>
-      <button type="button" onClick={reload}>
-        {t("users.audit.refresh")}
-      </button>
+      <div className="toolbar">
+        <button type="button" onClick={reload}>
+          {t("users.audit.refresh")}
+        </button>
+        <input
+          type="search"
+          style={{ maxWidth: "18rem" }}
+          aria-label={t("users.audit.filter")}
+          placeholder={t("users.audit.filter")}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
       {entries.kind === "loading" && <p>{t("users.loading")}</p>}
       {entries.kind === "error" && <p role="alert">{t("users.audit.loadFailed", { message: entries.message })}</p>}
       {entries.kind === "ready" && entries.items.length === 0 && <p>{t("users.audit.empty")}</p>}
-      {entries.kind === "ready" && entries.items.length > 0 && (
-        <table>
+      {entries.kind === "ready" && entries.items.length > 0 && shown.length === 0 && <p>{t("users.audit.noMatch")}</p>}
+      {entries.kind === "ready" && shown.length > 0 && (
+        <table className="cards">
           <thead>
             <tr>
               <th>{t("users.audit.when")}</th>
@@ -348,14 +359,14 @@ function Audit() {
             </tr>
           </thead>
           <tbody>
-            {entries.items.map((a) => (
+            {shown.map((a) => (
               <tr key={a.id}>
-                <td>{formatAgo(a.at, undefined, t)}</td>
-                <td>{a.actor || "–"}</td>
-                <td>{a.event.replace(/_/g, " ")}</td>
-                <td>{a.target || "–"}</td>
-                <td>{a.remote || "–"}</td>
-                <td>{a.detail || "–"}</td>
+                <td data-label={t("users.audit.when")}>{formatAgo(a.at, undefined, t)}</td>
+                <td data-label={t("users.audit.who")}>{a.actor || "–"}</td>
+                <td data-label={t("users.audit.event")}>{a.event.replace(/_/g, " ")}</td>
+                <td data-label={t("users.audit.target")}>{a.target || "–"}</td>
+                <td data-label={t("users.audit.from")} className="mono">{a.remote || "–"}</td>
+                <td data-label={t("users.audit.detail")} className="wrap">{a.detail || "–"}</td>
               </tr>
             ))}
           </tbody>

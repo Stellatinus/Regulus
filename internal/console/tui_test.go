@@ -560,3 +560,100 @@ func TestTurningRemoteAgentsOnWithoutRestartAsksForIt(t *testing.T) {
 		t.Errorf("needsRestart = %v, notice = %q", m.needsRestart, m.notice)
 	}
 }
+
+// italian switches the console to Italian for one test.
+func italian(t *testing.T) {
+	t.Helper()
+	UseLocale(func(k string) string {
+		if k == "LANG" {
+			return "it_IT.UTF-8"
+		}
+		return ""
+	})
+	t.Cleanup(func() { T = en })
+}
+
+func TestScreensInItalian(t *testing.T) {
+	italian(t)
+	for _, tc := range []struct {
+		name string
+		keys []tea.KeyMsg
+	}{
+		{"status-it", nil},
+		{"settings-it", []tea.KeyMsg{rune1('2')}},
+		{"health-it", []tea.KeyMsg{rune1('4')}},
+		{"actions-it", []tea.KeyMsg{rune1('5')}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := goldenModel(t, true, 100, 30)
+			m = sendKey(t, m, tc.keys...)
+			golden(t, tc.name, trimLines(m.View()))
+		})
+	}
+}
+
+func TestTextOutputFollowsTheLanguageAndMachineFormatsDoNot(t *testing.T) {
+	cfgFile := copyConfig(t)
+	italian(t)
+	snap := Collect(context.Background(), fakeSystem(), cfgFile, "v0.0.1")
+
+	var text strings.Builder
+	if err := WriteStatus(&text, snap, FormatText, fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"in esecuzione, attivo da 3h 12m (servizio: attivo)", "Porta della dashboard", "l'hub è in ascolto su :8080",
+		"connesso", "4s fa", "in ritardo", "1m 35s fa",
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("the Italian status does not say %q:\n%s", want, text.String())
+		}
+	}
+
+	var plain strings.Builder
+	if err := WriteStatus(&plain, snap, FormatPlain, fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"uptime=3h 12m\n", "agent.local=connected 4s ago\n", "check.dashboard_port=ok :8080 is served by the hub\n",
+		"check.configuration=ok ", "check.data_directory=", "check.database=",
+	} {
+		if !strings.Contains(plain.String(), want) {
+			t.Errorf("--plain changed with the language, no %q:\n%s", want, plain.String())
+		}
+	}
+
+	var js strings.Builder
+	if err := WriteStatus(&js, snap, FormatJSON, fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(js.String(), `"name": "Dashboard port"`) || !strings.Contains(js.String(), `"uptime": "3h 12m"`) || strings.Contains(js.String(), "Porta") {
+		t.Errorf("--json changed with the language:\n%s", js.String())
+	}
+
+	entries := snap.Settings
+	var settings strings.Builder
+	if err := WriteSettings(&settings, entries, FormatText); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(settings.String(), "IMPOSTAZIONE") || !strings.Contains(settings.String(), "predefinito") || !strings.Contains(settings.String(), "(vuoto)") {
+		t.Errorf("config list is not in Italian:\n%s", settings.String())
+	}
+}
+
+func TestFormatDuration(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		-time.Second:                               "0s",
+		42 * time.Second:                           "42s",
+		95 * time.Second:                           "1m 35s",
+		3*time.Hour + 12*time.Minute:               "3h 12m",
+		50*time.Hour + 5*time.Minute + time.Second: "2d 2h 5m",
+	} {
+		if got := formatDuration(d, en); got != want {
+			t.Errorf("formatDuration(%v) = %q, want %q", d, got, want)
+		}
+	}
+	if got := formatDuration(50*time.Hour, it); got != "2g 2h 0m" {
+		t.Errorf("Italian days: %q", got)
+	}
+}

@@ -101,8 +101,9 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.rollout.running":
     "Aggiornamento dei server, {size} alla volta. Si ferma al primo errore.",
   "updates.rollout.progress": "Avanzamento dell'aggiornamento",
-  "updates.rollout.allCurrent":
-    "Ogni server connesso esegue la {target}, oppure non è gestito da un agent che si può aggiornare.",
+  "updates.rollout.allCurrent": "Tutti i server sono aggiornati ({target}).",
+  "updates.rollout.exceptions": "Tranne questi, che non si possono aggiornare da qui:",
+  "updates.rollout.exceptionsLabel": "Server che non si possono aggiornare da qui",
   "updates.rollout.behindOne": "1 server esegue una versione più vecchia.",
   "updates.rollout.behindMany":
     "{count} server eseguono una versione più vecchia.",

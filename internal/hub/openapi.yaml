@@ -626,6 +626,24 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/certificates:
+    get:
+      tags: [agents]
+      summary: When the hub's certificates end, with warnings (needs servers.manage)
+      description: |
+        The end dates of the CA, of the agent listener's current certificate and
+        the soonest of all, plus `warnings`: the CA and agent certificates that
+        end within 90 days. The end of each agent's certificate is also in
+        `GET /api/agents` (`cert_not_after`). The hub logs the same warnings
+        once a day.
+      responses:
+        "200":
+          description: The certificates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Certificates" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/agents:
     get:
       tags: [agents]
@@ -722,6 +740,13 @@ paths:
           in: query
           description: Return only points received after this time.
           schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          description: >-
+            Return only the newest this many points (after since, when both are
+            given). Rates are computed before the cut, so the first returned
+            point keeps its rate.
+          schema: { type: integer, minimum: 1 }
       responses:
         "200":
           description: The metrics.
@@ -1694,6 +1719,50 @@ components:
             The agent is too old for this hub (compatibility `too_old`) and is
             connected only to be updated: the hub ignores its metrics and sends
             it no command but the update. It is a candidate of the rollout.
+        cert_not_after:
+          type: string
+          format: date-time
+          description: |
+            When the agent's client certificate ends. Absent for the built-in
+            agent, and for an agent enrolled before the hub kept the date until
+            it next connects. See `GET /api/certificates` for the warnings.
+    Certificate:
+      type: object
+      required: [kind, not_after, days_left]
+      properties:
+        kind: { type: string, enum: [ca, listener, agent] }
+        agent_id: { type: string, description: The agent, for kind `agent`. }
+        name: { type: string, description: "For kind `agent`: the name an admin gave the server, else its host name." }
+        not_after: { type: string, format: date-time }
+        days_left: { type: integer, description: Whole days until it ends; negative once it has ended. }
+    Certificates:
+      type: object
+      required: [ca, listener, soonest, agents_unknown, warn_days, warnings]
+      properties:
+        ca: { $ref: "#/components/schemas/Certificate" }
+        listener:
+          description: |
+            The current certificate of the agent listener; null while remote
+            agents are off. It is replaced by itself 30 days before it ends, so
+            it is never in `warnings`.
+          oneOf:
+            - { $ref: "#/components/schemas/Certificate" }
+            - { type: "null" }
+        soonest:
+          $ref: "#/components/schemas/Certificate"
+          description: The certificate that ends first, of the CA, the listener and the agents.
+        agents_unknown:
+          type: integer
+          description: Enrolled agents (not revoked) whose end date the hub does not know yet; it learns it when they connect.
+        warn_days: { type: integer, example: 90, description: How many days before its end a certificate is in `warnings`. }
+        warnings:
+          type: array
+          description: |
+            The CA and the agent certificates (revoked agents left out) that end
+            within `warn_days` or have ended, soonest first. Agent certificates
+            and the CA are not renewed automatically yet (#128): an agent is
+            revoked and enrolled again; a new CA means every agent enrolls again.
+          items: { $ref: "#/components/schemas/Certificate" }
     MetricsPoint:
       type: object
       required:

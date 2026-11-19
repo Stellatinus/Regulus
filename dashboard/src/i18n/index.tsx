@@ -22,13 +22,27 @@ const isLang = (v: unknown): v is Lang => v === "en" || v === "it";
 // browser, else English. Storage can be blocked (private windows): then the
 // browser language decides.
 export function detectLanguage(): Lang {
+  const saved = savedLanguage();
+  return saved === "auto" ? browserLanguage() : saved;
+}
+
+// browserLanguage is Italian for an Italian browser, else English.
+export function browserLanguage(): Lang {
+  return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("it") ? "it" : "en";
+}
+
+// LanguageChoice is what the user picked: a language, or "auto" to follow the
+// browser (the default).
+export type LanguageChoice = Lang | "auto";
+
+export function savedLanguage(): LanguageChoice {
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     if (isLang(saved)) return saved;
   } catch {
     // no storage
   }
-  return typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("it") ? "it" : "en";
+  return "auto";
 }
 
 // translate looks a key up in the language's catalog and fills {name}
@@ -41,7 +55,8 @@ export function translate(lang: Lang, key: MessageKey, params?: Record<string, s
 
 interface LanguageState {
   lang: Lang;
-  setLang: (lang: Lang) => void;
+  choice: LanguageChoice;
+  setLang: (lang: LanguageChoice) => void;
 }
 
 const LanguageContext = createContext<LanguageState | null>(null);
@@ -49,11 +64,13 @@ const LanguageContext = createContext<LanguageState | null>(null);
 // LanguageProvider holds the language of the page. Components also work
 // without it (they use the detected language), which keeps small tests simple.
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(detectLanguage);
-  const setLang = useCallback((next: Lang) => {
-    setLangState(next);
+  const [choice, setChoice] = useState<LanguageChoice>(savedLanguage);
+  const lang = choice === "auto" ? browserLanguage() : choice;
+  const setLang = useCallback((next: LanguageChoice) => {
+    setChoice(next);
     try {
-      window.localStorage.setItem(STORAGE_KEY, next);
+      if (next === "auto") window.localStorage.removeItem(STORAGE_KEY);
+      else window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // not saved; the choice still applies to this page
     }
@@ -61,13 +78,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = lang;
   }, [lang]);
-  const value = useMemo(() => ({ lang, setLang }), [lang, setLang]);
+  const value = useMemo(() => ({ lang, choice, setLang }), [lang, choice, setLang]);
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
 export function useLanguage(): LanguageState {
   const ctx = useContext(LanguageContext);
-  return ctx ?? { lang: detectLanguage(), setLang: () => {} };
+  return ctx ?? { lang: detectLanguage(), choice: savedLanguage(), setLang: () => {} };
 }
 
 // useT returns the translation function of the current language.

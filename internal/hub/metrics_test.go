@@ -152,11 +152,42 @@ func TestMetricsEndpointSinceKeepsRates(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpointLimitKeepsNewestAndRates(t *testing.T) {
+	t0 := time.Now().Add(-time.Minute).UTC().Truncate(time.Second)
+	mk := func(rx uint64) *agentv1.MetricsReport {
+		return &agentv1.MetricsReport{Networks: []*agentv1.NetworkMetrics{{Interface: "eth0", RxBytes: rx}}}
+	}
+	src := fakeSource{metrics: map[string][]MetricsSample{"a": {
+		{At: t0, Report: mk(0)},
+		{At: t0.Add(10 * time.Second), Report: mk(100)},
+		{At: t0.Add(20 * time.Second), Report: mk(300)},
+	}}}
+
+	_, out := getMetrics(t, src, "/api/agents/a/metrics?limit=2")
+	if len(out.Points) != 2 || !out.Points[0].At.Equal(t0.Add(10*time.Second)) {
+		t.Fatalf("limit=2: got %+v, want the two newest points", out.Points)
+	}
+	// The oldest returned point still has its rate: it is computed before the cut.
+	if r := out.Points[0].Networks[0].RxBytesPerSec; r == nil || math.Abs(*r-10) > 1e-9 {
+		t.Errorf("rate of the first returned point = %v, want 10 B/s", r)
+	}
+	if _, out := getMetrics(t, src, "/api/agents/a/metrics?limit=10"); len(out.Points) != 3 {
+		t.Errorf("limit above the count: got %d points, want 3", len(out.Points))
+	}
+	// since and limit combine: newest points after since.
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?limit=1&since="+t0.Format(time.RFC3339Nano))
+	if len(out.Points) != 1 || !out.Points[0].At.Equal(t0.Add(20*time.Second)) {
+		t.Errorf("since+limit: got %+v, want only the newest point", out.Points)
+	}
+}
+
 func TestMetricsEndpointErrors(t *testing.T) {
 	src := fakeSource{metrics: map[string][]MetricsSample{"a": nil}}
 	for path, want := range map[string]int{
 		"/api/agents/nobody/metrics":        http.StatusNotFound,
 		"/api/agents/a/metrics?since=today": http.StatusBadRequest,
+		"/api/agents/a/metrics?limit=0":     http.StatusBadRequest,
+		"/api/agents/a/metrics?limit=x":     http.StatusBadRequest,
 	} {
 		if res, _ := getMetrics(t, src, path); res.StatusCode != want {
 			t.Errorf("%s: status = %d, want %d", path, res.StatusCode, want)
