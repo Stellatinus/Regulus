@@ -71,13 +71,28 @@ export class ApiError extends Error {
   readonly status: number;
   // A machine-readable reason some answers carry, such as two_factor_setup_required.
   readonly code?: string;
+  // How many seconds the hub asks to wait (its Retry-After header), on a 429
+  // or 503 answer that sends one.
+  readonly retryAfter?: number;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, retryAfter?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;
   }
+}
+
+// parseRetryAfter reads a Retry-After header: a number of seconds, or an HTTP
+// date (turned into the seconds left from now). Anything else is undefined.
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return Number(v);
+  const at = Date.parse(v);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - now) / 1000));
 }
 
 // TWO_FACTOR_REQUIRED_EVENT is sent on window when the hub refuses a request
@@ -111,7 +126,8 @@ async function request<T>(
     if (res.status === 403 && code === "two_factor_setup_required") {
       window.dispatchEvent(new Event(TWO_FACTOR_REQUIRED_EVENT));
     }
-    throw new ApiError(res.status, message, code);
+    const retryAfter = typeof res.headers?.get === "function" ? parseRetryAfter(res.headers.get("Retry-After")) : undefined;
+    throw new ApiError(res.status, message, code, retryAfter);
   }
   if (res.status === 204) return undefined as T;
   // The hub answers JSON. Anything else with a 2xx status comes from

@@ -143,7 +143,7 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Password"), "wrong password!");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("invalid username or password");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password.");
   });
 
   it("creates the admin on first run", async () => {
