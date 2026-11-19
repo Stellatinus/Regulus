@@ -89,8 +89,12 @@ func (s *Service) PruneAudit(ctx context.Context) error {
 func (s *Service) Run(ctx context.Context) {
 	tick := time.NewTicker(auditPruneEvery)
 	defer tick.Stop()
-	for {
-		if err := s.PruneAudit(ctx); err != nil && ctx.Err() == nil {
+	for ctx.Err() == nil {
+		// A prune that has started is finished, not cut off by the shutdown:
+		// the caller waits for Run before it closes the database, and a
+		// statement abandoned in the middle can still be touching the files
+		// of a SQLite database after the caller thinks everything stopped.
+		if err := s.PruneAudit(context.WithoutCancel(ctx)); err != nil {
 			s.log.Error("pruning the audit log", "err", err)
 		}
 		select {
