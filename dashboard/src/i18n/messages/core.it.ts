@@ -49,4 +49,9 @@ export const coreIt: Record<keyof typeof core, string> = {
   "database.down":
     "Il database non risponde. Accesso e gran parte delle pagine non funzioneranno finché non torna disponibile. L'hub resta in funzione e si riconnette da solo.",
   "database.recovered": "Il database risponde di nuovo.",
+
+  "request.failed": "L'hub ha risposto {status} a {method} {path}, senza una spiegazione.",
+  "request.notJson": "La risposta a {method} {path} non è JSON ({type}); potrebbe esserci di mezzo un proxy o un captive portal.",
+  "request.notJsonNoType": "La risposta a {method} {path} non è JSON (non ha un tipo di contenuto); potrebbe esserci di mezzo un proxy o un captive portal.",
+  "request.network": "Nessuna risposta dall'hub a {method} {path}. Controlla la connessione di rete e che l'hub sia in funzione.",
 };

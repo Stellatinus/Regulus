@@ -188,6 +188,10 @@ func TestMetricsEndpointErrors(t *testing.T) {
 		"/api/agents/a/metrics?since=today": http.StatusBadRequest,
 		"/api/agents/a/metrics?limit=0":     http.StatusBadRequest,
 		"/api/agents/a/metrics?limit=x":     http.StatusBadRequest,
+		"/api/agents/a/metrics?step=x":      http.StatusBadRequest,
+		"/api/agents/a/metrics?step=30":     http.StatusBadRequest,
+		"/api/agents/a/metrics?step=500ms":  http.StatusBadRequest,
+		"/api/agents/a/metrics?step=2h":     http.StatusBadRequest,
 	} {
 		if res, _ := getMetrics(t, src, path); res.StatusCode != want {
 			t.Errorf("%s: status = %d, want %d", path, res.StatusCode, want)
@@ -227,5 +231,64 @@ func TestConfiguredMetricsIntervalReachesAgents(t *testing.T) {
 	defer func() { _ = h.Close() }()
 	if got := h.agents.metricsInterval; got != 7*time.Second {
 		t.Fatalf("metrics interval = %v, want 7s", got)
+	}
+}
+
+func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
+	// Six reports 10 s apart from a whole minute: buckets of 30 s hold three
+	// each.
+	t0 := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	var samples []MetricsSample
+	for i := range 6 {
+		samples = append(samples, MetricsSample{At: t0.Add(time.Duration(i) * 10 * time.Second), Report: &agentv1.MetricsReport{
+			Cpu:      &agentv1.CpuMetrics{UsagePercent: float64(10 * (i + 1)), Load_1: float64(i)},
+			Memory:   &agentv1.MemoryMetrics{TotalBytes: 1000, UsedBytes: uint64(100 * (i + 1))},
+			Disks:    []*agentv1.DiskMetrics{{MountPoint: "/", UsedBytes: uint64(i)}},
+			Networks: []*agentv1.NetworkMetrics{{Interface: "eth0", RxBytes: uint64(100 * i * i), TxBytes: uint64(10 * i)}},
+			// The agent's own times: rates come from them.
+			CollectedAt:   timestamppb.New(t0.Add(time.Duration(i) * 10 * time.Second)),
+			UptimeSeconds: uint64(1000 + 10*i),
+		}})
+	}
+	src := fakeSource{metrics: map[string][]MetricsSample{"a": samples}}
+
+	res, out := getMetrics(t, src, "/api/agents/a/metrics?step=30s")
+	if res.StatusCode != http.StatusOK || len(out.Points) != 2 {
+		t.Fatalf("status = %d, %d points, want 2", res.StatusCode, len(out.Points))
+	}
+	first, second := out.Points[0], out.Points[1]
+	if !first.At.Equal(t0.Add(20*time.Second)) || !second.At.Equal(t0.Add(50*time.Second)) {
+		t.Errorf("times = %v, %v; want the newest report of each bucket", first.At, second.At)
+	}
+	if first.CPUPercent != 20 || second.CPUPercent != 50 || first.Load1 != 1 || first.MemoryUsedBytes != 200 {
+		t.Errorf("means: cpu %v %v, load %v, memory %v", first.CPUPercent, second.CPUPercent, first.Load1, first.MemoryUsedBytes)
+	}
+	if first.UptimeSeconds != 1020 || first.MemoryTotalBytes != 1000 || first.Disks[0].UsedBytes != 2 || first.Networks[0].RxBytes != 400 {
+		t.Errorf("the newest report's values were not kept: %+v", first)
+	}
+	// rx rates per report: null, 10, 30 | 50, 70, 90 B/s; tx: null, 1, 1 | 1, 1, 1.
+	if r := first.Networks[0].RxBytesPerSec; r == nil || math.Abs(*r-20) > 1e-9 {
+		t.Errorf("first bucket rx rate = %v, want 20 (the null rate left out)", r)
+	}
+	if r := second.Networks[0].RxBytesPerSec; r == nil || math.Abs(*r-70) > 1e-9 {
+		t.Errorf("second bucket rx rate = %v, want 70", r)
+	}
+	if r := second.Networks[0].TxBytesPerSec; r == nil || math.Abs(*r-1) > 1e-9 {
+		t.Errorf("second bucket tx rate = %v, want 1", r)
+	}
+
+	// Buckets do not move with since: the reports after it fill the same
+	// bucket, and limit counts buckets.
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=30s&since="+t0.Add(30*time.Second).Format(time.RFC3339Nano))
+	if len(out.Points) != 1 || !out.Points[0].At.Equal(t0.Add(50*time.Second)) || out.Points[0].CPUPercent != 55 {
+		t.Errorf("step+since: %+v", out.Points)
+	}
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=10s&limit=2")
+	if len(out.Points) != 2 || out.Points[1].CPUPercent != 60 {
+		t.Errorf("a step as long as the interval must not change the points: %+v", out.Points)
+	}
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=1h")
+	if len(out.Points) != 1 || out.Points[0].CPUPercent != 35 {
+		t.Errorf("one bucket for the hour: %+v", out.Points)
 	}
 }

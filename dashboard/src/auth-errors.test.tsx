@@ -46,6 +46,14 @@ describe("authErrorText", () => {
     expect(authErrorText(t, "setup", new ApiError(503, "busy", undefined, 5))).toMatch(/still busy/);
   });
 
+  it("shows a generic request error in the form's language", () => {
+    const err = new ApiError(0, "Nessuna risposta…", "network_error", undefined, {
+      key: "request.network",
+      params: { method: "POST", path: "/api/auth/login" },
+    });
+    expect(authErrorText(t, "login", err)).toMatch(/^No answer from the hub to POST \/api\/auth\/login\./);
+  });
+
   it("keeps the hub's text for answers without a key of their own", () => {
     expect(authErrorText(t, "setup", new ApiError(400, "password must be at least 10 characters"))).toBe(
       "password must be at least 10 characters",

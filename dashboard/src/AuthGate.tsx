@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ApiError,
+  apiErrorText,
   fetchMe,
   isPending,
   login,
@@ -150,7 +151,7 @@ const BUSY_WAIT_SECONDS = 5;
 // a sentence in the user's language. The hub's English text is shown only
 // for answers without a key of their own (a 400 on input the hub refused).
 export function authErrorText(t: Translate, form: AuthForm, err: unknown): string {
-  if (!(err instanceof ApiError)) return err instanceof Error ? err.message : String(err);
+  if (!(err instanceof ApiError)) return apiErrorText(t, err);
   switch (err.status) {
     case 401:
       if (form === "code") return t(err.code === "login_expired" ? "auth.error.expired" : "auth.error.code");
@@ -169,7 +170,7 @@ export function authErrorText(t: Translate, form: AuthForm, err: unknown): strin
     case 503:
       return t("auth.error.busyGaveUp");
   }
-  return err.message;
+  return apiErrorText(t, err);
 }
 
 // useSubmit runs a form's request. A 503 (the hub is busy checking passwords)
