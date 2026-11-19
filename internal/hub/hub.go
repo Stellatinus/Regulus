@@ -236,7 +236,14 @@ func (h *Hub) Close() error {
 }
 
 // Serve serves HTTP on ln until ctx is cancelled, then shuts down gracefully.
+// With tls_cert and tls_key set it serves HTTPS on ln instead (https.go).
 func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
+	exposed, err := h.exposeHTTP(ln)
+	if err != nil {
+		_ = ln.Close()
+		return err
+	}
+	ln = exposed
 	// The background work below stops with ctx. When the HTTP server fails by
 	// itself nobody cancels the caller's context, so Serve must: otherwise it
 	// would wait for that work forever instead of returning the error.

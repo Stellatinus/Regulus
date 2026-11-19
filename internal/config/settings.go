@@ -45,7 +45,7 @@ type Setting struct {
 // Settings returns the settings in the order they are shown.
 func Settings() []Setting {
 	return []Setting{
-		{Key: "listen", Env: "REGULUS_LISTEN", Description: "Address of the dashboard and API: host:port, or only the port (8080)", Restart: true, quote: true},
+		{Key: "listen", Env: "REGULUS_LISTEN", Description: "Address of the dashboard and API: host:port, or only the port (8080). The default, 127.0.0.1:8080, is reachable from this machine only; a port alone listens on every interface", Restart: true, quote: true},
 		{Key: "agent_listen", Env: "REGULUS_AGENT_LISTEN", Description: "Address where remote agents connect (gRPC over TLS); empty keeps remote agents off", Restart: true, quote: true},
 		{Key: "data_dir", Env: "REGULUS_DATA_DIR", Description: "Directory where the hub keeps its database and keys", Restart: true, quote: true},
 		{Key: "database.type", Env: "REGULUS_DATABASE_TYPE", Description: "Where the hub keeps its data: sqlite (a file in data_dir, nothing to set up) or postgres (a server you prepared)", Choices: []string{"sqlite", "postgres"}, Restart: true},

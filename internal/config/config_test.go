@@ -174,7 +174,7 @@ func TestPackagedConfigIsValid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DataDir != "/var/lib/regulus" || !cfg.BuiltinAgent || cfg.Listen != ":8080" {
+	if cfg.DataDir != "/var/lib/regulus" || !cfg.BuiltinAgent || cfg.Listen != "127.0.0.1:8080" || cfg.TLS() {
 		t.Errorf("unexpected packaged defaults: %+v", cfg)
 	}
 }
@@ -350,5 +350,55 @@ func TestTrustedProxies(t *testing.T) {
 	}
 	if _, err := Load(nil, env(map[string]string{"REGULUS_TRUSTED_PROXIES": "proxy.example"}), io.Discard); err == nil || !strings.Contains(err.Error(), "trusted_proxies") {
 		t.Fatalf("a host name must be refused, got %v", err)
+	}
+}
+
+func TestTheDashboardListensOnLoopbackByDefault(t *testing.T) {
+	cfg := Default()
+	if cfg.Listen != "127.0.0.1:8080" || !LoopbackOnly(cfg.Listen) || cfg.TLS() {
+		t.Errorf("default listen %q, TLS %v: want 127.0.0.1:8080 without TLS", cfg.Listen, cfg.TLS())
+	}
+	if got := cfg.DashboardURL(); got != "http://127.0.0.1:8080" {
+		t.Errorf("DashboardURL = %q", got)
+	}
+}
+
+func TestLoopbackOnly(t *testing.T) {
+	for listen, want := range map[string]bool{
+		"127.0.0.1:8080": true,
+		"127.0.0.2:8080": true,
+		"[::1]:8080":     true,
+		"localhost:8080": true,
+		":8080":          false,
+		"0.0.0.0:8080":   false,
+		"[::]:8080":      false,
+		"10.0.0.5:8080":  false,
+		"hub.lan:8080":   false,
+		"nonsense":       false,
+	} {
+		if got := LoopbackOnly(listen); got != want {
+			t.Errorf("LoopbackOnly(%q) = %v, want %v", listen, got, want)
+		}
+	}
+}
+
+func TestTLSSettings(t *testing.T) {
+	file := writeFile(t, "tls_cert: /from/file.pem\ntls_key: /from/file.key\nlisten: \":8443\"\n")
+	cfg, err := Load([]string{"--config", file}, env(nil), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.TLS() || cfg.TLSCert != "/from/file.pem" || cfg.TLSKey != "/from/file.key" {
+		t.Errorf("from the file: %+v", cfg)
+	}
+	if got := cfg.DashboardURL(); got != "https://localhost:8443" {
+		t.Errorf("DashboardURL = %q", got)
+	}
+	cfg, err = Load([]string{"--config", file, "--tls-key", "/flag.key"}, env(map[string]string{"REGULUS_TLS_CERT": "/env.pem", "REGULUS_TLS_KEY": "/env.key"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TLSCert != "/env.pem" || cfg.TLSKey != "/flag.key" {
+		t.Errorf("environment and flags: %+v", cfg)
 	}
 }

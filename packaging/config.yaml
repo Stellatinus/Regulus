@@ -2,9 +2,21 @@
 # /etc/regulus/regulus.env) and command-line flags override these values.
 # Restart the service after changing it: sudo systemctl restart regulus
 
-# Address of the dashboard and API. Plain HTTP: to reach the hub from other
-# machines, put a reverse proxy with TLS in front and listen on 127.0.0.1:8080.
-listen: ":8080"
+# Address of the dashboard and API. The default answers on this machine only:
+# reach it with an SSH tunnel (ssh -L 8080:127.0.0.1:8080 you@this-server, then
+# open http://localhost:8080), or open it to the network in one of two ways:
+#   - a reverse proxy with TLS in front, keeping 127.0.0.1:8080 here and
+#     setting trusted_proxies below;
+#   - tls_cert and tls_key below, and listen: ":8443" (every interface).
+# ":8080" alone serves plain HTTP on every interface: passwords and session
+# cookies then cross the network in the clear, and the hub warns at start.
+listen: "127.0.0.1:8080"
+
+# Certificate (PEM, with its chain) and private key to serve the dashboard over
+# HTTPS. Both or neither. The key must be readable by the regulus user, for
+# example root:regulus 0640. Renewed files are picked up within a minute.
+# tls_cert: /etc/regulus/tls/cert.pem
+# tls_key: /etc/regulus/tls/key.pem
 
 # Address where remote agents connect (gRPC over TLS with client certificates).
 # Off by default. Enable it to manage other servers: the dashboard then makes

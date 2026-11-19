@@ -172,6 +172,50 @@ rm -f "$CONFIG_DIR/regulus.env"
 printf 'listen: "127.0.0.1:9090" # comment\nbuiltin_agent: true\n' >"$CONFIG_DIR/config.yaml"
 equal "reads the port from config.yaml" "$(REGULUS_LISTEN="" listen_port)" 9090
 equal "the environment wins for the port" "$(REGULUS_LISTEN=:7000 listen_port)" 7000
+only_here() { (REGULUS_LISTEN=$1 && local_only); }
+check "127.0.0.1 is this server only" only_here 127.0.0.1:8080
+check "[::1] is this server only" only_here '[::1]:8080'
+check_not "a port alone is every interface" only_here :8080
+check_not "a LAN address is not this server only" only_here 10.0.0.5:8080
+equal "plain HTTP without tls_cert" "$(REGULUS_TLS_CERT="" dashboard_scheme)" http
+printf 'listen: ":8443"\ntls_cert: /etc/regulus/tls/cert.pem\n' >"$CONFIG_DIR/config.yaml"
+equal "HTTPS with tls_cert in config.yaml" "$(REGULUS_TLS_CERT="" dashboard_scheme)" https
+rm -f "$CONFIG_DIR/config.yaml"
+equal "the built-in default is loopback" "$(REGULUS_LISTEN="" listen_address)" 127.0.0.1:8080
+printf 'REGULUS_LISTEN=:9100\n' >"$CONFIG_DIR/regulus.env"
+equal "the settings file of the service wins over the default" "$(REGULUS_LISTEN="" listen_address)" :9100
+rm -f "$CONFIG_DIR/regulus.env"
+
+# keep_old_listen (packaging/scripts/preinstall.sh): an upgrade keeps the
+# address of a hub that listened on every interface.
+keep_old() { (REGULUS_PREINSTALL_SOURCED=1 . "$here/../packaging/scripts/preinstall.sh" && keep_old_listen "$1") >/dev/null 2>&1; }
+up=$tmp/upgrade
+mkdir -p "$up"
+printf 'listen: ":8080"\n' >"$up/config.yaml"
+keep_old "$up"
+equal "the old packaged :8080 is kept" "$(grep -c '^REGULUS_LISTEN=:8080$' "$up/regulus.env")" 1
+keep_old "$up"
+equal "it is kept once" "$(grep -c '^REGULUS_LISTEN=' "$up/regulus.env")" 1
+rm -f "$up/regulus.env"
+printf 'builtin_agent: true\n' >"$up/config.yaml"
+keep_old "$up"
+equal "a file without listen (the old default applied) is kept too" "$(grep -c '^REGULUS_LISTEN=:8080$' "$up/regulus.env")" 1
+rm -f "$up/regulus.env"
+printf 'listen: "127.0.0.1:8080"\n' >"$up/config.yaml"
+keep_old "$up"
+check_not "an address chosen on purpose is left alone" test -e "$up/regulus.env"
+printf 'listen: ":8080"\n' >"$up/config.yaml"
+printf 'REGULUS_LISTEN=10.0.0.5:8080\n' >"$up/regulus.env"
+keep_old "$up"
+equal "an address in the settings file is left alone" "$(cat "$up/regulus.env")" "REGULUS_LISTEN=10.0.0.5:8080"
+rm -f "$up/regulus.env"
+echo agent >"$up/role"
+keep_old "$up"
+check_not "an agent is left alone" test -e "$up/regulus.env"
+rm -f "$up/role"
+rm -f "$up/config.yaml"
+keep_old "$up"
+check_not "a first install writes nothing" test -e "$up/regulus.env"
 
 # the agent role
 equal "adds the default port" "$(normalize_hub hub.example)" hub.example:8443

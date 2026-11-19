@@ -431,6 +431,13 @@ func TestEnvironmentOverrideIsFlagged(t *testing.T) {
 
 func TestCollect(t *testing.T) {
 	cfgFile := copyConfig(t)
+	// The packaged default answers on loopback only: no address of the LAN.
+	if snap := Collect(context.Background(), fakeSystem(), cfgFile, "v0.0.1"); snap.URL != "http://127.0.0.1:8080" || len(snap.LANURLs) != 0 {
+		t.Errorf("loopback: URL %q, LAN %v", snap.URL, snap.LANURLs)
+	}
+	if _, err := config.SetFile(cfgFile, "listen", "8080"); err != nil {
+		t.Fatal(err)
+	}
 	cfg, _, _ := config.Resolve(cfgFile, func(string) string { return "" })
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -602,7 +609,7 @@ func TestTextOutputFollowsTheLanguageAndMachineFormatsDoNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"in esecuzione, attivo da 3h 12m (servizio: attivo)", "Porta della dashboard", "l'hub è in ascolto su :8080",
+		"in esecuzione, attivo da 3h 12m (servizio: attivo)", "Porta della dashboard", "l'hub è in ascolto su 127.0.0.1:8080",
 		"connesso", "4s fa", "in ritardo", "1m 35s fa",
 	} {
 		if !strings.Contains(text.String(), want) {
@@ -615,7 +622,7 @@ func TestTextOutputFollowsTheLanguageAndMachineFormatsDoNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"uptime=3h 12m\n", "agent.local=connected 4s ago\n", "check.dashboard_port=ok :8080 is served by the hub\n",
+		"uptime=3h 12m\n", "agent.local=connected 4s ago\n", "check.dashboard_port=ok 127.0.0.1:8080 is served by the hub\n",
 		"check.configuration=ok ", "check.data_directory=", "check.database=",
 	} {
 		if !strings.Contains(plain.String(), want) {

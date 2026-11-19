@@ -60,7 +60,7 @@ curl -fsSLO https://github.com/Stellatinus/Regulus/releases/latest/download/inst
 sh install.sh
 ```
 
-It downloads the latest release, verifies its checksum and signature, installs it, starts the service and prints where to open the dashboard and the one-time setup token. Until the first stable release is out, `latest` has nothing to serve: use the command at the top of the notes of a [pre-release](https://github.com/Stellatinus/Regulus/releases). Options, what the package sets up and how to add other servers are in [Installation](docs/installation.md). The dashboard speaks plain HTTP on port 8080: put a reverse proxy with TLS in front of it before exposing it beyond a trusted network.
+It downloads the latest release, verifies its checksum and signature, installs it, starts the service and prints where to open the dashboard and the one-time setup token. Until the first stable release is out, `latest` has nothing to serve: use the command at the top of the notes of a [pre-release](https://github.com/Stellatinus/Regulus/releases). Options, what the package sets up and how to add other servers are in [Installation](docs/installation.md). The dashboard answers on `127.0.0.1:8080`, the server itself, until you choose how to reach it from other machines: an SSH tunnel, HTTPS from the hub (`tls_cert`, `tls_key`) or a reverse proxy with TLS (see [Reaching the dashboard](docs/installation.md#reaching-the-dashboard)).
 
 ## Documentation
 

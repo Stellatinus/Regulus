@@ -60,4 +60,21 @@ curl -fsSLO https://github.com/Stellatinus/Regulus/releases/download/vVERSION/in
 
 It verifies and installs the same package, enrolls the server as the `regulus` user (the token is sent only to a hub whose CA has that fingerprint), then enables and starts `regulus-agent.service`; the server shows as online within seconds. The hub must have the agent listener on (see [Remote agents](remote-agents.md)). `VERSION` is the version the hub runs: the dashboard fills it in, so the agent matches the hub even when only pre-releases exist. Keep the token off the command line with `REGULUS_AGENT_TOKEN=... sh install.sh --role agent ...`. If the hub revokes the agent, the service stops and is not restarted (exit status 3).
 
-The dashboard speaks plain HTTP on port 8080. Before exposing the hub beyond a trusted network, put a reverse proxy with TLS in front of it and set `listen: 127.0.0.1:8080` and `trusted_proxies: ["127.0.0.1"]` in `/etc/regulus/config.yaml`, so that the hub sees the real client address behind the proxy (the failed-login limit, the audit log and the session list use it; see [Authentication](authentication.md)).
+## Reaching the dashboard
+
+A new installation serves the dashboard on **`127.0.0.1:8080`, this server only** (#197). The port speaks plain HTTP unless the hub has a certificate, and a password, a session cookie or an enrollment token should not cross the network in the clear because nobody changed a default. The installer prints the address, the setup token and the tunnel command below. Choose one of these:
+
+- **SSH tunnel (nothing to change).** From your computer run `ssh -L 8080:127.0.0.1:8080 you@hub-server` and open `http://localhost:8080`. This is enough for the first admin (setup token) and for occasional use. When you add a server from the dashboard opened this way, the install command shows `localhost` as the hub: replace it with the name or address the new server uses to reach the hub (the dashboard says so under the command). The agents themselves never use this port; they connect to `agent_listen` (mutual TLS), see [Remote agents](remote-agents.md).
+- **HTTPS from the hub itself.** Put a certificate and its key where the `regulus` user can read them, and set in `/etc/regulus/config.yaml`:
+
+  ```yaml
+  listen: ":8443"
+  tls_cert: /etc/regulus/tls/cert.pem   # certificate followed by its chain
+  tls_key: /etc/regulus/tls/key.pem     # root:regulus, mode 0640
+  ```
+
+  then `sudo systemctl restart regulus` and open `https://hub-server:8443`. A renewed certificate is picked up within a minute, without a restart (for example a certbot `--deploy-hook` that copies the files and fixes their owner and mode). Details in [Configuration](configuration.md).
+- **A reverse proxy with TLS** (nginx, Caddy, Traefik) on the same machine: keep `listen: "127.0.0.1:8080"` and set `trusted_proxies: ["127.0.0.1"]` in `/etc/regulus/config.yaml`, so that the hub sees the real client address behind the proxy (the failed-login limit, the audit log and the session list use it; see [Authentication](authentication.md)). A proxy on another machine needs `listen` on an address it can reach, and its address in `trusted_proxies`; the hop between them is then plain HTTP.
+- **Plain HTTP on every interface**, only on a network you trust: `sudo regulus config set listen 8080` (that is `:8080`) and restart the service. The hub logs a warning at every start while it serves plain HTTP beyond the loopback interface.
+
+**Upgrading an installation from before this default.** Earlier packages listened on `:8080`, every interface. So that an upgrade does not take the dashboard off the network without warning, the package keeps that address when it was the one in use (the `listen: ":8080"` of the old packaged file, or no `listen` line at all): it adds `REGULUS_LISTEN=:8080`, with a comment, to `/etc/regulus/regulus.env` and says so during the upgrade. An address you chose yourself, or a `REGULUS_LISTEN` already in that file, is left alone. To move such a hub to one of the choices above, delete that line (the environment file wins over `config.yaml`), make the change and restart the service. The hub's log warns at every start while the old address serves plain HTTP. Agents are not affected.

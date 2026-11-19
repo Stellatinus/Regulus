@@ -75,7 +75,7 @@ func TestStatusFormats(t *testing.T) {
 	if err := json.Unmarshal(f.out.Bytes(), &snap); err != nil {
 		t.Fatalf("not JSON: %v\n%s", err, f.out)
 	}
-	if !snap.Running || snap.Version != "v1.2.3" || snap.Port != "8080" || snap.URL != "http://localhost:8080" || len(snap.Agents) != 1 {
+	if !snap.Running || snap.Version != "v1.2.3" || snap.Port != "8080" || snap.URL != "http://127.0.0.1:8080" || len(snap.Agents) != 1 {
 		t.Errorf("snapshot = %+v", snap)
 	}
 
@@ -83,7 +83,7 @@ func TestStatusFormats(t *testing.T) {
 	if code := consoleCommand([]string{"--config", f.file, "--plain"}, f.env, false); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, want := range []string{"running=true\n", "port=8080\n", "url=http://localhost:8080\n", "agents=1\n", "agent.local=connected 3s ago\n"} {
+	for _, want := range []string{"running=true\n", "port=8080\n", "url=http://127.0.0.1:8080\n", "agents=1\n", "agent.local=connected 3s ago\n"} {
 		if !strings.Contains(f.out.String(), want) {
 			t.Errorf("plain output lacks %q:\n%s", want, f.out)
 		}
@@ -93,7 +93,7 @@ func TestStatusFormats(t *testing.T) {
 	if code := consoleCommand([]string{"--config", f.file}, f.env, false); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if !strings.Contains(f.out.String(), "http://localhost:8080") || !strings.Contains(f.out.String(), "running, up 1h 0m") {
+	if !strings.Contains(f.out.String(), "http://127.0.0.1:8080") || !strings.Contains(f.out.String(), "running, up 1h 0m") {
 		t.Errorf("text output:\n%s", f.out)
 	}
 	if f.opened != nil {
@@ -119,7 +119,7 @@ func TestStatusAndConfigListFollowTheLanguage(t *testing.T) {
 	if code := consoleCommand([]string{"--config", f.file, "--plain"}, f.env, false); code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	for _, want := range []string{"uptime=1h 0m\n", "agent.local=connected 3s ago\n", "check.dashboard_port=ok :8080 is served by the hub\n"} {
+	for _, want := range []string{"uptime=1h 0m\n", "agent.local=connected 3s ago\n", "check.dashboard_port=ok 127.0.0.1:8080 is served by the hub\n"} {
 		if !strings.Contains(f.out.String(), want) {
 			t.Errorf("--plain lacks %q:\n%s", want, f.out)
 		}
@@ -133,7 +133,7 @@ func TestStatusAndConfigListFollowTheLanguage(t *testing.T) {
 		t.Errorf("config list is not in Italian:\n%s", f.out)
 	}
 	f.out.Reset()
-	if code := configCommand([]string{"list", "--plain", "--config", f.file}, f.env); code != 0 || !strings.Contains(f.out.String(), "listen=:8080\n") {
+	if code := configCommand([]string{"list", "--plain", "--config", f.file}, f.env); code != 0 || !strings.Contains(f.out.String(), "listen=127.0.0.1:8080\n") {
 		t.Errorf("config list --plain: %d\n%s", code, f.out)
 	}
 }
@@ -194,7 +194,7 @@ func TestConsoleOpensInATerminalOnly(t *testing.T) {
 			if (f.opened != nil) != tc.open {
 				t.Errorf("opened = %v, want %v", f.opened != nil, tc.open)
 			}
-			if tc.code == 0 && !tc.open && !strings.Contains(f.out.String(), "http://localhost:8080") {
+			if tc.code == 0 && !tc.open && !strings.Contains(f.out.String(), "http://127.0.0.1:8080") {
 				t.Errorf("no status printed instead:\n%s", f.out)
 			}
 		})
@@ -243,7 +243,7 @@ func TestConfigListGetSetPath(t *testing.T) {
 		t.Errorf("path: %d %q", code, out)
 	}
 	code, out, _ = run("get", "listen")
-	if code != 0 || out != ":8080\n" {
+	if code != 0 || out != "127.0.0.1:8080\n" {
 		t.Errorf("get: %d %q", code, out)
 	}
 
@@ -305,7 +305,7 @@ func TestConfigSetWithoutAFile(t *testing.T) {
 	}
 	// Reading works with the defaults.
 	f.out.Reset()
-	if code := configCommand([]string{"get", "listen"}, f.env); code != 0 || f.out.String() != ":8080\n" {
+	if code := configCommand([]string{"get", "listen"}, f.env); code != 0 || f.out.String() != "127.0.0.1:8080\n" {
 		t.Errorf("get exit %d: %q", code, f.out)
 	}
 }
@@ -351,7 +351,7 @@ func TestResetAdminLinkFromTheConsole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(link, "http://localhost:8080/#/reset/") {
+	if !strings.HasPrefix(link, "http://127.0.0.1:8080/#/reset/") {
 		t.Errorf("link = %q", link)
 	}
 	if storagetest.Postgres() {

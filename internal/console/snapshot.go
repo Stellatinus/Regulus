@@ -190,10 +190,10 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 	snap.Database = cfg.Storage().Describe()
 	snap.BuiltinAgent = cfg.BuiltinAgent
 	snap.LogLevel = cfg.Log.Level
-	snap.URL = dashboardURL(cfg.Listen)
+	snap.URL = cfg.DashboardURL()
 	if hostOf(cfg.Listen) == "" || isWildcard(hostOf(cfg.Listen)) {
 		for _, a := range sys.Addrs() {
-			snap.LANURLs = append(snap.LANURLs, "http://"+net.JoinHostPort(a, snap.Port))
+			snap.LANURLs = append(snap.LANURLs, cfg.Scheme()+"://"+net.JoinHostPort(a, snap.Port))
 		}
 	}
 	if fi, err := os.Stat(filepath.Join(cfg.DataDir, storage.FileName)); err == nil {
@@ -366,18 +366,6 @@ func portOf(listen string) string {
 }
 
 func isWildcard(host string) bool { return host == "0.0.0.0" || host == "::" }
-
-// dashboardURL is where to open the dashboard on this machine.
-func dashboardURL(listen string) string {
-	host, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return "http://localhost:8080"
-	}
-	if host == "" || isWildcard(host) {
-		host = "localhost"
-	}
-	return "http://" + net.JoinHostPort(host, port)
-}
 
 // FormatBytes writes a size for people: 1.5 MiB.
 func FormatBytes(n int64) string {
