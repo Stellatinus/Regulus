@@ -24,6 +24,9 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | understand why a choice was made | [Design decisions](decisions.md) |
 | understand plugins: the manifest, how they run, how to write one | [Plugins](plugins/README.md), [Manifest](plugins/manifest.md), [Runtime](plugins/runtime.md), [Writing a plugin](plugins/writing-a-plugin.md) |
 | understand managers, backends and apps (RAID, firewall, containers, VPN, Plex and the like; design only) | [Managers, backends and apps](managers-and-apps.md) |
+| read the proposed design for changing a node's type and the guided installation (not implemented) | [Node type changes](node-type-changes.md) |
+| read the proposed design of the web terminal and the file browser of a node (not implemented) | [Web terminal and file browser](node-access.md) |
+| see open ports and the traffic map of the group (design only) | [Network visibility](network-visibility.md) |
 | build and test Regulus | [Development](development.md) and [CONTRIBUTING](../CONTRIBUTING.md) |
 | work on Regulus as an AI coding agent | [AGENTS.md](../AGENTS.md) |
 | report a security problem | [SECURITY](../SECURITY.md) |

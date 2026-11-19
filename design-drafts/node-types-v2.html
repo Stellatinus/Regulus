@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Regulus Node Types v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Prototype for #164 (changing a node's type) and #165 (guided installation), in the machine-room v2 language:
+   industrial palette, left sidebar, Archivo + IBM Plex Mono, one safety-yellow signal for primary actions.
+   Example data only. Nodes are named only by their node name. Design page: docs/node-type-changes.md */
+:root{
+  --bg:#e6e8e3; --surface:#f5f6f2; --surface-2:#eceee9; --ink:#14171a; --muted:#5c635e; --faint:#7a817b;
+  --line:#d0d4cc; --line-2:#b9beb5;
+  --signal:#ffcc12; --signal-ink:#1c1600;
+  --ok:#17814a; --warn:#a86a00; --crit:#c3243d; --info:#2f56e8; --off:#7c827d;
+  --code:#14171a; --code-ink:#eef0ec;
+  --scrim:rgba(20,23,26,.4);
+  --f-disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1112; --surface:#171a1c; --surface-2:#1d2123; --ink:#eef0ec; --muted:#9aa29c; --faint:#7d857f;
+  --line:#2a2f31; --line-2:#3a4043; --signal:#ffd23a; --signal-ink:#1c1600;
+  --ok:#3fd47f; --warn:#ffb020; --crit:#ff5a6e; --info:#7c97ff; --off:#69706b;
+  --code:#0a0c0d; --code-ink:#eef0ec; --scrim:rgba(0,0,0,.55); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1112; --surface:#171a1c; --surface-2:#1d2123; --ink:#eef0ec; --muted:#9aa29c; --faint:#7d857f;
+  --line:#2a2f31; --line-2:#3a4043; --signal:#ffd23a; --signal-ink:#1c1600;
+  --ok:#3fd47f; --warn:#ffb020; --crit:#ff5a6e; --info:#7c97ff; --off:#69706b;
+  --code:#0a0c0d; --code-ink:#eef0ec; --scrim:rgba(0,0,0,.55); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-disp);font-size:14px;line-height:1.45;min-height:100vh;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mono{font-family:var(--f-mono)}
+.label{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sev-ok{--sev:var(--ok)} .sev-warn{--sev:var(--warn)} .sev-crit{--sev:var(--crit)} .sev-info{--sev:var(--info)} .sev-off{--sev:var(--off)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.app{display:grid;grid-template-columns:220px minmax(0,1fr) 400px;grid-template-rows:52px auto;grid-template-areas:"side head head" "side list insp";gap:10px;min-height:calc(100vh - 24px)}
+.side{grid-area:side;display:flex;flex-direction:column;background:var(--ink);color:var(--surface);border-radius:12px;padding:12px 10px}
+:root[data-theme="dark"] .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 6px 14px;font-stretch:125%;font-weight:850;font-size:16px;letter-spacing:.02em}
+.brand i{flex:none;width:24px;height:24px;border-radius:6px;background:var(--signal);display:grid;place-items:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
+.brand i::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--signal-ink)}
+.navsec{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.6;padding:10px 10px 5px}
+.nv{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:550;text-align:left;opacity:.78;position:relative}
+.nv svg{flex:none;width:18px;height:18px}
+.nv:hover{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
+.nv[aria-current="page"]{opacity:1;background:color-mix(in srgb,currentColor 11%,transparent)}
+.nv[aria-current="page"]::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--signal)}
+.side .sp{flex:1}
+.hubcard{border-radius:10px;padding:10px;border:1px solid color-mix(in srgb,currentColor 16%,transparent);font-family:var(--f-mono);font-size:11px}
+.hubcard b{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.hubcard b i{width:8px;height:8px;border-radius:2px;background:var(--signal)}
+.hubcard span{opacity:.75}
+
+.head{grid-area:head;display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
+.crumb{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.crumb span{color:var(--muted);font-size:13px}
+.crumb h1{margin:0;font-stretch:125%;font-weight:850;font-size:20px}
+.head .sp{flex:1}
+.tool{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.tool button{border:0;background:none;padding:7px 9px;font-family:var(--f-mono);font-size:11px;color:var(--muted);min-width:32px;min-height:32px}
+.tool button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px 9px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{margin:0;font-stretch:125%;font-weight:800;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:650;min-height:32px}
+.btn:hover:not(:disabled){border-color:var(--ink)}
+.btn.go{background:var(--signal);border-color:var(--signal);color:var(--signal-ink);box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.btn:disabled{opacity:.5}
+.btn.sm{padding:3px 8px;min-height:26px;font-size:11.5px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;font-weight:500;padding:2px 8px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.chip.hub{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+.chip.s{border-color:var(--sev);color:var(--sev)}
+.chip.s::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--sev)}
+.tiny{font-size:11.5px;color:var(--faint)}
+.note{font-size:12px;color:var(--muted);padding:10px 14px;border-bottom:1px dashed var(--line)}
+
+.list{grid-area:list;display:flex;flex-direction:column}
+.nodes{list-style:none;margin:0;padding:8px}
+.nodes button{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;border:1px solid transparent;background:none;border-radius:10px;padding:9px 10px;text-align:left}
+.nodes button:hover{background:var(--surface-2)}
+.nodes button[aria-current="true"]{border-color:var(--ink);background:var(--surface-2)}
+.nodes .dot{width:9px;height:9px;border-radius:50%;background:var(--sev)}
+.nodes b{font-family:var(--f-mono);font-weight:600;font-size:13.5px}
+.nodes small{display:block;color:var(--muted);font-size:12px}
+
+.insp{grid-area:insp;display:flex;flex-direction:column}
+.ins-hd{padding:14px 16px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.ins-hd h2{margin:0;font-family:var(--f-mono);font-weight:600;font-size:22px;overflow-wrap:anywhere}
+.ins-hd .where{display:flex;gap:6px;flex-wrap:wrap}
+.sec{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sec h3{margin:0 0 8px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.keys{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+.keys th:first-child{width:34%}
+.keys td{overflow-wrap:anywhere}
+.keys th{font-family:var(--f-mono);font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:4px 6px 6px 0}
+.keys td{padding:6px 6px 6px 0;border-top:1px dashed var(--line);vertical-align:top}
+.keys td:first-child{font-family:var(--f-mono);font-size:12px}
+.k{font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--sev)}
+.warnline{margin-top:6px;font-size:12px;color:var(--warn)}
+.facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;margin:0;font-size:12.5px}
+.facts dt{color:var(--muted)} .facts dd{margin:0;text-align:right;font-family:var(--f-mono);font-size:12px;overflow-wrap:anywhere}
+.opts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.opt{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.opt.cur{border-style:dashed}
+.opt .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.opt .nm{font-weight:700;font-size:13.5px}
+.opt p{margin:0;font-size:12.5px;color:var(--muted)}
+.opt .why{color:var(--ink)}
+.cmd{display:flex;align-items:stretch;gap:0;border-radius:8px;overflow:hidden;background:var(--code);color:var(--code-ink);border:1px solid var(--line-2)}
+.cmd code{flex:1;min-width:0;font-family:var(--f-mono);font-size:12px;padding:8px 10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+.cmd button{flex:none;border:0;border-left:1px solid color-mix(in srgb,var(--code-ink) 20%,transparent);background:none;color:var(--code-ink);font-family:var(--f-mono);font-size:11px;padding:0 10px;min-width:64px}
+.cmd button:hover{background:color-mix(in srgb,var(--code-ink) 10%,transparent)}
+.pend{margin:12px 16px 0;border:1px solid var(--sev);border-left-width:4px;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:color-mix(in srgb,var(--sev) 7%,var(--surface));font-size:13px}
+.pend p{margin:0}
+.demo{border:0;background:none;padding:0;font-size:11.5px;color:var(--info);text-decoration:underline;text-align:left}
+
+/* dialogs */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:40}
+.dlg{position:fixed;z-index:41;background:var(--surface);border:1px solid var(--line-2);display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+.dlg.mid{left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,calc(100% - 32px));max-height:calc(100% - 32px);border-radius:14px}
+.dlg.wide{top:0;right:0;bottom:0;width:min(760px,100%);border-radius:0;border-width:0 0 0 1px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.dlg .ph{padding:14px 18px 12px}
+.dlg .ph h2{font-size:14px}
+.dclose{border:0;background:none;font-size:22px;line-height:1;color:var(--muted);padding:4px 10px;border-radius:8px;min-height:32px}
+.dbody{overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:14px;min-height:0;flex:1}
+.dfoot{padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;align-items:center}
+.dfoot .msg{margin-right:auto;font-size:12.5px;color:var(--sev)}
+ul.eff{margin:0;padding-left:18px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.twokeys{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.key{border:1px solid var(--sev);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:color-mix(in srgb,var(--sev) 6%,var(--surface))}
+.key .kt{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px}
+.key svg{flex:none;width:20px;height:20px;color:var(--sev)}
+.key p{margin:0;font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.field input{border:1px solid var(--line-2);border-radius:8px;background:var(--bg);padding:8px 10px;min-height:36px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px}
+.chk input{margin-top:3px;width:16px;height:16px}
+
+/* wizard */
+.stepper{display:flex;gap:6px;list-style:none;margin:0;padding:10px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.stepper li{font-family:var(--f-mono);font-size:11px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.stepper li[aria-current="step"]{border-color:var(--ink);color:var(--ink);font-weight:600}
+.types{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.tcard{display:flex;flex-direction:column;gap:6px;text-align:left;border:1px solid var(--line-2);background:var(--surface);border-radius:12px;padding:12px}
+.tcard:hover:not(:disabled){border-color:var(--ink)}
+.tcard[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tcard b{font-size:14px}
+.tcard span{font-size:12.5px;color:var(--muted)}
+.tcard .chip{align-self:flex-start}
+.pre{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pre li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:8px 0;border-top:1px dashed var(--line);font-size:13px;align-items:center}
+.pre li:first-child{border-top:0}
+.meter{height:6px;border-radius:6px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);transition:width .3s}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.step{border:1px solid var(--line);border-left:4px solid var(--sev);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.step .sh{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start}
+.step .n{font-family:var(--f-mono);font-weight:600;font-size:12px;width:24px;height:24px;border-radius:6px;display:grid;place-items:center;background:var(--surface-2);border:1px solid var(--line-2)}
+.step h4{margin:0;font-size:13.5px}
+.step .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.step .st{font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--sev);text-align:right;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.step .st i{width:8px;height:8px;border-radius:50%;background:var(--sev)}
+.step p{margin:0;font-size:12.5px}
+.step .exp{color:var(--muted)}
+.step .fail{border:1px solid var(--crit);border-radius:8px;padding:8px 10px;background:color-mix(in srgb,var(--crit) 7%,var(--surface))}
+.step .acts{display:flex;gap:6px;flex-wrap:wrap}
+.secret{font-size:12px;border:1px dashed var(--warn);border-radius:8px;padding:6px 10px;color:var(--ink)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:99px;font-size:12.5px;z-index:60;max-width:calc(100% - 32px)}
+.blink{animation:blink 1.1s steps(2) infinite}
+@keyframes blink{50%{opacity:.2}}
+
+@media (max-width:1180px){.app{grid-template-columns:64px minmax(0,1fr) 380px}.side .txt,.navsec,.hubcard{display:none}.brand{justify-content:center;padding-inline:0}.nv{justify-content:center}}
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"side" "head" "list" "insp"}
+  .side{flex-direction:row;align-items:center;gap:4px;overflow-x:auto;padding:6px 8px}
+  .side .brand{padding:0 8px 0 4px}.side .sp{display:none}
+  .nv[aria-current="page"]::before{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:3px;border-radius:3px}
+}
+@media (max-width:480px){.twokeys{grid-template-columns:1fr}.crumb span{display:none}.dlg.mid{top:auto;bottom:0;left:0;transform:none;width:100%;border-radius:14px 14px 0 0}.step .sh{grid-template-columns:auto minmax(0,1fr)}.step .st{grid-column:1/-1;justify-content:flex-start}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <nav class="side" aria-label="Main">
+    <div class="brand"><i aria-hidden="true"></i><span class="txt">REGULUS</span></div>
+    <div class="navsec" data-i="sec_ops"></div>
+    <button class="nv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 21 8 12 13 3 8Z"/><path d="M3 12.5 12 17.5 21 12.5"/></svg><span class="txt" data-i="t_room"></span></button>
+    <button class="nv" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.5"/></svg><span class="txt" data-i="t_nodes"></span></button>
+    <div class="navsec" data-i="sec_admin"></div>
+    <button class="nv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5h9l3 3v14H6Z"/><path d="M9 10h6M9 13.5h6M9 17h4"/></svg><span class="txt" data-i="t_audit"></span></button>
+    <div class="sp"></div>
+    <div class="hubcard"><b><i></i>atlas</b><span data-i="hub_active"></span> · v0.6.0</div>
+  </nav>
+
+  <header class="head">
+    <div class="crumb"><span>home-lab /</span><h1 data-i="t_nodes"></h1></div>
+    <div class="sp"></div>
+    <button class="btn go" id="addNode" data-i="add_node"></button>
+    <div class="tool" role="group" aria-label="Theme"><button data-th="system" data-i="th_auto"></button><button data-th="light" aria-label="Light">☀</button><button data-th="dark" aria-label="Dark">☾</button></div>
+    <div class="tool" role="group" aria-label="Language"><button data-l="en" lang="en">EN</button><button data-l="it" lang="it">IT</button></div>
+  </header>
+
+  <section class="panel list" aria-labelledby="lh">
+    <div class="ph"><h2 id="lh" data-i="t_nodes"></h2><span class="label" id="lcount"></span></div>
+    <p class="note" data-i="proto_note"></p>
+    <ul class="nodes" id="nodes"></ul>
+  </section>
+
+  <aside class="panel insp" id="insp" aria-label="Inspector"></aside>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="dlg mid" id="confirm" role="dialog" aria-modal="true" aria-labelledby="ch" hidden></div>
+<div class="dlg wide" id="wizard" role="dialog" aria-modal="true" aria-labelledby="wh" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="sr" id="live" aria-live="polite"></div>
+
+<script>
+(()=>{"use strict";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const store={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- strings: English and Italian. Commands are never translated. ---------- */
+let LANG=store.get('rnt2-lang',(navigator.language||'en').startsWith('it')?'it':'en');
+const D={
+en:{sec_ops:'Operations',sec_admin:'Administration',t_room:'Machine room',t_nodes:'Nodes',t_audit:'Audit log',hub_active:'active hub',th_auto:'Auto',
+ add_node:'Add a node',proto_note:'Prototype with example data for #164 and #165. Nothing here is implemented.',n_count:'{n} nodes',
+ online:'online',offline:'offline',
+ compute:'Compute node',backup:'Backup node',gateway:'Access gateway',redundant:'Redundant hub',hub:'Active hub',development:'Development node',ai:'AI node',
+ d_compute:'Runs workloads, managed from the hub.',d_backup:'Keeps the backups of the other nodes. Talks to the hub only.',d_gateway:'A public address for the phone app; forwards to the hub, mTLS stays end to end.',d_redundant:'A passive copy of the hub that takes over on failover.',d_development:'Not designed yet (#168).',d_ai:'Idea only, not designed.',
+ sec_type:'Type and capabilities',type:'Type',cap:'Capability',k_hub:'Hub',k_node:'Node',eff:'Effective',granted:'assigned',ng:'not assigned',allowed:'allowed',na:'not allowed',noneed:'no consent needed',on:'on',off:'off',
+ disagree:'{cap}: assigned by the hub, not allowed by the node. It stays off.',
+ local:'Set on the node (the hub cannot change these)',l_allow:'Allowed capabilities',l_prom:'Accept promotion',l_bdir:'Backup directory',none:'none',prom_token:'only with a token',prom_auto:'autonomously',reported:'reported {t} ago',free:'{f} GB free',
+ change:'Change type',current:'current',change_to:'Change',on_node:'Run on {n}:',copy:'Copy',copied:'Copied',
+ r_not_allowed:'{n} does not allow {cap}.',r_no_backup_dir:'{n} has no backup directory.',r_space:'{f} GB free; a backup node needs {need} GB.',r_needs_token:'{n} accepts promotion only with a token. Run this on it, then enter the token here.',r_too_old:'{n} runs {v}; this needs 0.6.0. Update it from the Updates page.',r_workloads:'{k} workloads run on {n}. Move or stop them first.',r_active_hub:'This is the active hub. Changing it is a planned switch (#109), not a type change.',r_standby:'A redundant hub has no preset. Demote it first (#105).',r_not_designed:'Not designed yet.',
+ offline_ok:'{n} is offline: the change will be saved and applied when it connects.',
+ pending_off:'Change to “{type}” is pending: it applies when {n} connects.',pending_on:'Change to “{type}” sent to {n}; waiting for the node to confirm…',cancel_change:'Cancel the change',
+ demo:'Prototype: pretend the command was run on {n}',
+ f_ver:'Agent',f_status:'Status',f_role:'Role',r_agent:'agent',r_hubr:'hub (active)',r_hubs:'hub-redundant',
+ c_title:'Change {n} to: {type}',effects:'What changes',keys:'Two keys',key_hub:'Hub',key_hub_s:'You ({u}) assign it when you confirm.',key_node:'Node {n}',key_ok:'{cap} allowed on the node · reported {t} ago.',key_no:'{cap} is not allowed on the node. Run on {n}: sudo regulus agent allow add {cap}',key_na:'No local consent needed: {why}',why_backup:'no port is opened; the node chose {dir}.',why_compute:'it removes capabilities.',why_red:'promotion accepted autonomously on the node (#105).',
+ pw:'Your password (step-up, #279)',ack_backup:'I understand that 4 servers will have no backup target until another backup node exists.',confirm:'Confirm',cancel:'Cancel',both:'Both keys turned: the change can be sent.',one:'One key is missing: the change cannot be sent.',fill:'Enter your password to confirm.',tick:'Tick the box to confirm.',
+ e_gw:['{n} will accept connections from the internet on port 443.','Phones use it when away from home; mTLS stays end to end between phone and hub.','No secret is stored on {n}; it can be rebuilt from nothing.'],
+ e_bk:['{n} starts accepting backups in {dir}.','No new port is opened; it still talks to the hub only.'],
+ e_from_gw:['The listener on port 443 closes; phones move to the next address of their list.','“relay” stays allowed on the node until someone removes it there.'],
+ e_from_bk:['{n} stops accepting new backups at once.','The 312 GB already stored stay, read-only, until you move them (#171) or delete them.'],
+ e_red:['{n} becomes a candidate, then a redundant hub (#105).','It receives a copy of what the hub needs (#106).'],
+ e_cp:['{n} keeps running its workloads; nothing else changes.'],
+ e_demote:['{n} returns to a compute node; its replica is deleted after the demotion is confirmed (#105).'],
+ preview:'Preview (dry run)',
+ t_applied:'{n} applied the change.',t_pending:'Saved. It applies when {n} connects.',t_cancel:'Change cancelled.',t_allow:'{n} now reports: relay allowed.',
+ w_title:'Add a node',w_s1:'1 · Type',w_s2:'2 · Requirements',w_s3:'3 · Steps',w_choose:'What kind of node do you want to add?',w_name:'Node name (optional, shown in the steps)',next:'Continue',back:'Back',close:'Close',
+ pre_title:'What a {type} needs',pre_note:'Run the check on the new machine first; it installs nothing:',
+ v_auto:'checked by the hub',v_manual:'confirm manually',v_partly:'partly checked',
+ w_hub:'on the hub',w_node:'on the new node',w_out:'outside Regulus',expect:'Expected:',
+ st_wait:'waiting',st_check:'checking…',st_pass:'verified by the hub',st_manual:'confirm manually',st_conf:'confirmed by you, not checked',st_fail:'failed',st_block:'waits for step {k}',
+ done:'Done',retry:'Check again',what:'What to do:',prog:'{a} of {b} done',
+ tok_once:'Shown once. Copy the command now; the token is valid for one hour.',tok_hide:'I copied it',tok_gone:'The token was shown once. Make a new one to see it again: the old one is cancelled.',tok_new:'Make a new token',
+ no_cmd:'Nothing to run: do it in the provider’s console.',ready:'{n} is ready as {type}.',src:'These steps come from internal/guide/steps/{f}.yaml: the same file feeds the console, the documentation and the configurator.',
+ fail_reach:'Connection to 203.0.113.24:443 timed out. The provider’s firewall probably blocks the port: do step 5, then check again.',
+ hint_reach:'Proves the address and TLS from the hub’s network only. Step 9 covers the internet.'},
+it:{sec_ops:'Operatività',sec_admin:'Amministrazione',t_room:'Sala macchine',t_nodes:'Nodi',t_audit:'Registro di controllo',hub_active:'hub attivo',th_auto:'Auto',
+ add_node:'Aggiungi un nodo',proto_note:'Prototipo con dati di esempio per #164 e #165. Niente di questo è implementato.',n_count:'{n} nodi',
+ online:'in linea',offline:'spento',
+ compute:'Nodo di calcolo',backup:'Nodo di backup',gateway:'Gateway di accesso',redundant:'Hub di riserva',hub:'Hub attivo',development:'Nodo di sviluppo',ai:'Nodo IA',
+ d_compute:'Esegue carichi di lavoro, gestito dal hub.',d_backup:'Conserva i backup degli altri nodi. Parla solo con il hub.',d_gateway:'Un indirizzo pubblico per l’app sul telefono; inoltra al hub, mTLS resta da capo a capo.',d_redundant:'Una copia passiva del hub che subentra in caso di guasto.',d_development:'Non ancora progettato (#168).',d_ai:'Solo un’idea, non progettato.',
+ sec_type:'Tipo e funzionalità',type:'Tipo',cap:'Funzionalità',k_hub:'Hub',k_node:'Nodo',eff:'Effettiva',granted:'assegnata',ng:'non assegnata',allowed:'consentita',na:'non consentita',noneed:'consenso non necessario',on:'attiva',off:'spenta',
+ disagree:'{cap}: assegnata dal hub, non consentita dal nodo. Resta spenta.',
+ local:'Impostato sul nodo (il hub non può cambiarlo)',l_allow:'Funzionalità consentite',l_prom:'Accetta la promozione',l_bdir:'Cartella dei backup',none:'nessuna',prom_token:'solo con un token',prom_auto:'in autonomia',reported:'comunicato {t} fa',free:'{f} GB liberi',
+ change:'Cambia tipo',current:'attuale',change_to:'Cambia',on_node:'Esegui su {n}:',copy:'Copia',copied:'Copiato',
+ r_not_allowed:'{n} non consente {cap}.',r_no_backup_dir:'{n} non ha una cartella per i backup.',r_space:'{f} GB liberi; un nodo di backup ne richiede {need}.',r_needs_token:'{n} accetta la promozione solo con un token. Esegui questo comando sul nodo, poi inserisci qui il token.',r_too_old:'{n} usa la {v}; serve la 0.6.0. Aggiornalo dalla pagina Aggiornamenti.',r_workloads:'Su {n} girano {k} carichi di lavoro. Spostali o fermali prima.',r_active_hub:'Questo è il hub attivo. Cambiarlo è un passaggio pianificato (#109), non un cambio di tipo.',r_standby:'Un hub di riserva non ha un tipo predefinito. Prima retrocedilo (#105).',r_not_designed:'Non ancora progettato.',
+ offline_ok:'{n} è spento: la modifica viene salvata e applicata quando si collega.',
+ pending_off:'Passaggio a «{type}» in attesa: si applica quando {n} si collega.',pending_on:'Passaggio a «{type}» inviato a {n}; in attesa della conferma del nodo…',cancel_change:'Annulla la modifica',
+ demo:'Prototipo: fingi che il comando sia stato eseguito su {n}',
+ f_ver:'Agente',f_status:'Stato',f_role:'Ruolo',r_agent:'agente',r_hubr:'hub (attivo)',r_hubs:'hub di riserva',
+ c_title:'Cambia {n} in: {type}',effects:'Cosa cambia',keys:'Due chiavi',key_hub:'Hub',key_hub_s:'La assegni tu ({u}) quando confermi.',key_node:'Nodo {n}',key_ok:'{cap} consentita sul nodo · comunicato {t} fa.',key_no:'{cap} non è consentita sul nodo. Esegui su {n}: sudo regulus agent allow add {cap}',key_na:'Nessun consenso locale necessario: {why}',why_backup:'non si apre nessuna porta; il nodo ha scelto {dir}.',why_compute:'toglie funzionalità.',why_red:'il nodo accetta la promozione in autonomia (#105).',
+ pw:'La tua password (nuova verifica, #279)',ack_backup:'Ho capito che 4 server resteranno senza destinazione di backup finché non c’è un altro nodo di backup.',confirm:'Conferma',cancel:'Annulla',both:'Entrambe le chiavi girate: la modifica può partire.',one:'Manca una chiave: la modifica non può partire.',fill:'Inserisci la password per confermare.',tick:'Spunta la casella per confermare.',
+ e_gw:['{n} accetterà connessioni da internet sulla porta 443.','I telefoni lo usano fuori casa; mTLS resta da capo a capo tra telefono e hub.','Su {n} non resta alcun segreto; si può ricostruire da zero.'],
+ e_bk:['{n} inizia ad accettare backup in {dir}.','Non si apre nessuna porta; continua a parlare solo con il hub.'],
+ e_from_gw:['L’ascolto sulla porta 443 si chiude; i telefoni passano all’indirizzo successivo della lista.','«relay» resta consentita sul nodo finché qualcuno non la toglie lì.'],
+ e_from_bk:['{n} smette subito di accettare nuovi backup.','I 312 GB già salvati restano, in sola lettura, finché non li sposti (#171) o li cancelli.'],
+ e_red:['{n} diventa candidato, poi hub di riserva (#105).','Riceve una copia di ciò che serve al hub (#106).'],
+ e_cp:['{n} continua a eseguire i suoi carichi di lavoro; nient’altro cambia.'],
+ e_demote:['{n} torna nodo di calcolo; la sua copia viene cancellata dopo la conferma della retrocessione (#105).'],
+ preview:'Anteprima (prova)',
+ t_applied:'{n} ha applicato la modifica.',t_pending:'Salvato. Si applica quando {n} si collega.',t_cancel:'Modifica annullata.',t_allow:'{n} ora comunica: relay consentita.',
+ w_title:'Aggiungi un nodo',w_s1:'1 · Tipo',w_s2:'2 · Requisiti',w_s3:'3 · Passi',w_choose:'Che tipo di nodo vuoi aggiungere?',w_name:'Nome del nodo (facoltativo, appare nei passi)',next:'Continua',back:'Indietro',close:'Chiudi',
+ pre_title:'Cosa serve a un {type}',pre_note:'Esegui prima il controllo sulla nuova macchina; non installa nulla:',
+ v_auto:'verificato dal hub',v_manual:'conferma a mano',v_partly:'verificato in parte',
+ w_hub:'sul hub',w_node:'sul nuovo nodo',w_out:'fuori da Regulus',expect:'Risultato atteso:',
+ st_wait:'in attesa',st_check:'verifica…',st_pass:'verificato dal hub',st_manual:'conferma a mano',st_conf:'confermato da te, non verificato',st_fail:'non riuscito',st_block:'attende il passo {k}',
+ done:'Fatto',retry:'Verifica di nuovo',what:'Cosa fare:',prog:'{a} di {b} completati',
+ tok_once:'Mostrato una sola volta. Copia ora il comando; il token vale un’ora.',tok_hide:'L’ho copiato',tok_gone:'Il token è stato mostrato una volta. Creane uno nuovo per vederlo di nuovo: il vecchio viene annullato.',tok_new:'Crea un nuovo token',
+ no_cmd:'Niente da eseguire: fallo nella console del fornitore.',ready:'{n} è pronto come {type}.',src:'Questi passi vengono da internal/guide/steps/{f}.yaml: lo stesso file alimenta la console, la documentazione e il configuratore.',
+ fail_reach:'Connessione a 203.0.113.24:443 scaduta. Probabilmente il firewall del fornitore blocca la porta: fai il passo 5, poi verifica di nuovo.',
+ hint_reach:'Dimostra indirizzo e TLS solo dalla rete del hub. Il passo 9 copre internet.'}};
+const t=(k,v)=>{let s=D[LANG][k]??D.en[k]??k;if(v&&typeof s==='string')for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s};
+const tl=(k,v)=>(D[LANG][k]||D.en[k]).map(s=>{for(const x in v||{})s=s.split('{'+x+'}').join(v[x]);return s});
+
+/* ---------- example data ---------- */
+const N=o=>Object.assign({status:'online',ver:'0.6.0',preset:'compute',role:'agent',allow:[],prom:'token',bdir:null,work:0,pending:null,seen:'12 s'},o);
+const S=[
+ N({id:'atlas',role:'hub',preset:null,work:3}),
+ N({id:'aldebaran',role:'standby',preset:null}),
+ N({id:'ceres',work:0}),
+ N({id:'sirius',allow:['relay'],seen:'8 s'}),
+ N({id:'polaris',preset:'backup',bdir:{p:'/srv/regulus-backups',f:1840}}),
+ N({id:'vega',work:3,prom:'autonomous'}),
+ N({id:'mira',ver:'0.3.9'}),
+ N({id:'altair',status:'offline',bdir:{p:'/data/backups',f:420},seen:'2 h 14 min'}),
+];
+const byId=id=>S.find(s=>s.id===id);
+let sel=store.get('rnt2-sel','ceres');if(!byId(sel))sel='ceres';
+const TARGETS=['compute','backup','gateway','redundant'];
+const NEED_GB=50;
+
+/* the hub's answer: for each target, available or the reason and the fix (one source for dashboard, console, CLI) */
+function options(n){
+  return TARGETS.map(to=>{
+    const o={to,ok:false};
+    if(n.role==='hub'){o.why=t('r_active_hub');return o}
+    if(n.role==='standby'){if(to==='compute'){o.ok=true;o.kind='demote'}else o.why=t('r_standby');return o}
+    if(n.preset===to){o.cur=true;return o}
+    if(n.ver<'0.6.0'){o.why=t('r_too_old',{n:n.id,v:n.ver});return o}
+    if(to==='gateway'){
+      if(n.work){o.why=t('r_workloads',{n:n.id,k:n.work});return o}
+      if(!n.allow.includes('relay')){o.why=t('r_not_allowed',{n:n.id,cap:'relay'});o.fix='sudo regulus agent allow add relay';return o}
+    }
+    if(to==='backup'){
+      if(n.work){o.why=t('r_workloads',{n:n.id,k:n.work});return o}
+      if(!n.bdir){o.why=t('r_no_backup_dir',{n:n.id});o.fix='sudo regulus agent config set backup_dir /srv/regulus-backups';return o}
+      if(n.bdir.f<NEED_GB){o.why=t('r_space',{f:n.bdir.f,need:NEED_GB});return o}
+    }
+    if(to==='redundant'&&n.prom!=='autonomous'){o.why=t('r_needs_token',{n:n.id});o.fix='sudo regulus promote request';return o}
+    o.ok=true;return o;
+  });
+}
+const sevOf=n=>n.status==='online'?'ok':'off';
+const typeOf=n=>n.role==='hub'?'hub':n.role==='standby'?'redundant':n.preset;
+const capsOf=p=>p==='gateway'?['relay']:p==='backup'?['backup-storage']:[];
+
+/* ---------- rendering ---------- */
+function renderList(){
+  $('#lcount').textContent=t('n_count',{n:S.length});
+  $('#nodes').innerHTML=S.map(n=>`<li><button data-id="${n.id}" aria-current="${n.id===sel}"><span class="dot sev-${sevOf(n)}" aria-hidden="true"></span><span><b>${n.id}</b><small>${esc(t(typeOf(n)))}${n.pending?' · '+esc(t('change_to'))+' → '+esc(t(n.pending.to)):''}</small></span><span class="chip s sev-${sevOf(n)}">${t(n.status)}</span></button></li>`).join('');
+  $$('#nodes button').forEach(b=>b.onclick=()=>{sel=b.dataset.id;store.set('rnt2-sel',sel);renderList();renderInsp()});
+}
+function cmdBox(c){return `<div class="cmd"><code>${esc(c)}</code><button type="button" data-copy="${esc(c)}">${t('copy')}</button></div>`}
+function bindCopy(root){root.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{try{navigator.clipboard.writeText(b.dataset.copy)}catch(e){}b.textContent=t('copied');live(t('copied'));setTimeout(()=>b.textContent=t('copy'),1400)})}
+function renderInsp(){
+  const n=byId(sel),ty=typeOf(n);
+  const caps=['relay','notifications','backup-storage'];
+  const granted=c=>capsOf(n.preset).includes(c);
+  const consent=c=>c!=='backup-storage';
+  const allowed=c=>!consent(c)||n.allow.includes(c);
+  const rows=caps.map(c=>{const g=granted(c),a=allowed(c),e=g&&a&&(c!=='backup-storage'||n.bdir);
+    return `<tr><td>${c}</td><td><span class="k sev-${g?'ok':'off'}">${t(g?'granted':'ng')}</span></td><td><span class="k sev-${consent(c)?(a?'ok':'off'):'info'}">${consent(c)?t(a?'allowed':'na'):t('noneed')}</span></td><td><span class="k sev-${e?'ok':'off'}">${t(e?'on':'off')}</span></td></tr>`}).join('');
+  const dis=caps.filter(c=>granted(c)&&!allowed(c)).map(c=>`<p class="warnline">${esc(t('disagree',{cap:c}))}</p>`).join('');
+  const opts=options(n).map(o=>{
+    const id='why-'+o.to;
+    if(o.cur)return `<li class="opt cur"><div class="top"><span class="nm">${esc(t(o.to))}</span><span class="chip">${t('current')}</span></div></li>`;
+    return `<li class="opt"><div class="top"><span class="nm">${esc(t(o.to))}</span><button class="btn ${o.ok?'go':''} sm" data-to="${o.to}" ${o.ok&&!n.pending?'':'disabled'} ${o.ok?'':`aria-describedby="${id}"`}>${t('change_to')}</button></div>
+      ${o.ok&&n.status==='offline'?`<p>${esc(t('offline_ok',{n:n.id}))}</p>`:''}
+      ${o.why?`<p class="why" id="${id}">${esc(o.why)}</p>`:''}
+      ${o.fix?`<p>${esc(t('on_node',{n:n.id}))}</p>${cmdBox(o.fix)}`:''}${o.to==='gateway'&&o.fix?`<div class="top"><button class="btn sm" data-preview="gateway">${t('preview')}</button><button class="demo" data-demo="relay">${esc(t('demo',{n:n.id}))}</button></div>`:''}</li>`}).join('');
+  const pend=n.pending?`<div class="pend sev-${n.status==='online'?'info':'warn'}" role="status"><p>${esc(t(n.status==='online'?'pending_on':'pending_off',{n:n.id,type:t(n.pending.to)}))}</p>${n.status==='offline'?`<div><button class="btn sm" id="cancelPend">${t('cancel_change')}</button></div>`:''}</div>`:'';
+  $('#insp').innerHTML=`
+  <div class="ins-hd"><div class="where">${n.role==='hub'?`<span class="chip hub">HUB</span>`:''}<span class="chip">${esc(t(ty))}</span><span class="chip s sev-${sevOf(n)}">${t(n.status)}</span></div><h2>${n.id}</h2></div>
+  ${pend}
+  <section class="sec" aria-labelledby="st"><h3 class="label" id="st">${t('sec_type')}<span class="tiny mono">#164</span></h3>
+    <dl class="facts"><dt>${t('type')}</dt><dd>${esc(t(ty))}</dd><dt>${t('f_role')}</dt><dd>${n.role==='hub'?t('r_hubr'):n.role==='standby'?t('r_hubs'):t('r_agent')}</dd><dt>${t('f_ver')}</dt><dd>v${n.ver}</dd></dl>
+    ${n.role==='agent'?`<table class="keys" style="margin-top:10px"><caption class="sr">${t('sec_type')}</caption><thead><tr><th scope="col">${t('cap')}</th><th scope="col">${t('k_hub')}</th><th scope="col">${t('k_node')}</th><th scope="col">${t('eff')}</th></tr></thead><tbody>${rows}</tbody></table>${dis}`:''}
+  </section>
+  ${n.role!=='hub'?`<section class="sec" aria-labelledby="sl"><h3 class="label" id="sl">${t('local')}</h3><dl class="facts">
+    <dt>${t('l_allow')}</dt><dd>${n.allow.length?n.allow.join(', '):t('none')}</dd>
+    <dt>${t('l_prom')}</dt><dd>${t(n.prom==='autonomous'?'prom_auto':'prom_token')}</dd>
+    <dt>${t('l_bdir')}</dt><dd>${n.bdir?esc(n.bdir.p)+' · '+t('free',{f:n.bdir.f}):t('none')}</dd>
+    <dt></dt><dd class="tiny">${esc(t('reported',{t:n.seen}))}</dd></dl></section>`:''}
+  <section class="sec" aria-labelledby="sc"><h3 class="label" id="sc">${t('change')}</h3>${n.role==='hub'?`<p class="why" style="margin:0;font-size:12.5px">${esc(t('r_active_hub'))}</p>`:`<ul class="opts">${opts}</ul>`}</section>`;
+  $$('#insp [data-to]').forEach(b=>b.onclick=()=>openConfirm(n,b.dataset.to,b));
+  $$('#insp [data-preview]').forEach(b=>b.onclick=()=>openConfirm(n,b.dataset.preview,b));
+  $$('#insp [data-demo]').forEach(b=>b.onclick=()=>{n.allow.push('relay');n.seen='1 s';toast(t('t_allow',{n:n.id}));renderInsp()});
+  const cp=$('#cancelPend');if(cp)cp.onclick=()=>{n.pending=null;toast(t('t_cancel'));renderAll()};
+  bindCopy($('#insp'));
+}
+function renderAll(){renderList();renderInsp()}
+
+/* ---------- dialogs: focus kept inside, Esc closes, focus returns ---------- */
+let opener=null,openDlg=null;
+function showDlg(el,from){opener=from||document.activeElement;openDlg=el;el.hidden=false;$('#scrim').hidden=false;$('#app').inert=true;
+  const f=el.querySelector('input,button:not(.dclose):not(:disabled)')||el.querySelector('button');f&&f.focus()}
+function hideDlg(){if(!openDlg)return;openDlg.hidden=true;$('#scrim').hidden=true;$('#app').inert=false;openDlg=null;if(wTimer){clearInterval(wTimer);wTimer=null}opener&&opener.focus&&opener.focus()}
+addEventListener('keydown',e=>{if(e.key==='Escape'&&openDlg)hideDlg();
+  if(e.key==='Tab'&&openDlg){const f=[...openDlg.querySelectorAll('button:not(:disabled),input,[tabindex]')].filter(x=>!x.hidden&&x.offsetParent);if(!f.length)return;const a=f[0],z=f[f.length-1];
+    if(e.shiftKey&&document.activeElement===a){z.focus();e.preventDefault()}else if(!e.shiftKey&&document.activeElement===z){a.focus();e.preventDefault()}}});
+$('#scrim').onclick=hideDlg;
+const KEY_OK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8m-3 3 2 2m-4 0 2 2"/></svg>';
+
+/* ---------- change-type confirmation with the two keys ---------- */
+function openConfirm(n,to,from){
+  const o=options(n).find(x=>x.to===to),dlg=$('#confirm');
+  const fx={gateway:tl('e_gw',{n:n.id}),backup:tl('e_bk',{n:n.id,dir:n.bdir?n.bdir.p:''}),redundant:tl('e_red',{n:n.id}),
+    compute:n.preset==='gateway'?tl('e_from_gw',{n:n.id}):n.preset==='backup'?tl('e_from_bk',{n:n.id}):n.role==='standby'?tl('e_demote',{n:n.id}):tl('e_cp',{n:n.id})}[to];
+  const nodeKey=to==='gateway'?(n.allow.includes('relay')?{ok:true,txt:t('key_ok',{cap:'relay',t:n.seen})}:{ok:false,txt:t('key_no',{cap:'relay',n:n.id})})
+    :{ok:true,na:true,txt:t('key_na',{why:to==='backup'?t('why_backup',{dir:n.bdir.p}):to==='redundant'?t('why_red'):t('why_compute')})};
+  const step=to==='gateway'||to==='redundant',ack=to==='compute'&&n.preset==='backup';
+  dlg.innerHTML=`<div class="ph"><h2 id="ch">${esc(t('c_title',{n:n.id,type:t(to)}))}</h2><button class="dclose" aria-label="${t('close')}">×</button></div>
+  <div class="dbody">
+    <div><div class="label" style="margin-bottom:6px">${t('effects')}</div><ul class="eff">${fx.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+      ${n.status==='offline'?`<p class="warnline">${esc(t('offline_ok',{n:n.id}))}</p>`:''}</div>
+    <div><div class="label" style="margin-bottom:6px">${t('keys')}</div>
+      <div class="twokeys">
+        <div class="key sev-ok"><div class="kt">${KEY_OK}${t('key_hub')} · atlas</div><p>${esc(t('key_hub_s',{u:'admin'}))}</p></div>
+        <div class="key sev-${nodeKey.ok?(nodeKey.na?'info':'ok'):'crit'}"><div class="kt">${KEY_OK}${esc(t('key_node',{n:n.id}))}</div><p>${esc(nodeKey.txt)}</p></div>
+      </div></div>
+    ${step?`<label class="field">${t('pw')}<input type="password" id="pw" autocomplete="current-password"></label>`:''}
+    ${ack?`<label class="chk"><input type="checkbox" id="ack"><span>${esc(t('ack_backup'))}</span></label>`:''}
+  </div>
+  <div class="dfoot sev-${nodeKey.ok?'ok':'crit'}"><span class="msg" id="cmsg" aria-live="polite">${t(nodeKey.ok?'both':'one')}</span>${nodeKey.ok?'':`<button class="demo" id="cdemo">${esc(t('demo',{n:n.id}))}</button>`}<button class="btn" data-x>${t('cancel')}</button><button class="btn go" id="cgo" ${nodeKey.ok?'':'disabled'}>${t('confirm')}</button></div>`;
+  const cd=$('#cdemo');if(cd)cd.onclick=()=>{n.allow.push('relay');n.seen='1 s';renderAll();const op=opener;openDlg=null;openConfirm(n,to,op);live(t('both'))};
+  dlg.querySelector('.dclose').onclick=hideDlg;dlg.querySelector('[data-x]').onclick=hideDlg;
+  $('#cgo').onclick=()=>{
+    if(step&&!$('#pw').value){$('#cmsg').textContent=t('fill');$('#pw').focus();return}
+    if(ack&&!$('#ack').checked){$('#cmsg').textContent=t('tick');$('#ack').focus();return}
+    hideDlg();n.pending={to};
+    if(n.status==='offline'){toast(t('t_pending',{n:n.id}));renderAll();return}
+    renderAll();
+    setTimeout(()=>{if(!n.pending)return;if(to==='redundant'){n.role='standby';n.preset=null}else if(n.role==='standby'){n.role='agent';n.preset='compute'}else n.preset=to;n.pending=null;toast(t('t_applied',{n:n.id}));renderAll()},2600);
+  };
+  showDlg(dlg,from);
+}
+
+/* ---------- guided installation: steps in the shape of internal/guide/steps/<type>.yaml ---------- */
+const V={hub_address:'atlas.lan:8443',agent_port:'8443',version:'0.6.0',ca_fingerprint:'sha256:3f9c0a…e21a',relay_port:'443',backup_dir:'/srv/regulus-backups'};
+const TOKEN='rgt_7kQe2xV9mPz4LcW1';
+const L=(en,it)=>({en,it});
+const PRE={
+ compute:[[L('Ubuntu or Debian with systemd, amd64 or arm64','Ubuntu o Debian con systemd, amd64 o arm64'),'auto'],[L('Outbound TCP to atlas.lan:8443','TCP in uscita verso atlas.lan:8443'),'auto']],
+ backup:[[L('As a compute node, plus a dedicated filesystem (recommended)','Come un nodo di calcolo, più un filesystem dedicato (consigliato)'),'manual'],[L('At least 50 GB free in the backup directory','Almeno 50 GB liberi nella cartella dei backup'),'auto'],[L('No public address: it talks to the hub only','Nessun indirizzo pubblico: parla solo con il hub'),'manual']],
+ gateway:[[L('A public IPv4 or IPv6 address','Un indirizzo IPv4 o IPv6 pubblico'),'manual'],[L('Port 443/tcp free on the host','Porta 443/tcp libera sulla macchina'),'partly'],[L('1 vCPU and 512 MB of memory are enough (to measure)','Bastano 1 vCPU e 512 MB di memoria (da misurare)'),'auto'],[L('The relay allowed on the node (--allow relay)','Il relay consentito sul nodo (--allow relay)'),'auto']],
+ redundant:[[L('The same release as the active hub (0.6.0)','La stessa versione del hub attivo (0.6.0)'),'auto'],[L('At least the hub’s memory and twice its data size','Almeno la memoria del hub e il doppio dei suoi dati'),'auto'],[L('Reachable by the other nodes for a failover (#109)','Raggiungibile dagli altri nodi per un failover (#109)'),'manual']]};
+const INSTALL=allow=>`REGULUS_AGENT_TOKEN={{token}} sh install.sh --version {{version}} --role agent --hub {{hub_address}} --ca-fingerprint {{ca_fingerprint}}${allow}`;
+const STEPS={
+ compute:[
+  {id:'listener',w:'hub',ti:L('Remote agents are on','Gli agenti remoti sono attivi'),c:'sudo regulus config set agent_listen :{{agent_port}}',ex:L('The hub listens on port 8443.','Il hub ascolta sulla porta 8443.'),v:'auto',chk:()=>'pass'},
+  {id:'install',w:'node',ti:L('Install and enroll','Installa e registra'),c:INSTALL(''),secret:1,ex:L('The installer ends with “enrolled”; the agent service starts.','L’installer termina con «enrolled»; il servizio dell’agente parte.'),v:'auto',needs:['listener'],chk:()=>sim.enrolled?'pass':'wait'},
+  {id:'report',w:'hub',ti:L('Connected and reporting','Collegato e invia i dati'),c:null,ex:L('The node appears online in Nodes.','Il nodo appare in linea in Nodi.'),v:'auto',needs:['install'],chk:()=>sim.enrolled?'pass':'wait'}],
+ backup:[
+  {id:'listener',w:'hub',ti:L('Remote agents are on','Gli agenti remoti sono attivi'),c:'sudo regulus config set agent_listen :{{agent_port}}',ex:L('The hub listens on port 8443.','Il hub ascolta sulla porta 8443.'),v:'auto',chk:()=>'pass'},
+  {id:'install',w:'node',ti:L('Install and enroll','Installa e registra'),c:INSTALL(''),secret:1,ex:L('The installer ends with “enrolled”.','L’installer termina con «enrolled».'),v:'auto',needs:['listener'],chk:()=>sim.enrolled?'pass':'wait'},
+  {id:'dir',w:'node',ti:L('Choose the backup directory','Scegli la cartella dei backup'),c:'sudo regulus agent config set backup_dir {{backup_dir}}',ex:L('The node reports the directory and its free space.','Il nodo comunica la cartella e lo spazio libero.'),v:'auto',needs:['install'],chk:()=>sim.enrolled?'pass':'wait'},
+  {id:'space',w:'hub',ti:L('Enough free space','Spazio libero sufficiente'),c:null,ex:L('At least 50 GB free.','Almeno 50 GB liberi.'),v:'auto',needs:['dir'],chk:()=>'pass'},
+  {id:'apply',w:'hub',ti:L('The hub applies backup-storage','Il hub applica backup-storage'),c:null,ex:L('The node confirms; it accepts backups.','Il nodo conferma; accetta i backup.'),v:'auto',needs:['space'],chk:()=>'pass'}],
+ gateway:[
+  {id:'pre',w:'node',ti:L('Check the machine','Controlla la macchina'),c:'curl -fsSLO https://github.com/Stellatinus/Regulus/releases/download/v{{version}}/install.sh && sh install.sh --preflight --type gateway',ex:L('Every line ends with “ok”; nothing is installed.','Ogni riga termina con «ok»; non viene installato nulla.'),v:'manual'},
+  {id:'listener',w:'hub',ti:L('Remote agents are on','Gli agenti remoti sono attivi'),c:'sudo regulus config set agent_listen :{{agent_port}}',ex:L('The hub listens on port 8443.','Il hub ascolta sulla porta 8443.'),v:'auto',chk:()=>'pass'},
+  {id:'install',w:'node',ti:L('Install and enroll, allowing the relay','Installa e registra, consentendo il relay'),c:INSTALL(' --allow relay'),secret:1,ex:L('The installer ends with “enrolled”; the node reports relay as allowed.','L’installer termina con «enrolled»; il nodo comunica relay come consentita.'),v:'auto',needs:['listener'],chk:()=>sim.enrolled?'pass':'wait'},
+  {id:'hostfw',w:'node',ti:L('Open port 443/tcp on the host firewall','Apri la porta 443/tcp nel firewall della macchina'),c:'sudo ufw allow {{relay_port}}/tcp',ex:L('ufw status lists 443/tcp ALLOW. Checked automatically once the firewall manager exists (#290).','ufw status elenca 443/tcp ALLOW. Verificato in automatico quando esisterà la gestione firewall (#290).'),v:'manual'},
+  {id:'cloudfw',w:'out',ti:L('Open port 443/tcp in the provider’s firewall','Apri la porta 443/tcp nel firewall del fornitore'),c:null,ex:L('An inbound rule for 443/tcp from anywhere.','Una regola in ingresso per 443/tcp da qualsiasi indirizzo.'),v:'manual'},
+  {id:'apply',w:'hub',ti:L('The hub applies relay','Il hub applica relay'),c:null,ex:L('Assigned with the token; the node confirms and opens the listener.','Assegnata con il token; il nodo conferma e apre l’ascolto.'),v:'auto',needs:['install'],chk:()=>'pass'},
+  {id:'reach',w:'hub',ti:L('Reachable, TLS correct','Raggiungibile, TLS corretto'),c:null,ex:L('The hub connects to 203.0.113.24:443 and sees the group’s certificate.','Il hub si collega a 203.0.113.24:443 e vede il certificato del gruppo.'),hint:'hint_reach',v:'auto',needs:['apply'],chk:()=>sim.reachOk?'pass':'fail',fail:'fail_reach'},
+  {id:'fwd',w:'hub',ti:L('Forwards to the hub','Inoltra al hub'),c:null,ex:L('A test connection through the gateway reaches atlas.','Una connessione di prova attraverso il gateway arriva ad atlas.'),v:'auto',needs:['reach'],chk:()=>'pass'},
+  {id:'phone',w:'out',ti:L('Test from a phone on mobile data','Prova da un telefono con i dati mobili'),c:null,ex:L('The app connects with Wi-Fi off.','L’app si collega con il Wi-Fi spento.'),v:'partly',needs:['fwd']}],
+ redundant:[
+  {id:'install',w:'node',ti:L('Install and enroll as a compute node','Installa e registra come nodo di calcolo'),c:INSTALL(''),secret:1,ex:L('The installer ends with “enrolled”.','L’installer termina con «enrolled».'),v:'auto',chk:()=>sim.enrolled?'pass':'wait'},
+  {id:'release',w:'hub',ti:L('Same release as the hub','Stessa versione del hub'),c:null,ex:L('Both run 0.6.0.','Entrambi usano la 0.6.0.'),v:'auto',needs:['install'],chk:()=>'pass'},
+  {id:'promote',w:'node',ti:L('Request the promotion, then enter the token on the hub (#105)','Chiedi la promozione, poi inserisci il token sul hub (#105)'),c:'sudo regulus promote request',ex:L('The node shows a one-time token; atlas shows a pending request.','Il nodo mostra un token monouso; atlas mostra una richiesta in attesa.'),v:'manual',needs:['release']}]};
+const TYPES=[['compute',1],['backup',1],['gateway',1],['redundant',1],['development',0],['ai',0]];
+let W={stage:1,type:null,name:''},sim,wTimer=null;
+const render=s=>s.replace(/\{\{(\w+)\}\}/g,(m,k)=>k==='token'?(sim&&!sim.tokHidden?TOKEN:'…'):k==='node_name'?(W.name||'new-node'):(V[k]??m));
+function stepState(s,i,list){
+  const unmet=(s.needs||[]).find(id=>!['pass','conf'].includes(sim.st[id]));
+  if(unmet)return{k:'block',n:list.findIndex(x=>x.id===unmet)+1};
+  if(s.v==='auto')return{k:s.chk()};
+  return{k:sim.done.has(s.id)?'conf':'manual'};
+}
+function evalSteps(){const list=STEPS[W.type];list.forEach((s,i)=>{const r=stepState(s,i,list);sim.st[s.id]=r.k;sim.info[s.id]=r});}
+function openWizard(from){W={stage:1,type:null,name:''};sim=null;renderWizard();showDlg($('#wizard'),from)}
+function renderWizard(){
+  const dlg=$('#wizard'),stages=['w_s1','w_s2','w_s3'];
+  let body='',foot='';
+  if(W.stage===1){
+    body=`<p style="margin:0">${t('w_choose')}</p><div class="types" role="group" aria-label="${t('w_s1')}">${TYPES.map(([k,ok])=>`<button class="tcard" data-ty="${k}" aria-pressed="${W.type===k}" ${ok?'':'disabled'}><b>${esc(t(k))}</b><span>${esc(t('d_'+k))}</span>${ok?'':`<span class="chip">${t('r_not_designed')}</span>`}</button>`).join('')}</div>
+    <label class="field">${t('w_name')}<input id="wname" value="${esc(W.name)}" placeholder="procyon" autocomplete="off" spellcheck="false"></label>`;
+    foot=`<button class="btn go" id="wnext" ${W.type?'':'disabled'}>${t('next')}</button>`;
+  }else if(W.stage===2){
+    body=`<h3 class="label" style="margin:0">${esc(t('pre_title',{type:t(W.type)}))}</h3><ul class="pre">${PRE[W.type].map(([x,v])=>`<li><span>${esc(x[LANG])}</span><span class="chip">${t('v_'+v)}</span></li>`).join('')}</ul>
+    <p style="margin:0;font-size:12.5px">${t('pre_note')}</p>${cmdBox(render('sh install.sh --preflight --type '+(W.type==='redundant'?'redundant-hub':W.type)))}`;
+    foot=`<button class="btn" id="wback">${t('back')}</button><button class="btn go" id="wnext">${t('next')}</button>`;
+  }else{
+    const list=STEPS[W.type];evalSteps();
+    const done=list.filter(s=>['pass','conf'].includes(sim.st[s.id])).length;
+    const SEV={pass:'ok',conf:'ok',wait:'info',manual:'warn',fail:'crit',block:'off'};
+    const LBL={pass:'st_pass',conf:'st_conf',wait:'st_check',manual:'st_manual',fail:'st_fail',block:'st_block'};
+    body=`<div><div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span>${esc(t(W.type))}${W.name?' · <b class="mono">'+esc(W.name)+'</b>':''}</span><span class="mono">${t('prog',{a:done,b:list.length})}</span></div><div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="${list.length}" aria-valuenow="${done}" aria-label="${t('prog',{a:done,b:list.length})}"><i style="width:${done/list.length*100}%"></i></div></div>
+    ${done===list.length?`<p class="chip s sev-ok" role="status" style="align-self:flex-start;font-size:12px">${esc(t('ready',{n:W.name||'new-node',type:t(W.type)}))}</p>`:''}
+    <ol class="steps">${list.map((s,i)=>{const st=sim.st[s.id],info=sim.info[s.id];
+      return `<li class="step sev-${SEV[st]}"><div class="sh"><span class="n">${i+1}</span><div><h4>${esc(s.ti[LANG])}</h4><div class="meta"><span class="chip">${t('w_'+s.w)}</span><span class="chip">${t('v_'+s.v)}</span></div></div>
+        <span class="st"><i class="${st==='wait'?'blink':''}"></i>${esc(t(LBL[st],{k:info.n}))}</span></div>
+        ${s.c?cmdBox(render(s.c)):s.w==='out'&&s.v!=='partly'?`<p class="exp">${t('no_cmd')}</p>`:''}
+        ${s.secret?(sim.tokHidden?`<p class="secret">${t('tok_gone')} <button class="btn sm" data-tnew>${t('tok_new')}</button></p>`:`<p class="secret">${t('tok_once')} <button class="btn sm" data-thide>${t('tok_hide')}</button></p>`):''}
+        <p class="exp"><b>${t('expect')}</b> ${esc(s.ex[LANG])}</p>${s.hint?`<p class="exp">${esc(t(s.hint))}</p>`:''}
+        ${st==='fail'?`<div class="fail"><p><b>${t('what')}</b> ${esc(t(s.fail))}</p></div>`:''}
+        ${st==='manual'||st==='fail'?`<div class="acts">${st==='manual'?`<button class="btn sm go" data-done="${s.id}">${t('done')}</button>`:`<button class="btn sm" data-retry>${t('retry')}</button>`}</div>`:''}</li>`}).join('')}</ol>
+    <p class="tiny" style="margin:0;font-size:11.5px;color:var(--muted)">${esc(t('src',{f:W.type==='redundant'?'redundant-hub':W.type}))}</p>`;
+    foot=`<button class="btn" id="wback">${t('back')}</button><button class="btn" data-x>${t('close')}</button>`;
+  }
+  dlg.innerHTML=`<div class="ph"><h2 id="wh">${t('w_title')}</h2><button class="dclose" aria-label="${t('close')}">×</button></div>
+   <ol class="stepper">${stages.map((s,i)=>`<li ${W.stage===i+1?'aria-current="step"':''}>${t(s)}</li>`).join('')}</ol>
+   <div class="dbody" id="wbody">${body}</div><div class="dfoot">${foot}</div>`;
+  dlg.querySelector('.dclose').onclick=hideDlg;const x=dlg.querySelector('[data-x]');if(x)x.onclick=hideDlg;
+  dlg.querySelectorAll('[data-ty]').forEach(b=>b.onclick=()=>{W.type=b.dataset.ty;W.name=$('#wname').value.trim();renderWizard();dlg.querySelector(`[data-ty="${W.type}"]`).focus()});
+  const nm=$('#wname');if(nm)nm.oninput=()=>W.name=nm.value.trim().replace(/[^a-z0-9-]/gi,'').toLowerCase();
+  const nx=$('#wnext');if(nx)nx.onclick=()=>{W.stage++;if(W.stage===3)startSim();renderWizard();$('#wbody').focus&&dlg.querySelector('.dbody button, .dfoot button').focus()};
+  const bk=$('#wback');if(bk)bk.onclick=()=>{W.stage--;if(wTimer){clearInterval(wTimer);wTimer=null}renderWizard();$('#wback')?$('#wback').focus():$('#wnext').focus()};
+  dlg.querySelectorAll('[data-done]').forEach(b=>b.onclick=()=>{sim.done.add(b.dataset.done);refreshSteps()});
+  dlg.querySelectorAll('[data-retry]').forEach(b=>b.onclick=()=>{if(sim.done.has('cloudfw'))sim.reachOk=true;refreshSteps()});
+  dlg.querySelectorAll('[data-thide]').forEach(b=>b.onclick=()=>{sim.tokHidden=true;refreshSteps()});
+  dlg.querySelectorAll('[data-tnew]').forEach(b=>b.onclick=()=>{sim.tokHidden=false;refreshSteps()});
+  bindCopy(dlg);
+}
+function startSim(){sim={st:{},info:{},done:new Set(),enrolled:false,reachOk:false,tokHidden:false};const t0=Date.now();
+  if(wTimer)clearInterval(wTimer);wTimer=setInterval(()=>{if(!sim.enrolled&&Date.now()-t0>6000){sim.enrolled=true;refreshSteps()}},1000)}
+function refreshSteps(){
+  const list=STEPS[W.type],before={...sim.st},ae=document.activeElement,sel=ae&&ae.closest&&ae.closest('#wizard')?['data-done','data-retry','data-thide','data-tnew','data-copy'].find(x=>ae.hasAttribute(x)):null;
+  const y=$('#wbody').scrollTop;renderWizard();$('#wbody').scrollTop=y;
+  const changed=list.filter(s=>before[s.id]!==sim.st[s.id]);
+  if(changed.length)live(changed.map(s=>s.ti[LANG]+': '+t({pass:'st_pass',conf:'st_conf',fail:'st_fail',manual:'st_manual',wait:'st_check',block:'st_wait'}[sim.st[s.id]])).join('. '));
+  if(sel){const f=$('#wizard ['+sel+']')||$('#wizard .dfoot button');f&&f.focus()}
+}
+
+/* ---------- toast, live region, theme, language ---------- */
+let tT;function toast(m){const e=$('#toast');e.textContent=m;e.hidden=false;clearTimeout(tT);tT=setTimeout(()=>e.hidden=true,2800)}
+function live(m){$('#live').textContent='';setTimeout(()=>$('#live').textContent=m,30)}
+function setTheme(v){if(v==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',v);store.set('rnt2-theme',v);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.th===v))}
+$$('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
+function applyLang(){document.documentElement.lang=LANG;$$('[data-i]').forEach(e=>e.textContent=t(e.dataset.i));$$('[data-l]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===LANG));renderAll();if(openDlg===$('#wizard'))renderWizard()}
+$$('[data-l]').forEach(b=>b.onclick=()=>{LANG=b.dataset.l;store.set('rnt2-lang',LANG);applyLang()});
+$('#addNode').onclick=e=>openWizard(e.currentTarget);
+setTheme(store.get('rnt2-theme','system'));applyLang();
+})();
+</script>
+</body>
+</html>
