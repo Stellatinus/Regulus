@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Regulus Node Access</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Prototype of docs/node-access.md (#236 web terminal, #237 file browser) in the machine-room v2 language.
+   Example data only, not wired to the hub. Tokens copied from machine-room-v2.html. */
+:root{
+  --bg:#e6e8e3; --surface:#f5f6f2; --surface-2:#eceee9; --ink:#14171a; --muted:#5c635e; --faint:#8a918b;
+  --line:#d0d4cc; --line-2:#b9beb5;
+  --signal:#ffcc12; --signal-ink:#1c1600;
+  --ok:#17914c; --warn:#c77d00; --crit:#d22d47; --info:#2f56e8; --off:#8c928d;
+  --term-bg:#14171a; --term-ink:#dfe3dc; --term-dim:#8a918b; --term-ok:#6fdc9a;
+  --scrim:rgba(20,23,26,.35);
+  --f-disp:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1112; --surface:#171a1c; --surface-2:#1d2123; --ink:#eef0ec; --muted:#9aa29c; --faint:#6b726d;
+  --line:#2a2f31; --line-2:#3a4043; --signal:#ffd23a; --signal-ink:#1c1600;
+  --ok:#3fd47f; --warn:#ffb020; --crit:#ff5a6e; --info:#7c97ff; --off:#69706b;
+  --term-bg:#0a0c0d; --scrim:rgba(0,0,0,.5); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1112; --surface:#171a1c; --surface-2:#1d2123; --ink:#eef0ec; --muted:#9aa29c; --faint:#6b726d;
+  --line:#2a2f31; --line-2:#3a4043; --signal:#ffd23a; --signal-ink:#1c1600;
+  --ok:#3fd47f; --warn:#ffb020; --crit:#ff5a6e; --info:#7c97ff; --off:#69706b;
+  --term-bg:#0a0c0d; --scrim:rgba(0,0,0,.5); color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.45}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+a.sr:focus{position:fixed;left:16px;top:8px;width:auto;height:auto;clip:auto;z-index:70;background:var(--signal);color:var(--signal-ink);padding:6px 10px;border-radius:8px}
+.sev-crit{--sev:var(--crit)} .sev-warn{--sev:var(--warn)} .sev-info{--sev:var(--info)} .sev-ok{--sev:var(--ok)} .sev-off{--sev:var(--off)}
+
+.app{min-height:calc(100vh - 24px);display:grid;grid-template-columns:236px minmax(0,1fr);grid-template-rows:52px auto minmax(0,1fr);
+  grid-template-areas:"side head" "side demo" "side main";gap:10px}
+
+/* sidebar (as in v2) */
+.side{grid-area:side;display:flex;flex-direction:column;background:var(--ink);color:var(--surface);border-radius:12px;padding:12px 10px;min-height:0}
+:root[data-theme="dark"] .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 6px 14px;font-family:var(--f-disp);font-stretch:125%;font-weight:850;font-size:16px;letter-spacing:.02em;white-space:nowrap}
+.brand i{flex:none;width:24px;height:24px;border-radius:6px;background:var(--signal);display:grid;place-items:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
+.brand i::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--signal-ink)}
+.navsec{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.55;padding:10px 10px 5px;white-space:nowrap}
+.nv{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:550;text-align:left;opacity:.75;white-space:nowrap;position:relative}
+.nv svg{flex:none;width:18px;height:18px}
+.nv:hover{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
+.nv[aria-current="page"]{opacity:1;background:color-mix(in srgb,currentColor 11%,transparent)}
+.nv[aria-current="page"]::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--signal)}
+.nv .badge{margin-left:auto;font-family:var(--f-mono);font-size:10.5px;font-weight:600;background:var(--signal);color:var(--signal-ink);border-radius:99px;padding:0 7px}
+.side .sp{flex:1;min-height:12px}
+.hubcard{border-radius:10px;padding:10px;border:1px solid color-mix(in srgb,currentColor 16%,transparent);display:flex;flex-direction:column;gap:4px;font-size:12px;margin-bottom:10px}
+.hubcard .row{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono);font-size:11px;opacity:.8}
+.hubcard .hn{display:flex;align-items:center;gap:7px;font-family:var(--f-mono);font-weight:600;font-size:12.5px}
+.hubcard .hn i{width:8px;height:8px;border-radius:2px;background:var(--signal)}
+.me{display:flex;align-items:center;gap:10px;padding:6px}
+.me .av{flex:none;width:30px;height:30px;border-radius:50%;background:var(--signal);color:var(--signal-ink);display:grid;place-items:center;font-weight:700;font-size:12px}
+.me b{display:block;font-size:13px;font-weight:600}
+.me small{display:block;font-size:11px;opacity:.7}
+
+/* header */
+.head{grid-area:head;display:flex;align-items:center;gap:12px;min-width:0}
+.crumb{display:flex;align-items:center;gap:8px;white-space:nowrap;min-width:0}
+.crumb span{color:var(--muted);font-size:13px}
+.crumb h1{margin:0;font-family:var(--f-disp);font-stretch:125%;font-weight:850;font-size:20px}
+.crumb h1.mono{font-family:var(--f-mono);font-stretch:100%;font-weight:600}
+.head .sp{flex:1}
+.tool{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.tool button{border:0;background:none;padding:7px 9px;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.tool button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+
+/* prototype controls */
+.demo{grid-area:demo;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--line-2);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--muted)}
+.seg{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--surface);border:1px solid var(--line);flex-wrap:wrap}
+.seg button{border:0;background:none;padding:4px 9px;border-radius:7px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+
+/* panels, buttons, chips */
+main{grid-area:main;min-width:0;display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px 8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{margin:0;font-family:var(--f-disp);font-stretch:125%;font-weight:800;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--ink)}
+.btn.go{background:var(--signal);border-color:var(--signal);color:var(--signal-ink);box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.btn.danger{background:var(--crit);border-color:var(--crit);color:#fff}
+.btn.ghost{border-color:transparent;background:none}
+.btn.sm{padding:3px 8px;font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;font-weight:500;padding:2px 8px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.chip.on{border-color:var(--ok);color:var(--ok)}
+.chip.ro{border-color:var(--warn);color:var(--warn)}
+.chip.sig{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+.state{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;color:var(--sev)}
+.state i{width:8px;height:8px;border-radius:50%;background:var(--sev)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:99px;font-size:12.5px;z-index:60;max-width:calc(100% - 32px)}
+
+/* node header + tabs */
+.nodehd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px}
+.nodehd h2{margin:0;font-family:var(--f-mono);font-weight:600;font-size:22px}
+.nodehd .keys{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.tabs{display:flex;gap:4px;padding:0 10px;border-top:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 12px;font-weight:650;font-size:13px;color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--signal)}
+
+/* state card */
+.card{padding:22px 18px;display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.card .ico{flex:none;width:44px;height:44px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--sev) 14%,var(--surface));color:var(--sev);border:1px solid color-mix(in srgb,var(--sev) 40%,transparent)}
+.card .body{flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px}
+.card h3{margin:0;font-size:16px;font-weight:700}
+.card p{margin:0;color:var(--muted);max-width:62ch}
+.cmd{display:flex;align-items:center;gap:8px;background:var(--term-bg);color:var(--term-ink);border-radius:8px;padding:8px 10px;font-family:var(--f-mono);font-size:12.5px;max-width:100%}
+.cmd code{flex:1;min-width:0;overflow-wrap:anywhere}
+.cmd .btn{background:transparent;color:var(--term-ink);border-color:#3a4043}
+.keyrow{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12.5px;margin:4px 0 0}
+.keyrow dt{font-family:var(--f-mono);font-size:11.5px}
+.keyrow dd{margin:0;color:var(--muted)}
+
+/* session bar + terminal */
+.sbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--signal);color:var(--signal-ink);border-radius:12px 12px 0 0;padding:8px 12px;font-size:13px;font-weight:600}
+.sbar .dot{width:9px;height:9px;border-radius:50%;background:var(--signal-ink);animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+.sbar .who{display:flex;gap:6px;align-items:center;min-width:0}
+.sbar .mono{font-size:12px}
+.sbar .sp{flex:1}
+.sbar .idle{font-family:var(--f-mono);font-size:12px;padding:2px 8px;border-radius:99px;background:rgba(0,0,0,.08)}
+.sbar .idle.warn{background:var(--crit);color:#fff}
+.sbar .btn{background:var(--signal-ink);color:var(--signal);border-color:var(--signal-ink)}
+.term{background:var(--term-bg);color:var(--term-ink);font-family:var(--f-mono);font-size:13px;line-height:1.5;border-radius:0 0 12px 12px;padding:12px 14px;min-height:340px;height:52vh;overflow:auto;cursor:text}
+.term pre{margin:0;white-space:pre-wrap;word-break:break-word;font:inherit}
+.term .p{color:var(--term-ok)}
+.term .d{color:var(--term-dim)}
+.tline{display:flex;gap:0}
+.tline input{flex:1;min-width:0;border:0;background:none;color:var(--term-ink);font-family:var(--f-mono);font-size:13px;padding:0;outline:none;caret-color:var(--signal)}
+.ended{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border:1px solid var(--line-2);border-left:4px solid var(--off);border-radius:10px;background:var(--surface)}
+
+/* files */
+.rootbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--signal) 14%,var(--surface));border-radius:12px 12px 0 0}
+.rootbar .where{font-family:var(--f-mono);font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.rootbar select{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:4px 8px;font-family:var(--f-mono);font-size:12px}
+.rootbar .sp{flex:1}
+.ftool{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+.bc{display:flex;align-items:center;gap:2px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12.5px;min-width:0}
+.bc button{border:0;background:none;padding:2px 5px;border-radius:6px;color:var(--info)}
+.bc button[aria-current="location"]{color:var(--ink);font-weight:600}
+.bc span{color:var(--faint)}
+.ftool .sp{flex:1}
+.filter{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 9px;font-size:12.5px;width:160px;max-width:100%}
+.drop{position:relative}
+.drop.over::after{content:attr(data-drop);position:absolute;inset:6px;border:2px dashed var(--info);border-radius:10px;background:color-mix(in srgb,var(--info) 10%,transparent);display:grid;place-items:center;font-weight:700;color:var(--info)}
+.tblwrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
+th button{border:0;background:none;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit}
+td{padding:7px 14px;border-bottom:1px dashed var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-2)}
+td.num,th.num{text-align:right;font-family:var(--f-mono);font-size:12px}
+td.m{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.fname{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;font-weight:600;text-align:left}
+.fname svg{flex:none;width:16px;height:16px;color:var(--muted)}
+.fname.dir{color:var(--info)}
+.fname .lnk{font-family:var(--f-mono);font-weight:400;font-size:11.5px;color:var(--faint)}
+.acts{display:flex;gap:4px;justify-content:flex-end}
+.uploads{list-style:none;margin:0;padding:8px 14px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.uploads li{display:grid;grid-template-columns:minmax(0,1fr) 120px 80px;gap:10px;align-items:center;font-size:12.5px}
+.uploads li span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--f-mono)}
+progress{width:100%;height:6px;appearance:none;border:0;border-radius:4px;background:var(--line);overflow:hidden;accent-color:var(--ink)}
+progress::-webkit-progress-bar{background:var(--line)}
+progress::-webkit-progress-value{background:var(--ink)}
+progress::-moz-progress-bar{background:var(--ink)}
+.rohint{padding:8px 14px;font-size:12.5px;color:var(--warn);border-bottom:1px solid var(--line)}
+.empty{padding:20px 14px;color:var(--muted)}
+
+/* live sessions */
+.kill{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px}
+.kill p{margin:0;flex:1;min-width:220px;color:var(--muted)}
+.kill.off{background:color-mix(in srgb,var(--crit) 8%,var(--surface));border-radius:0 0 12px 12px}
+.kill.off p{color:var(--crit);font-weight:650}
+.kind{font-family:var(--f-mono);font-size:11px;border:1px solid var(--line-2);border-radius:5px;padding:0 6px}
+
+/* dialogs */
+dialog{border:1px solid var(--line-2);border-radius:14px;background:var(--surface);color:var(--ink);padding:0;width:min(440px,calc(100vw - 32px));box-shadow:0 30px 80px rgba(0,0,0,.25)}
+dialog::backdrop{background:var(--scrim)}
+dialog form{display:flex;flex-direction:column;gap:12px;padding:18px}
+dialog h2{margin:0;font-family:var(--f-disp);font-stretch:112%;font-weight:800;font-size:17px}
+dialog p{margin:0;color:var(--muted);font-size:13.5px}
+dialog .path{font-family:var(--f-mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px 9px;overflow-wrap:anywhere;color:var(--ink)}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:600}
+.fld input,.fld select{border:1px solid var(--line-2);background:var(--bg);border-radius:8px;padding:8px 10px;font-weight:400;font-size:14px}
+.fld small{font-weight:400;color:var(--muted)}
+.err{color:var(--crit);font-size:12.5px;min-height:1em;margin:0}
+.dact{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.step{display:flex;gap:6px;align-items:center;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.step b{color:var(--ink)}
+
+@media (max-width:1020px){
+  .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"side" "head" "demo" "main"}
+  .side{flex-direction:row;align-items:center;gap:4px;overflow-x:auto;padding:6px 8px}
+  .side .brand{padding:0 8px 0 4px}
+  .side .navsec,.side .sp,.side .hubcard,.side .me{display:none}
+  .nv[aria-current="page"]::before{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:3px;border-radius:3px}
+  .head{flex-wrap:wrap}
+  .app{min-height:0;align-content:start}
+}
+@media (max-width:560px){
+  .crumb span{display:none}
+  .col-mode,.col-owner,.col-src,.col-bytes{display:none}
+  .stack thead{display:none}
+  .stack tr{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;padding:8px 12px;border-bottom:1px dashed var(--line)}
+  .stack tr:last-child{border-bottom:0}
+  .stack td{border:0;padding:0}
+  .stack td:first-child,.stack td:last-child{flex:1 1 100%}
+  .stack td.num{text-align:left}
+  .stack .acts{justify-content:flex-start;margin-top:4px}
+  .uploads li{grid-template-columns:minmax(0,1fr) 70px 64px}
+  .term{height:60vh;font-size:12px}
+  .nodehd .keys{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<a class="sr" href="#main">Skip to content</a>
+<div class="app">
+  <nav class="side" aria-label="Main">
+    <div class="brand"><i aria-hidden="true"></i><span class="txt">REGULUS</span></div>
+    <div class="navsec" data-i="sec_ops"></div>
+    <button class="nv" data-view="room"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 21 8 12 13 3 8Z"/><path d="M3 12.5 12 17.5 21 12.5"/></svg><span class="txt" data-i="t_room"></span></button>
+    <button class="nv" data-view="node" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.5"/></svg><span class="txt" data-i="t_nodes"></span></button>
+    <div class="navsec" data-i="sec_admin"></div>
+    <button class="nv" data-view="users"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/></svg><span class="txt" data-i="t_users"></span></button>
+    <button class="nv" data-view="sessions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></svg><span class="txt" data-i="t_sessions"></span><span class="badge" id="navBadge">0</span></button>
+    <button class="nv" data-view="audit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5h9l3 3v14H6Z"/><path d="M9 10h6M9 13.5h6M9 17h4"/></svg><span class="txt" data-i="t_audit"></span></button>
+    <div class="sp"></div>
+    <div class="hubcard"><div class="hn"><i></i><span>atlas</span></div><div class="row"><span data-i="hub_active"></span><span>v0.6.0</span></div><div class="row"><span>proto</span><span>v2</span></div></div>
+    <div class="me"><span class="av">GM</span><div><b>admin</b><small>2FA · <span data-i="role_ops"></span></small></div></div>
+  </nav>
+
+  <header class="head">
+    <div class="crumb" id="crumb"></div>
+    <div class="sp"></div>
+    <div class="tool" role="group" aria-label="Theme"><button data-th="system">Auto</button><button data-th="light" aria-label="Light">☀</button><button data-th="dark" aria-label="Dark">☾</button></div>
+    <div class="tool" role="group" aria-label="Language"><button data-l="en">EN</button><button data-l="it">IT</button></div>
+  </header>
+
+  <div class="demo" role="group" aria-labelledby="demoL">
+    <span class="label" id="demoL" data-i="demo"></span>
+    <div class="seg" id="demoState" role="group"></div>
+    <div class="seg" id="demoFiles" role="group" hidden></div>
+  </div>
+
+  <main id="main" tabindex="-1">
+    <!-- node view -->
+    <section class="panel" id="nodeView" aria-labelledby="nodeName">
+      <div class="nodehd">
+        <h2 id="nodeName">ceres</h2>
+        <span class="state sev-ok"><i></i><span data-i="online"></span></span>
+        <span class="chip">agent 0.6.0 · proto v2</span>
+        <div class="keys" id="keys"></div>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Node">
+        <button role="tab" id="tab-ov" aria-controls="pane-ov" aria-selected="false" data-tab="ov" data-i="tab_ov"></button>
+        <button role="tab" id="tab-term" aria-controls="pane-term" aria-selected="true" data-tab="term" data-i="tab_term"></button>
+        <button role="tab" id="tab-files" aria-controls="pane-files" aria-selected="false" data-tab="files" data-i="tab_files"></button>
+      </div>
+    </section>
+
+    <section id="pane-ov" role="tabpanel" aria-labelledby="tab-ov" class="panel" hidden><div class="empty" data-i="ov_note"></div></section>
+
+    <section id="pane-term" role="tabpanel" aria-labelledby="tab-term">
+      <div class="panel" id="termCard"></div>
+      <div id="termLive" hidden>
+        <div class="sbar" role="region" aria-label="Session">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="who"><span id="sbWho"></span></span>
+          <span class="mono" id="sbElapsed" aria-label="Elapsed">00:00</span>
+          <span class="sp"></span>
+          <span class="idle" id="sbIdle" aria-live="polite"></span>
+          <button class="btn sm" id="endBtn" data-i="end"></button>
+        </div>
+        <div class="term" id="term">
+          <pre id="tout" role="log" aria-label="Terminal output"></pre>
+          <div class="tline"><span class="p" id="tprompt"></span>&nbsp;<label class="sr" for="tin" data-i="term_input"></label><input id="tin" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        </div>
+      </div>
+      <div class="ended" id="termEnded" hidden role="status"><span class="state sev-off"><i></i><span id="endedTxt"></span></span><span class="sp" style="flex:1"></span><button class="btn go" id="againBtn" data-i="again"></button></div>
+    </section>
+
+    <section id="pane-files" role="tabpanel" aria-labelledby="tab-files" hidden>
+      <div class="panel">
+        <div class="rootbar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H10l2 2h7.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"/></svg>
+          <span class="where" id="rootWhere"></span>
+          <span class="chip" id="rootMode"></span>
+          <span class="sp"></span>
+          <label class="sr" for="rootSel" data-i="root_choose"></label>
+          <select id="rootSel"></select>
+        </div>
+        <div class="rohint" id="roHint" hidden data-i="ro_hint"></div>
+        <div class="ftool">
+          <nav class="bc" id="bc" aria-label="Path"></nav>
+          <span class="sp"></span>
+          <label class="sr" for="filter" data-i="filter"></label>
+          <input class="filter" id="filter" type="search">
+          <button class="btn" id="mkdirBtn" data-i="mkdir"></button>
+          <label class="btn go" id="upLbl" tabindex="0" role="button"><span data-i="upload"></span><input type="file" id="upIn" multiple class="sr" tabindex="-1"></label>
+        </div>
+        <div class="drop" id="drop">
+          <div class="tblwrap">
+            <table class="stack" aria-describedby="rootWhere">
+              <thead><tr>
+                <th scope="col"><button data-sort="name" data-i="c_name"></button></th>
+                <th scope="col" class="num"><button data-sort="size" data-i="c_size"></button></th>
+                <th scope="col"><button data-sort="mod" data-i="c_mod"></button></th>
+                <th scope="col" class="col-mode" data-i="c_mode"></th>
+                <th scope="col" class="col-owner" data-i="c_owner"></th>
+                <th scope="col"><span class="sr" data-i="c_act"></span></th>
+              </tr></thead>
+              <tbody id="ftbody"></tbody>
+            </table>
+          </div>
+          <ul class="uploads" id="uploads" aria-label="Uploads" hidden></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- live sessions (admin) -->
+    <section id="sessView" hidden>
+      <div class="panel">
+        <div class="ph"><h2 data-i="kill_title"></h2><span class="state" id="killState"></span></div>
+        <div class="kill" id="killBox"><p id="killTxt"></p><button class="btn danger" id="killBtn"></button></div>
+      </div>
+      <div class="panel" style="margin-top:10px">
+        <div class="ph"><h2 data-i="t_sessions"></h2><span class="label" id="sessCount"></span></div>
+        <div class="tblwrap">
+          <table class="stack">
+            <thead><tr><th scope="col" data-i="s_user"></th><th scope="col" data-i="s_node"></th><th scope="col" data-i="s_kind"></th><th scope="col" data-i="s_local"></th><th scope="col" data-i="s_since"></th><th scope="col" class="col-src" data-i="s_src"></th><th scope="col" class="num col-bytes" data-i="s_bytes"></th><th scope="col"><span class="sr" data-i="c_act"></span></th></tr></thead>
+            <tbody id="stbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="otherView" class="panel" hidden><div class="empty" data-i="other_note"></div></section>
+  </main>
+</div>
+
+<!-- step-up -->
+<dialog id="dStep" aria-labelledby="dStepH">
+  <form method="dialog" id="fStep">
+    <div class="step"><b>1</b>/2 · <span data-i="step_hub"></span></div>
+    <h2 id="dStepH" data-i="step_title"></h2>
+    <p id="stepBody"></p>
+    <label class="fld"><span data-i="pw"></span><input id="stPw" type="password" autocomplete="current-password" required></label>
+    <label class="fld"><span data-i="code"></span><input id="stCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required><small data-i="code_hint"></small></label>
+    <p class="err" id="stErr" role="alert"></p>
+    <div class="dact"><button class="btn" value="cancel" formnovalidate data-i="cancel"></button><button class="btn go" id="stOk" value="ok" data-i="continue"></button></div>
+  </form>
+</dialog>
+<!-- local login (PAM conversation relayed) -->
+<dialog id="dLocal" aria-labelledby="dLocalH">
+  <form method="dialog" id="fLocal">
+    <div class="step"><b>2</b>/2 · <span data-i="step_node"></span></div>
+    <h2 id="dLocalH"></h2>
+    <p data-i="local_body"></p>
+    <label class="fld"><span data-i="local_acct"></span><select id="lcUser"><option>alice</option><option>deploy</option></select><small data-i="local_list"></small></label>
+    <label class="fld"><span id="lcPwL"></span><input id="lcPw" type="password" autocomplete="off" required></label>
+    <p class="err" id="lcErr" role="alert"></p>
+    <div class="dact"><button class="btn" value="cancel" formnovalidate data-i="cancel"></button><button class="btn go" value="ok" data-i="login"></button></div>
+  </form>
+</dialog>
+<!-- delete -->
+<dialog id="dDel" aria-labelledby="dDelH">
+  <form method="dialog" id="fDel">
+    <h2 id="dDelH" data-i="del_title"></h2>
+    <p id="delBody"></p>
+    <div class="path" id="delPath"></div>
+    <label class="fld" id="delTypeL"><span id="delTypeTxt"></span><input id="delType" autocomplete="off" spellcheck="false"></label>
+    <div class="dact"><button class="btn" value="cancel" formnovalidate data-i="cancel"></button><button class="btn danger" id="delOk" value="ok" data-i="del_ok"></button></div>
+  </form>
+</dialog>
+<!-- kill switch -->
+<dialog id="dKill" aria-labelledby="dKillH">
+  <form method="dialog">
+    <h2 id="dKillH" data-i="kill_confirm_t"></h2>
+    <p id="killBody"></p>
+    <div class="dact"><button class="btn" value="cancel" data-i="cancel"></button><button class="btn danger" value="ok" data-i="kill_do"></button></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(()=>{"use strict";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const store={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- i18n ---------- */
+let LANG=store.get('rna2-lang','en');
+const D={
+ en:{sec_ops:'Operations',sec_admin:'Administration',t_room:'Machine room',t_nodes:'Nodes',t_users:'Users',t_sessions:'Live sessions',t_audit:'Audit log',
+  hub_active:'active hub',role_ops:'node operator',demo:'Prototype · state',online:'online',
+  d_notallowed:'Not allowed on node',d_notgranted:'Not granted',d_noperm:'No permission',d_ready:'Ready',d_live:'Live',d_rw:'Root rw',d_ro:'Root read-only',
+  tab_ov:'Overview',tab_term:'Terminal',tab_files:'Files',ov_note:'The overview is the inspector of the machine room (machine-room-v2.html).',other_note:'Not part of this prototype. See machine-room-v2.html.',
+  k_node:'node key',k_hub:'hub key',k_on:'on',k_off:'off',
+  na_t:'Node access is not allowed on this node',na_p:'An operator must turn it on locally. The hub cannot do it: this is the second key, and it keeps a compromised hub out of nodes that never opted in.',
+  na_cmd:'Run on the node as root:',copy:'Copy',copied:'Command copied',
+  ng_t:'The hub has not granted terminal access to this node',ng_p:'The node allows it locally. Granting it is audited and asks for your password and code.',grant:'Grant on this node',granted:'Terminal granted on ceres',
+  np_t:'Your role does not include "Open a terminal"',np_p:'Ask an administrator for a role with the permission terminal.open. The built-in admin role does not include it.',
+  rd_t:'Open a terminal on {node}',rd_p:'You will confirm your Regulus identity, then log in with a local account of the node. Regulus never opens root: use sudo inside the session.',open:'Open terminal',
+  keys_l:'What is checked',kk1:'your role has terminal.open',kk2:'the hub granted this node',kk3:'the node allows it locally',kk4:'two-factor is on for you',
+  step_hub:'Regulus',step_node:'The node',step_title:'Confirm it is you',step_body:'Enter your Regulus password and a code from your app to open a session on {node}.',
+  pw:'Regulus password',code:'Two-factor code',code_hint:'6 digits. Any 6 digits work in this prototype.',cancel:'Cancel',continue:'Continue',
+  local_t:'Log in to {node}',local_body:'The node checks this password itself (PAM). The hub only carries it and never stores it.',local_acct:'Local account',local_list:'Only the accounts the node lists. Never root.',local_pw:'Password of {user} on {node}',login:'Log in',
+  err_req:'Fill in both fields.',err_local:'Enter the password.',
+  sb_who:'Live session on {node} as {user}',idle:'Closes after {t} without input',end:'End session',term_input:'Terminal input',
+  ended:'Session ended: {r}',r_user:'you ended it',r_exit:'the shell exited',r_idle:'idle timeout',r_admin:'terminated by an administrator',again:'Open again',
+  root_w:'{node} · root {root} · as {user}',rw:'read-write',ro:'read-only',root_choose:'Root',ro_hint:'Read-only root: the node allows only listing and download here, whatever your role.',
+  filter:'Filter',mkdir:'New folder',upload:'Upload',drop:'Drop files to upload to this folder',
+  c_name:'Name',c_size:'Size',c_mod:'Modified',c_mode:'Mode',c_owner:'Owner',c_act:'Actions',
+  esc_link:'This link points outside the root. It is listed, never followed.',esc_short:'outside root',a_dl:'Download',a_ren:'Rename',a_del:'Delete',empty:'This folder is empty.',up_done:'done',up_fail:'too large',
+  del_title:'Delete for good?',del_body:'This deletes the path below on {node}{n}. There is no trash.',del_n:', with {n} items inside',del_type:'Type {name} to confirm',del_ok:'Delete',deleted:'Deleted {name} on {node}',
+  dl:'Download of {name} started (as an attachment)',ren_prompt:'New name',renamed:'Renamed to {name}',mk_prompt:'Folder name',made:'Folder {name} created',
+  kill_title:'Node access for the whole group',kill_on_t:'Node access is on. Sessions open only on nodes with both keys.',kill_off_t:'Node access is off for the whole group. New sessions are refused.',
+  kill_btn:'Close all sessions and block new ones',kill_undo:'Turn node access back on',st_on:'on',st_off:'off',
+  kill_confirm_t:'Close every session?',kill_body:'{n} live sessions will be closed now, and no new session can be opened until node access is turned back on. Also on the hub machine: regulus config set node_access.enabled false',kill_do:'Close all',
+  killed:'All node-access sessions closed',restored:'Node access is on again',
+  s_user:'User',s_node:'Node',s_kind:'Kind',s_local:'Local account',s_since:'Since',s_src:'From',s_bytes:'Traffic',term_k:'terminal',files_k:'files',terminate:'Terminate',term_done:'Session of {u} on {n} terminated',
+  s_count:'{n} open',none:'No live sessions.',
+ },
+ it:{sec_ops:'Operatività',sec_admin:'Amministrazione',t_room:'Sala macchine',t_nodes:'Nodi',t_users:'Utenti',t_sessions:'Sessioni attive',t_audit:'Registro di controllo',
+  hub_active:'hub attivo',role_ops:'operatore nodi',demo:'Prototipo · stato',online:'in linea',
+  d_notallowed:'Non consentito sul nodo',d_notgranted:'Non concesso',d_noperm:'Senza permesso',d_ready:'Pronto',d_live:'Attivo',d_rw:'Radice rw',d_ro:'Radice sola lettura',
+  tab_ov:'Panoramica',tab_term:'Terminale',tab_files:'File',ov_note:'La panoramica è l\'ispettore della sala macchine (machine-room-v2.html).',other_note:'Non fa parte di questo prototipo. Vedi machine-room-v2.html.',
+  k_node:'chiave del nodo',k_hub:'chiave del hub',k_on:'sì',k_off:'no',
+  na_t:'L\'accesso al nodo non è consentito su questo nodo',na_p:'Deve abilitarlo localmente un operatore. Il hub non può farlo: è la seconda chiave, e tiene un hub compromesso fuori dai nodi che non hanno mai acconsentito.',
+  na_cmd:'Esegui sul nodo come root:',copy:'Copia',copied:'Comando copiato',
+  ng_t:'Il hub non ha concesso l\'accesso al terminale per questo nodo',ng_p:'Il nodo lo consente localmente. La concessione è registrata e chiede password e codice.',grant:'Concedi su questo nodo',granted:'Terminale concesso su ceres',
+  np_t:'Il tuo ruolo non comprende "Apri un terminale"',np_p:'Chiedi a un amministratore un ruolo con il permesso terminal.open. Il ruolo predefinito admin non lo comprende.',
+  rd_t:'Apri un terminale su {node}',rd_p:'Confermerai la tua identità in Regulus, poi accederai con un account locale del nodo. Regulus non apre mai root: usa sudo nella sessione.',open:'Apri terminale',
+  keys_l:'Cosa viene controllato',kk1:'il tuo ruolo ha terminal.open',kk2:'il hub ha concesso questo nodo',kk3:'il nodo lo consente localmente',kk4:'hai attivato i due fattori',
+  step_hub:'Regulus',step_node:'Il nodo',step_title:'Conferma la tua identità',step_body:'Inserisci la password di Regulus e un codice dell\'app per aprire una sessione su {node}.',
+  pw:'Password di Regulus',code:'Codice a due fattori',code_hint:'6 cifre. In questo prototipo va bene qualsiasi codice.',cancel:'Annulla',continue:'Continua',
+  local_t:'Accedi a {node}',local_body:'Il nodo verifica questa password da sé (PAM). Il hub la trasporta soltanto e non la conserva mai.',local_acct:'Account locale',local_list:'Solo gli account elencati dal nodo. Mai root.',local_pw:'Password di {user} su {node}',login:'Accedi',
+  err_req:'Compila entrambi i campi.',err_local:'Inserisci la password.',
+  sb_who:'Sessione attiva su {node} come {user}',idle:'Si chiude dopo {t} senza input',end:'Termina sessione',term_input:'Input del terminale',
+  ended:'Sessione terminata: {r}',r_user:'l\'hai chiusa tu',r_exit:'la shell è uscita',r_idle:'inattività',r_admin:'chiusa da un amministratore',again:'Apri di nuovo',
+  root_w:'{node} · radice {root} · come {user}',rw:'lettura e scrittura',ro:'sola lettura',root_choose:'Radice',ro_hint:'Radice in sola lettura: qui il nodo consente solo elenco e download, qualunque sia il tuo ruolo.',
+  filter:'Filtra',mkdir:'Nuova cartella',upload:'Carica',drop:'Rilascia i file per caricarli in questa cartella',
+  c_name:'Nome',c_size:'Dimensione',c_mod:'Modificato',c_mode:'Permessi',c_owner:'Proprietario',c_act:'Azioni',
+  esc_link:'Questo collegamento punta fuori dalla radice. È elencato, mai seguito.',esc_short:'fuori radice',a_dl:'Scarica',a_ren:'Rinomina',a_del:'Elimina',empty:'Questa cartella è vuota.',up_done:'fatto',up_fail:'troppo grande',
+  del_title:'Eliminare definitivamente?',del_body:'Elimina il percorso qui sotto su {node}{n}. Non c\'è un cestino.',del_n:', con {n} elementi al suo interno',del_type:'Scrivi {name} per confermare',del_ok:'Elimina',deleted:'{name} eliminato su {node}',
+  dl:'Download di {name} avviato (come allegato)',ren_prompt:'Nuovo nome',renamed:'Rinominato in {name}',mk_prompt:'Nome della cartella',made:'Cartella {name} creata',
+  kill_title:'Accesso ai nodi per tutto il gruppo',kill_on_t:'L\'accesso ai nodi è attivo. Le sessioni si aprono solo sui nodi con entrambe le chiavi.',kill_off_t:'L\'accesso ai nodi è disattivato per tutto il gruppo. Le nuove sessioni sono rifiutate.',
+  kill_btn:'Chiudi tutte le sessioni e blocca le nuove',kill_undo:'Riattiva l\'accesso ai nodi',st_on:'attivo',st_off:'disattivato',
+  kill_confirm_t:'Chiudere tutte le sessioni?',kill_body:'{n} sessioni attive verranno chiuse subito e non se ne potranno aprire di nuove finché l\'accesso ai nodi non viene riattivato. Anche sulla macchina del hub: regulus config set node_access.enabled false',kill_do:'Chiudi tutto',
+  killed:'Tutte le sessioni di accesso ai nodi sono chiuse',restored:'L\'accesso ai nodi è di nuovo attivo',
+  s_user:'Utente',s_node:'Nodo',s_kind:'Tipo',s_local:'Account locale',s_since:'Da',s_src:'Da indirizzo',s_bytes:'Traffico',term_k:'terminale',files_k:'file',terminate:'Termina',term_done:'Sessione di {u} su {n} terminata',
+  s_count:'{n} aperte',none:'Nessuna sessione attiva.',
+ }};
+const t=(k,v={})=>(D[LANG][k]??D.en[k]??k).replace(/\{(\w+)\}/g,(_,x)=>v[x]??'');
+
+/* ---------- state ---------- */
+const NODE='ceres';
+const S={view:'node',tab:'term',tstate:'ready',user:'alice',started:0,lastIn:0,reason:'',root:0,path:[],sort:'name',dir:1,filter:'',killed:false};
+const IDLE=15*60;
+const ROOTS=[{path:'/srv/media',mode:'rw'},{path:'/etc/nginx',mode:'ro'}];
+const now=Date.now();
+const F={ // example tree, per root
+ '/srv/media':{d:1,c:{
+  films:{d:1,c:{'2024':{d:1,c:{'night-train.mkv':{s:2.1e9},'night-train.srt':{s:84e3}}},'2025':{d:1,c:{}},'index.txt':{s:1200}}},
+  music:{d:1,c:{'live-set.flac':{s:6.2e8}}},
+  photos:{d:1,c:{}},
+  'latest':{l:'films/2024'},
+  'outside':{l:'/etc/shadow',x:1},
+  'README.md':{s:3400},
+  'backup.fifo':{sp:'fifo'}}},
+ '/etc/nginx':{d:1,c:{'nginx.conf':{s:2688},'sites-enabled':{d:1,c:{'default':{s:812}}},'mime.types':{s:5231}}}
+};
+let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+(function stamp(n){for(const[k,v]of Object.entries(n.c||{})){v.m=now-Math.floor(rnd()*9e9);v.mode=v.d?'drwxr-x---':v.l?'lrwxrwxrwx':v.sp?'prw-------':'-rw-r--r--';v.o='alice:media';if(v.d)stamp(v)}})(F['/srv/media']);
+(function stamp(n){for(const v of Object.values(n.c||{})){v.m=now-Math.floor(rnd()*9e9);v.mode=v.d?'drwxr-xr-x':'-rw-r--r--';v.o='root:root';if(v.d)stamp(v)}})(F['/etc/nginx']);
+const SESS=[
+ {u:'admin',n:'ceres',k:'term_k',l:'alice',since:now-12*60e3,src:'192.168.1.20',b:'84 KiB'},
+ {u:'marco',n:'vega',k:'files_k',l:'deploy',since:now-41*60e3,src:'192.168.1.31',b:'1.4 GiB'},
+ {u:'marco',n:'rigel',k:'term_k',l:'marco',since:now-3*60e3,src:'192.168.1.31',b:'12 KiB'},
+ {u:'admin',n:'atlas',k:'term_k',l:'ops',since:now-95*60e3,src:'10.8.0.4',b:'2.2 MiB'}];
+
+/* ---------- helpers ---------- */
+let toastT;function toast(m){const e=$('#toast');e.textContent=m;e.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>e.hidden=true,2600)}
+const mmss=s=>{s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return(h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0')};
+const size=b=>b==null?'—':b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KiB':b<1073741824?(b/1048576).toFixed(1)+' MiB':(b/1073741824).toFixed(2)+' GiB';
+const date=ms=>new Date(ms).toLocaleString(LANG==='it'?'it-IT':'en-GB',{year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+const ago=ms=>{const m=Math.round((Date.now()-ms)/60e3);return m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'};
+const IC={
+ lock:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>',
+ key:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="14" r="4"/><path d="m11 11 8-8m-3 3 3 3m-6 0 2 2"/></svg>',
+ term:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></svg>',
+ dir:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H10l2 2h7.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z"/></svg>',
+ file:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M6 3.5h8l4 4v13H6Z"/><path d="M14 3.5v4h4"/></svg>',
+ link:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+ sp:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12h8"/></svg>'};
+
+/* ---------- views ---------- */
+function setView(v){S.view=v;$$('.nv').forEach(b=>b.toggleAttribute('aria-current',b.dataset.view===v)&&b.setAttribute('aria-current','page'));
+ $('#nodeView').hidden=v!=='node';$('#sessView').hidden=v!=='sessions';$('#otherView').hidden=v==='node'||v==='sessions';
+ ['ov','term','files'].forEach(x=>$('#pane-'+x).hidden=v!=='node'||S.tab!==x);
+ $('.demo').hidden=v!=='node';renderCrumb();if(v==='sessions')renderSess()}
+function setTab(x,focus){S.tab=x;$$('[role=tab]').forEach(b=>{const on=b.dataset.tab===x;b.setAttribute('aria-selected',on);b.tabIndex=on?0:-1;if(on&&focus)b.focus()});
+ ['ov','term','files'].forEach(k=>$('#pane-'+k).hidden=k!==x);$('#demoState').hidden=x!=='term';$('#demoFiles').hidden=x!=='files';renderCrumb();if(x==='files')renderFiles()}
+function renderCrumb(){const c=$('#crumb');
+ if(S.view==='sessions')c.innerHTML='<span>home-lab / '+esc(t('sec_admin'))+' /</span><h1>'+esc(t('t_sessions'))+'</h1>';
+ else if(S.view==='node')c.innerHTML='<span>home-lab / '+esc(t('t_nodes'))+' /</span><h1 class="mono">'+NODE+'</h1>';
+ else c.innerHTML='<span>home-lab /</span><h1>'+esc(t({room:'t_room',users:'t_users',audit:'t_audit'}[S.view]))+'</h1>'}
+
+/* ---------- demo controls ---------- */
+const TST=[['notallowed','d_notallowed'],['notgranted','d_notgranted'],['noperm','d_noperm'],['ready','d_ready'],['live','d_live']];
+function renderDemo(){
+ $('#demoState').innerHTML=TST.map(([k,l])=>`<button data-st="${k}" aria-pressed="${S.tstate===k||(k==='live'&&S.tstate==='ended')}">${esc(t(l))}</button>`).join('');
+ $('#demoFiles').innerHTML=ROOTS.map((r,i)=>`<button data-rt="${i}" aria-pressed="${S.root===i}">${esc(t(r.mode==='rw'?'d_rw':'d_ro'))}</button>`).join('');
+ $('#demoState').setAttribute('aria-label',t('demo'));$('#demoFiles').setAttribute('aria-label',t('demo'))}
+$('#demoState').onclick=e=>{const b=e.target.closest('[data-st]');if(!b)return;if(b.dataset.st==='live'){startSession(S.user)}else{stopTimers();S.tstate=b.dataset.st;renderTerm()}renderDemo()};
+$('#demoFiles').onclick=e=>{const b=e.target.closest('[data-rt]');if(!b)return;S.root=+b.dataset.rt;S.path=[];renderDemo();renderFiles()};
+
+/* ---------- keys ---------- */
+function renderKeys(){const nk=S.tstate!=='notallowed',hk=S.tstate!=='notgranted';
+ $('#keys').innerHTML=`<span class="chip ${nk?'on':''}">${esc(t('k_node'))}: ${esc(t(nk?'k_on':'k_off'))}</span><span class="chip ${hk?'on':''}">${esc(t('k_hub'))}: ${esc(t(hk?'k_on':'k_off'))}</span>`}
+
+/* ---------- terminal ---------- */
+function card(sev,icon,title,body,extra){return `<div class="card ${sev}"><div class="ico" aria-hidden="true">${icon}</div><div class="body"><h3>${esc(title)}</h3><p>${esc(body)}</p>${extra||''}</div></div>`}
+function checks(){const st=S.tstate,ok=[st!=='noperm',st!=='notgranted',st!=='notallowed',true];
+ return `<span class="label">${esc(t('keys_l'))}</span><dl class="keyrow">${['kk1','kk2','kk3','kk4'].map((k,i)=>`<dt style="color:var(${ok[i]?'--ok':'--crit'})">${ok[i]?'✓':'✕'}<span class="sr">${ok[i]?'ok':'missing'}</span></dt><dd>${esc(t(k))}</dd>`).join('')}</dl>`}
+function renderTerm(){renderKeys();const c=$('#termCard'),st=S.tstate;
+ $('#termLive').hidden=st!=='live';$('#termEnded').hidden=st!=='ended';c.hidden=st==='live'||st==='ended';
+ if(st==='notallowed'){const cmd=`sudo regulus node-access enable terminal --user alice`;
+  c.innerHTML=card('sev-warn',IC.lock,t('na_t'),t('na_p'),`<span class="label">${esc(t('na_cmd'))}</span><div class="cmd"><code id="cmdTxt">${cmd}</code><button class="btn sm" id="copyBtn">${esc(t('copy'))}</button></div>${checks()}`);
+  $('#copyBtn').onclick=()=>{try{navigator.clipboard.writeText(cmd)}catch(e){}toast(t('copied'))}}
+ else if(st==='notgranted'){c.innerHTML=card('sev-info',IC.key,t('ng_t'),t('ng_p'),`<div><button class="btn go" id="grantBtn">${esc(t('grant'))}</button></div>${checks()}`);
+  $('#grantBtn').onclick=()=>openStep(()=>{S.tstate='ready';renderTerm();renderDemo();toast(t('granted'))})}
+ else if(st==='noperm'){c.innerHTML=card('sev-off',IC.lock,t('np_t'),t('np_p'),checks())}
+ else if(st==='ready'){c.innerHTML=card('sev-ok',IC.term,t('rd_t',{node:NODE}),t('rd_p'),`<div><button class="btn go" id="openBtn">${esc(t('open'))}</button></div>${checks()}`);
+  $('#openBtn').onclick=()=>openStep(openLocal)}
+ if(st==='ended')$('#endedTxt').textContent=t('ended',{r:t(S.reason)});
+ if(st==='live')updateBar()}
+
+/* step-up */
+let stepThen=null;
+function openStep(then){stepThen=then;$('#stepBody').textContent=t('step_body',{node:NODE});$('#stPw').value='';$('#stCode').value='';$('#stErr').textContent='';$('#dStep').showModal();$('#stPw').focus()}
+$('#fStep').addEventListener('submit',e=>{if(e.submitter&&e.submitter.value==='cancel')return;
+ if(!$('#stPw').value||!/^\d{6}$/.test($('#stCode').value)){e.preventDefault();$('#stErr').textContent=t('err_req');return}
+ setTimeout(()=>stepThen&&stepThen(),0)});
+function openLocal(){$('#dLocalH').textContent=t('local_t',{node:NODE});$('#lcPw').value='';$('#lcErr').textContent='';lcLabel();$('#dLocal').showModal();$('#lcPw').focus()}
+function lcLabel(){$('#lcPwL').textContent=t('local_pw',{user:$('#lcUser').value,node:NODE})}
+$('#lcUser').onchange=lcLabel;
+$('#fLocal').addEventListener('submit',e=>{if(e.submitter&&e.submitter.value==='cancel')return;
+ if(!$('#lcPw').value){e.preventDefault();$('#lcErr').textContent=t('err_local');return}
+ const u=$('#lcUser').value;setTimeout(()=>startSession(u),0)});
+
+/* live session */
+let tick=null;
+const CANNED={
+ 'uptime':' 09:14:22 up 41 days,  3:02,  1 user,  load average: 0.31, 0.27, 0.22',
+ 'whoami':'{user}','hostname':'ceres','pwd':'/home/{user}',
+ 'ls':'notes.txt  scripts  backup.log',
+ 'df -h /':'Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p2  468G  177G  268G  40% /',
+ 'sudo -l':'User {user} may run the following commands on ceres:\n    (root) /usr/bin/systemctl restart nginx',
+ 'help':'Example commands: uptime, whoami, ls, df -h /, sudo -l, clear, exit'};
+function startSession(u){S.user=u;S.tstate='live';S.started=Date.now();S.lastIn=Date.now();
+ $('#tout').innerHTML=`<span class="d">Last login: Thu Nov 19 09:12:04 2026 via regulus-session (hub atlas)\nType "help" for the commands of this prototype.</span>\n`;
+ $('#tprompt').textContent=`${u}@${NODE}:~$`;renderTerm();renderDemo();stopTimers();tick=setInterval(updateBar,1000);setTimeout(()=>$('#tin').focus(),0)}
+function stopTimers(){clearInterval(tick);tick=null}
+function updateBar(){if(S.tstate!=='live')return;const el=(Date.now()-S.started)/1000,left=IDLE-(Date.now()-S.lastIn)/1000;
+ $('#sbWho').textContent=t('sb_who',{node:NODE,user:S.user});$('#sbElapsed').textContent=mmss(el);
+ const i=$('#sbIdle');i.textContent=t('idle',{t:mmss(left)});i.classList.toggle('warn',left<120);if(left<=0)endSession('r_idle')}
+function endSession(r){stopTimers();S.reason=r;S.tstate='ended';renderTerm();renderDemo();$('#againBtn').focus()}
+$('#endBtn').onclick=()=>endSession('r_user');
+$('#againBtn').onclick=()=>openStep(openLocal);
+$('#term').addEventListener('click',()=>{if(!getSelection().toString())$('#tin').focus()});
+$('#tin').addEventListener('keydown',e=>{if(e.key!=='Enter')return;S.lastIn=Date.now();const cmd=e.target.value.trim();e.target.value='';
+ const o=$('#tout');o.insertAdjacentHTML('beforeend',`<span class="p">${esc($('#tprompt').textContent)}</span> ${esc(cmd)}\n`);
+ if(cmd==='exit'){o.insertAdjacentHTML('beforeend','logout\n');endSession('r_exit');return}
+ if(cmd==='clear'){o.textContent='';return}
+ if(cmd){const r=CANNED[cmd];o.insertAdjacentHTML('beforeend',esc(r!=null?r.replace(/\{user\}/g,S.user):`-bash: ${cmd.split(' ')[0]}: command not found`)+'\n')}
+ $('#term').scrollTop=1e9;updateBar()});
+
+/* ---------- files ---------- */
+function cur(){let n=F[ROOTS[S.root].path];for(const p of S.path)n=n.c[p];return n}
+function renderFiles(){const r=ROOTS[S.root],ro=r.mode==='ro';
+ $('#rootSel').innerHTML=ROOTS.map((x,i)=>`<option value="${i}" ${i===S.root?'selected':''}>${esc(x.path)} (${x.mode})</option>`).join('');
+ $('#rootWhere').textContent=t('root_w',{node:NODE,root:r.path,user:S.user});
+ const m=$('#rootMode');m.className='chip '+(ro?'ro':'on');m.textContent=t(ro?'ro':'rw');
+ $('#roHint').hidden=!ro;$('#mkdirBtn').hidden=ro;$('#upLbl').hidden=ro;$('#drop').dataset.drop=t('drop');$('#filter').placeholder=t('filter');
+ const segs=[r.path,...S.path];
+ $('#bc').innerHTML=segs.map((s,i)=>`${i?'<span aria-hidden="true">/</span>':''}<button data-depth="${i}" ${i===segs.length-1?'aria-current="location"':''}>${esc(s)}</button>`).join('');
+ const n=cur();let rows=Object.entries(n.c).filter(([k])=>k.toLowerCase().includes(S.filter.toLowerCase()));
+ rows.sort((a,b)=>{const A=a[1],B=b[1];if(!!A.d!==!!B.d)return A.d?-1:1;const v=S.sort==='size'?(A.s||0)-(B.s||0):S.sort==='mod'?A.m-B.m:a[0].localeCompare(b[0]);return v*S.dir});
+ $$('th [data-sort]').forEach(b=>{const th=b.closest('th');th.setAttribute('aria-sort',b.dataset.sort===S.sort?(S.dir>0?'ascending':'descending'):'none')});
+ $('#ftbody').innerHTML=rows.length?rows.map(([k,v])=>{
+  const kind=v.d?'dir':v.l?'link':v.sp?'sp':'file';
+  const name=v.d?`<button class="fname dir" data-open="${esc(k)}">${IC.dir}${esc(k)}/</button>`:
+   v.l?`<span class="fname">${IC.link}${esc(k)} <span class="lnk">→ ${esc(v.l)}</span>${v.x?`<span class="chip ro" title="${esc(t('esc_link'))}">${esc(t('esc_short'))}</span>`:''}</span>`:
+   `<span class="fname">${v.sp?IC.sp:IC.file}${esc(k)}</span>`;
+  const can=kind==='file';
+  const acts=[can?`<button class="btn sm" data-dl="${esc(k)}">${esc(t('a_dl'))}</button>`:'',
+   !ro&&kind!=='sp'?`<button class="btn sm ghost" data-ren="${esc(k)}">${esc(t('a_ren'))}</button>`:'',
+   !ro?`<button class="btn sm ghost" style="color:var(--crit)" data-del="${esc(k)}">${esc(t('a_del'))}</button>`:''].join('');
+  return `<tr><td>${name}</td><td class="num">${v.d||v.l||v.sp?'—':size(v.s)}</td><td class="m">${date(v.m)}</td><td class="m col-mode">${v.mode}</td><td class="m col-owner">${ro?'root:root':v.o}</td><td><div class="acts" aria-label="${esc(k)}">${acts}</div></td></tr>`}).join('')
+  :`<tr><td colspan="6" class="empty">${esc(t('empty'))}</td></tr>`}
+$('#rootSel').onchange=e=>{S.root=+e.target.value;S.path=[];renderDemo();renderFiles()};
+$('#bc').onclick=e=>{const b=e.target.closest('[data-depth]');if(!b)return;S.path=S.path.slice(0,+b.dataset.depth);renderFiles();$('#bc [aria-current]').focus()};
+$('#filter').oninput=e=>{S.filter=e.target.value;renderFiles()};
+$$('th [data-sort]').forEach(b=>b.onclick=()=>{S.dir=S.sort===b.dataset.sort?-S.dir:1;S.sort=b.dataset.sort;renderFiles()});
+$('#ftbody').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.dataset.open){S.path.push(b.dataset.open);S.filter='';$('#filter').value='';renderFiles();$('#bc [aria-current]').focus()}
+ else if(b.dataset.dl)toast(t('dl',{name:b.dataset.dl}));
+ else if(b.dataset.ren){const nn=prompt(t('ren_prompt'),b.dataset.ren);if(nn&&nn!==b.dataset.ren&&!/[\/\0]/.test(nn)&&nn!=='..'&&nn!=='.'){const c=cur().c;c[nn]=c[b.dataset.ren];delete c[b.dataset.ren];renderFiles();toast(t('renamed',{name:nn}))}}
+ else if(b.dataset.del)askDelete(b.dataset.del)};
+$('#mkdirBtn').onclick=()=>{const nn=prompt(t('mk_prompt'));if(nn&&!/[\/\0]/.test(nn)&&nn!=='..'&&nn!=='.'&&!cur().c[nn]){cur().c[nn]={d:1,c:{},m:Date.now(),mode:'drwxr-x---',o:S.user+':media'};renderFiles();toast(t('made',{name:nn}))}};
+/* delete */
+let delName='';
+function count(n){let k=0;for(const v of Object.values(n.c||{})){k++;if(v.d)k+=count(v)}return k}
+function askDelete(name){delName=name;const v=cur().c[name],full=[ROOTS[S.root].path,...S.path,name].join('/')+(v.d?'/':'');
+ const n=v.d?count(v):0;$('#delBody').textContent=t('del_body',{node:NODE,n:v.d?t('del_n',{n}):''});$('#delPath').textContent=NODE+':'+full;
+ $('#delTypeL').hidden=!v.d;$('#delTypeTxt').textContent=t('del_type',{name});$('#delType').value='';$('#delOk').disabled=!!v.d;
+ $('#dDel').showModal();(v.d?$('#delType'):$('#dDel .btn')).focus()}
+$('#delType').oninput=e=>$('#delOk').disabled=e.target.value!==delName;
+$('#fDel').addEventListener('submit',e=>{if(e.submitter&&e.submitter.value==='ok'){delete cur().c[delName];setTimeout(()=>{renderFiles();toast(t('deleted',{name:delName,node:NODE}))},0)}});
+/* uploads */
+const MAXUP=2*1024**3;
+function upload(files){const ul=$('#uploads');ul.hidden=false;
+ for(const f of files){const li=document.createElement('li'),big=f.size>MAXUP;
+  li.innerHTML=`<span>${esc(f.name)}</span><progress max="100" value="0" aria-label="${esc(f.name)}"></progress><span class="mono" style="font-size:11px">0%</span>`;ul.prepend(li);
+  const pr=li.querySelector('progress'),lb=li.lastChild;let p=0;
+  if(big){lb.textContent=t('up_fail');lb.style.color='var(--crit)';continue}
+  const iv=setInterval(()=>{p=Math.min(100,p+8+Math.random()*18);pr.value=p;lb.textContent=Math.round(p)+'%';
+   if(p>=100){clearInterval(iv);lb.textContent=t('up_done');cur().c[f.name]={s:f.size,m:Date.now(),mode:'-rw-r--r--',o:S.user+':media'};renderFiles()}},180)}}
+$('#upIn').onchange=e=>{upload([...e.target.files]);e.target.value=''};
+$('#upLbl').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#upIn').click()}};
+const drop=$('#drop');
+drop.addEventListener('dragover',e=>{if(ROOTS[S.root].mode==='ro')return;e.preventDefault();drop.classList.add('over')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{drop.classList.remove('over');if(ROOTS[S.root].mode==='ro')return;e.preventDefault();upload([...e.dataTransfer.files])});
+
+/* ---------- live sessions ---------- */
+function renderSess(){const off=S.killed,n=SESS.length;
+ $('#navBadge').textContent=n;$('#navBadge').hidden=!n;
+ const ks=$('#killState');ks.className='state '+(off?'sev-crit':'sev-ok');ks.innerHTML=`<i></i>${esc(t(off?'st_off':'st_on'))}`;
+ $('#killBox').classList.toggle('off',off);$('#killTxt').textContent=t(off?'kill_off_t':'kill_on_t');
+ const kb=$('#killBtn');kb.textContent=t(off?'kill_undo':'kill_btn');kb.className='btn '+(off?'go':'danger');
+ $('#sessCount').textContent=t('s_count',{n});
+ $('#stbody').innerHTML=n?SESS.map((s,i)=>`<tr><td>${esc(s.u)}</td><td class="mono">${esc(s.n)}</td><td><span class="kind">${esc(t(s.k))}</span></td><td class="mono">${esc(s.l)}</td><td class="m">${ago(s.since)}</td><td class="m col-src">${esc(s.src)}</td><td class="num col-bytes">${esc(s.b)}</td><td><div class="acts"><button class="btn sm" data-term="${i}" aria-label="${esc(t('terminate')+' '+s.u+' '+s.n)}">${esc(t('terminate'))}</button></div></td></tr>`).join('')
+  :`<tr><td colspan="8" class="empty">${esc(t('none'))}</td></tr>`}
+$('#stbody').onclick=e=>{const b=e.target.closest('[data-term]');if(!b)return;const s=SESS.splice(+b.dataset.term,1)[0];
+ if(s.n===NODE&&S.tstate==='live')endSession('r_admin');renderSess();toast(t('term_done',{u:s.u,n:s.n}));const nb=$('#stbody button');(nb||$('#killBtn')).focus()};
+$('#killBtn').onclick=()=>{if(S.killed){S.killed=false;renderSess();toast(t('restored'));return}
+ $('#killBody').textContent=t('kill_body',{n:SESS.length});$('#dKill').showModal()};
+$('#dKill').addEventListener('close',()=>{if($('#dKill').returnValue!=='ok')return;SESS.length=0;S.killed=true;if(S.tstate==='live')endSession('r_admin');renderSess();toast(t('killed'))});
+
+/* ---------- navigation, tabs (arrow keys), theme, language ---------- */
+$$('.nv').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+$$('[role=tab]').forEach(b=>{b.onclick=()=>setTab(b.dataset.tab);
+ b.onkeydown=e=>{const ks=['ov','term','files'],i=ks.indexOf(S.tab);if(e.key==='ArrowRight')setTab(ks[(i+1)%3],1);else if(e.key==='ArrowLeft')setTab(ks[(i+2)%3],1);else return;e.preventDefault()}});
+function setTheme(v){if(v==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',v);store.set('rna2-theme',v);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.th===v))}
+$$('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
+function applyLang(){document.documentElement.lang=LANG;$$('[data-i]').forEach(e=>e.textContent=t(e.dataset.i));$$('[data-l]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===LANG));
+ renderCrumb();renderDemo();renderTerm();renderFiles();renderSess()}
+$$('[data-l]').forEach(b=>b.onclick=()=>{LANG=b.dataset.l;store.set('rna2-lang',LANG);applyLang()});
+setTheme(store.get('rna2-theme','system'));applyLang();setView('node');setTab('term');
+/* deep links for reviewers: #live #ended #notallowed #step #files #ro #delete #sessions #kill */
+const h=location.hash.slice(1);
+if(h==='live')startSession('alice');else if(h==='ended'){startSession('alice');endSession('r_idle')}
+else if(['notallowed','notgranted','noperm'].includes(h)){S.tstate=h;renderTerm();renderDemo()}
+else if(h==='step')openStep(openLocal);
+else if(h==='files'||h==='ro'||h==='delete'){if(h==='ro'){S.root=1;renderDemo()}setTab('files');if(h==='delete')askDelete('films');else if(h==='files')upload([{name:'holiday-2026.zip',size:4.2e8},{name:'disk-image.iso',size:3e9}])}
+else if(h==='sessions'||h==='kill'){setView('sessions');if(h==='kill')$('#killBtn').click()}
+})();
+</script>
+</body>
+</html>

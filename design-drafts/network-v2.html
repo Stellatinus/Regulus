@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Regulus Network v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Prototype for #282 (open ports) and #283 (traffic map), in the machine-room v2 language:
+   concrete and graphite, one safety-yellow signal for the hub and primary actions, Archivo + IBM Plex Mono.
+   Example data only; design in docs/network-visibility.md. */
+:root{
+  --bg:#e6e8e3;--surface:#f5f6f2;--surface-2:#eceee9;--ink:#14171a;--muted:#5c635e;--faint:#8a918b;--line:#d0d4cc;--line-2:#b9beb5;
+  --signal:#ffcc12;--signal-ink:#1c1600;--ok:#17914c;--warn:#c77d00;--crit:#d22d47;--info:#2f56e8;--off:#8c928d;
+  --floor:#dcdfd8;--floor-line:#c7cbc2;--zone:#d2d6ce;--metal-top:#4a5156;--metal-l:#2d3236;--metal-r:#22262a;--metal-edge:#5f676d;
+  --k-agent:#2f56e8;--k-update:#7a3fd0;--k-repl:#0f8a8a;--k-plugin:#b5487e;--k-other:#6b5a3e;--k-vpn:#4c7a2a;
+  --scrim:rgba(20,23,26,.35);
+  --f-disp:"Archivo","Helvetica Neue",Arial,sans-serif;--f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1112;--surface:#171a1c;--surface-2:#1d2123;--ink:#eef0ec;--muted:#9aa29c;--faint:#6b726d;--line:#2a2f31;--line-2:#3a4043;
+  --signal:#ffd23a;--ok:#3fd47f;--warn:#ffb020;--crit:#ff5a6e;--info:#7c97ff;--off:#69706b;
+  --floor:#15181a;--floor-line:#23282a;--zone:#1b1f21;--metal-top:#545c62;--metal-l:#353b40;--metal-r:#2a2f33;--metal-edge:#6c757b;
+  --k-agent:#7c97ff;--k-update:#b48cff;--k-repl:#3cc9c9;--k-plugin:#f07cb4;--k-other:#c9ad7c;--k-vpn:#8fcf5e;--scrim:rgba(0,0,0,.5);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1112;--surface:#171a1c;--surface-2:#1d2123;--ink:#eef0ec;--muted:#9aa29c;--faint:#6b726d;--line:#2a2f31;--line-2:#3a4043;
+  --signal:#ffd23a;--ok:#3fd47f;--warn:#ffb020;--crit:#ff5a6e;--info:#7c97ff;--off:#69706b;
+  --floor:#15181a;--floor-line:#23282a;--zone:#1b1f21;--metal-top:#545c62;--metal-l:#353b40;--metal-r:#2a2f33;--metal-edge:#6c757b;
+  --k-agent:#7c97ff;--k-update:#b48cff;--k-repl:#3cc9c9;--k-plugin:#f07cb4;--k-other:#c9ad7c;--k-vpn:#8fcf5e;--scrim:rgba(0,0,0,.5);color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-disp);font-size:14px;line-height:1.45;overflow:hidden;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) 12px max(16px,env(safe-area-inset-left,0px))}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-family:var(--f-mono);font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.app{height:100%;display:grid;grid-template-columns:236px minmax(0,1fr);grid-template-rows:52px minmax(0,1fr);grid-template-areas:"side head" "side main";gap:10px}
+/* sidebar */
+.side{grid-area:side;display:flex;flex-direction:column;background:var(--ink);color:var(--surface);border-radius:12px;padding:12px 10px;min-height:0;overflow:auto;scrollbar-width:none}
+:root[data-theme="dark"] .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .side{background:var(--surface);color:var(--ink);border:1px solid var(--line)}}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 6px 14px;font-stretch:125%;font-weight:850;font-size:16px;letter-spacing:.02em;white-space:nowrap}
+.brand i{flex:none;width:24px;height:24px;border-radius:6px;background:var(--signal);display:grid;place-items:center;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
+.brand i::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--signal-ink)}
+.navsec{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.45;padding:10px 10px 5px;white-space:nowrap}
+.nv{display:flex;align-items:center;gap:11px;width:100%;border:0;background:none;padding:8px 10px;border-radius:9px;font-size:13.5px;font-weight:550;text-align:left;opacity:.72;white-space:nowrap;position:relative}
+.nv svg{flex:none;width:18px;height:18px}
+.nv:hover{opacity:1;background:color-mix(in srgb,currentColor 8%,transparent)}
+.nv[aria-current="page"]{opacity:1;background:color-mix(in srgb,currentColor 11%,transparent)}
+.nv[aria-current="page"]::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--signal)}
+.nv .soon{margin-left:auto;font-family:var(--f-mono);font-size:9.5px;opacity:.55}
+.side .sp{flex:1;min-height:12px}
+.hubcard{border-radius:10px;padding:10px;border:1px solid color-mix(in srgb,currentColor 16%,transparent);display:flex;flex-direction:column;gap:4px;font-size:12px}
+.hubcard .row{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono);font-size:11px;opacity:.75}
+.hubcard .hn{display:flex;align-items:center;gap:7px;font-family:var(--f-mono);font-weight:600;font-size:12.5px}
+.hubcard .hn i{width:8px;height:8px;border-radius:2px;background:var(--signal)}
+/* header */
+.head{grid-area:head;display:flex;align-items:center;gap:12px;min-width:0}
+.crumb{display:flex;align-items:center;gap:8px;white-space:nowrap;min-width:0}
+.crumb span{color:var(--muted);font-size:13px}
+.crumb h1{margin:0;font-stretch:125%;font-weight:850;font-size:20px}
+.head .sp{flex:1}
+.tool{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.tool button{border:0;background:none;padding:7px 9px;font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.tool button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+/* panels and parts */
+main{grid-area:main;min-height:0;min-width:0}
+.view{height:100%;display:grid;gap:10px;min-height:0}
+#vPorts{grid-template-columns:minmax(0,1fr) 340px;grid-template-rows:auto minmax(0,1fr);grid-template-areas:"bar bar" "tbl log"}
+#vTraffic{grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:minmax(0,1fr);grid-template-areas:"map insp"}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-height:0;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px 8px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{margin:0;font-stretch:125%;font-weight:800;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:4px 10px;font-size:12.5px;font-weight:600}
+.btn:hover{border-color:var(--ink)}
+.btn.go{background:var(--signal);border-color:var(--signal);color:var(--signal-ink);box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-mono);font-size:10.5px;font-weight:500;padding:1px 8px;border-radius:99px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
+.chip i{width:7px;height:7px;border-radius:2px;background:var(--c,var(--off))}
+.chip.hub{background:var(--signal);border-color:var(--signal);color:var(--signal-ink)}
+.chip.crit{border-color:var(--crit);color:var(--crit)} .chip.warn{border-color:var(--warn);color:var(--warn)} .chip.ok{border-color:var(--ok);color:var(--ok)}
+.chip.solid{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.seg{display:flex;gap:2px;padding:3px;border-radius:10px;background:var(--surface);border:1px solid var(--line);flex-wrap:wrap}
+.seg button{border:0;background:none;padding:4px 9px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.seg button b{font-family:var(--f-mono);font-weight:500;opacity:.6;margin-left:4px}
+.note{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:flex-start}
+.note::before{content:"i";flex:none;width:15px;height:15px;border-radius:50%;border:1px solid var(--line-2);display:grid;place-items:center;font-family:var(--f-mono);font-size:9.5px;margin-top:1px}
+.tiny{font-size:11.5px;color:var(--faint)}
+/* ports */
+.bar{grid-area:bar;display:flex;flex-direction:column;gap:8px;padding:10px 12px}
+.bar .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.field{display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-2);min-width:0}
+.field input,.field select{border:0;background:none;outline:none;min-width:0;font-size:13px}
+.field input{width:190px}
+.check{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;font-weight:600;color:var(--muted)}
+.stats{display:flex;gap:6px;flex-wrap:wrap}
+.tblp{grid-area:tbl;display:flex;flex-direction:column}
+.scroll{overflow:auto;min-height:0;flex:1}
+table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{position:sticky;top:0;background:var(--surface);text-align:left;font-family:var(--f-mono);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+.tbl td{padding:7px 10px;border-bottom:1px dashed var(--line);vertical-align:top}
+.tbl tr.sel td{background:color-mix(in srgb,var(--info) 8%,transparent)}
+.tbl td.m{font-family:var(--f-mono);font-size:12px;white-space:nowrap}
+.own{min-width:150px;max-width:260px}
+.own b{font-family:var(--f-mono);font-weight:600;font-size:12px;overflow-wrap:anywhere}
+.flag{white-space:normal}
+.own small{display:block;color:var(--faint);font-size:11px}
+.gp{display:flex;flex-direction:column;gap:6px}
+.gp .srvs{display:flex;gap:5px;flex-wrap:wrap}
+.logp{grid-area:log;display:flex;flex-direction:column}
+.log{list-style:none;margin:0;padding:10px 12px;display:flex;flex-direction:column;gap:7px;overflow:auto;min-height:0}
+.li{position:relative;border:1px solid var(--line);border-radius:10px;padding:8px 10px 8px 14px;font-size:12.5px}
+.li::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:4px;border-radius:0 3px 3px 0;background:var(--c)}
+.li .lh{display:flex;justify-content:space-between;gap:8px;font-family:var(--f-mono);font-size:11px}
+.li .lh b{font-weight:600}
+.li p{margin:3px 0 0}
+.flag{color:var(--crit);font-size:11.5px;font-weight:600;display:block;margin-top:2px}
+/* traffic */
+.mapp{grid-area:map;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.mapbox{position:relative;flex:1;min-height:0;background:var(--floor)}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.mtop{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+.nodes{display:flex;gap:4px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--line)}
+.nodes button{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:2px 8px;font-family:var(--f-mono);font-size:11.5px}
+.nodes button[aria-pressed="true"]{border-color:var(--info);color:var(--info);font-weight:600}
+.lgd{position:absolute;left:10px;bottom:10px;right:10px;display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);pointer-events:none}
+.lgd div{display:flex;gap:10px;flex-wrap:wrap;background:color-mix(in srgb,var(--surface) 88%,transparent);border:1px solid var(--line);border-radius:9px;padding:5px 9px}
+.lgd span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.lgd i{width:14px;height:0;border-top:2px solid var(--c)}
+.lgd i.d{border-top-style:dashed} .lgd i.t{border-top-width:1px}
+#tip{position:absolute;pointer-events:none;z-index:4;background:var(--ink);color:var(--surface);border-radius:8px;padding:8px 10px;font-size:12px;min-width:170px;max-width:260px}
+#tip .r{display:flex;justify-content:space-between;gap:12px;font-family:var(--f-mono);font-size:11px;opacity:.85}
+.ttbl{flex:1;overflow:auto;min-height:0}
+.insp{grid-area:insp;overflow:auto;display:flex;flex-direction:column}
+.ins-hd{padding:14px 16px 12px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:5px}
+.ins-hd h2{margin:0;font-family:var(--f-mono);font-weight:600;font-size:22px}
+.sec{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sec h3{margin:0 0 8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lk{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.lk:first-of-type{border-top:0}
+.lk>i{width:10px;height:3px;border-radius:2px;background:var(--c)}
+.lk small{display:block;color:var(--faint);font-size:11px}
+.rate{font-family:var(--f-mono);font-size:11.5px;text-align:right;white-space:nowrap}
+.st{font-family:var(--f-mono);font-size:10.5px;font-weight:600}
+.st.inuse{color:var(--ok)} .st.idle{color:var(--muted)} .st.down{color:var(--crit)} .st.unknown{color:var(--warn)}
+.share{height:10px;border-radius:5px;overflow:hidden;display:flex;background:var(--line);margin:6px 0}
+.share i{display:block;height:100%}
+.dl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.dl li{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.dl .dh{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.dl dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;margin:5px 0 0;font-size:12px}
+.dl dt{color:var(--muted);font-size:11.5px}.dl dd{margin:0;overflow-wrap:anywhere;font-size:11.5px}
+.off{border:1px dashed var(--line-2);border-radius:10px;padding:10px 12px;font-size:12.5px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.hint{color:var(--faint);font-size:11px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:99px;font-size:12.5px;z-index:50;max-width:calc(100% - 32px)}
+@media (max-width:1320px){.app{grid-template-columns:64px minmax(0,1fr)}.side .txt,.navsec,.hubcard,.nv .soon{display:none}.brand{justify-content:center;padding-inline:0}.nv{justify-content:center}
+  #vPorts{grid-template-columns:minmax(0,1fr) 300px}#vTraffic{grid-template-columns:minmax(0,1fr) 340px}}
+@media (max-width:1020px){
+  html,body{height:auto}body{overflow:auto}
+  .app{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"side" "head" "main"}
+  .side{flex-direction:row;align-items:center;gap:4px;overflow-x:auto;padding:6px 8px}
+  .side .brand{padding:0 8px 0 4px}.side .navsec,.side .sp,.side .hubcard{display:none}
+  .nv[aria-current="page"]::before{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:3px;border-radius:3px}
+  .head{flex-wrap:wrap}
+  .view{height:auto}
+  #vPorts{grid-template-columns:minmax(0,1fr);grid-template-areas:"bar" "tbl" "log"}
+  #vTraffic{grid-template-columns:minmax(0,1fr);grid-template-areas:"map" "insp"}
+  .tblp .scroll{max-height:70vh}.logp .log{max-height:420px}
+  .mapbox{height:min(62vh,520px);min-height:340px;flex:none}.ttbl{max-height:70vh}
+}
+@media (max-width:700px){
+  .tbl.cards thead{display:none}
+  .tbl.cards,.tbl.cards tbody,.tbl.cards tr{display:block}
+  .tbl.cards tr{padding:8px 10px;border-bottom:1px solid var(--line)}
+  .tbl.cards td{display:flex;gap:10px;padding:3px 0;border:0;white-space:normal}
+  .tbl.cards td::before{content:attr(data-l);flex:none;width:92px;font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+  .tbl.cards td>div{min-width:0;flex:1}
+  .field input{width:130px}
+  .mapbox{height:300px;min-height:0}
+  .lgd{display:none}
+  .crumb span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="side" aria-label="Main">
+    <div class="brand"><i aria-hidden="true"></i><span class="txt">REGULUS</span></div>
+    <div class="navsec" data-i="sec_ops"></div>
+    <button class="nv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 3 21 8 12 13 3 8Z"/><path d="M3 12.5 12 17.5 21 12.5"/></svg><span class="txt" data-i="t_room"></span></button>
+    <button class="nv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.5"/></svg><span class="txt" data-i="t_nodes"></span></button>
+    <div class="navsec" data-i="sec_net"></div>
+    <button class="nv" data-v="ports"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3.5" y="7" width="17" height="10" rx="1.5"/><path d="M7 11h2v2H7zM11 11h2v2h-2zM15 11h2v2h-2z"/></svg><span class="txt" data-i="t_ports"></span><span class="soon">#282</span></button>
+    <button class="nv" data-v="traffic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="5.5" cy="12" r="2.2"/><circle cx="18.5" cy="6" r="2.2"/><circle cx="18.5" cy="18" r="2.2"/><path d="M7.5 11 16.5 7M7.5 13l9 4"/></svg><span class="txt" data-i="t_traffic"></span><span class="soon">#283</span></button>
+    <div class="navsec" data-i="sec_admin"></div>
+    <button class="nv"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5h9l3 3v14H6Z"/><path d="M9 10h6M9 13.5h6M9 17h4"/></svg><span class="txt" data-i="t_audit"></span></button>
+    <div class="sp"></div>
+    <div class="hubcard"><div class="hn"><i></i>atlas</div><div class="row"><span data-i="hub_active"></span><span>v0.5.0</span></div></div>
+  </nav>
+
+  <header class="head">
+    <div class="crumb"><span>home-lab / <span data-i="sec_net"></span> /</span><h1 id="h1"></h1></div>
+    <div class="sp"></div>
+    <div class="tool" role="group" aria-label="Theme"><button data-th="system">Auto</button><button data-th="light" aria-label="Light">☀</button><button data-th="dark" aria-label="Dark">☾</button></div>
+    <div class="tool" role="group" aria-label="Language"><button data-l="en">EN</button><button data-l="it">IT</button></div>
+  </header>
+
+  <main>
+    <!-- ===== Open ports ===== -->
+    <section class="view" id="vPorts" aria-labelledby="h1">
+      <div class="panel bar">
+        <div class="row">
+          <label class="field"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="sr" data-i="f_search"></span><input id="q" type="search" autocomplete="off" spellcheck="false"></label>
+          <label class="field"><span class="label" data-i="c_server"></span><select id="srv"></select></label>
+          <div class="seg" id="exSeg" role="group"></div>
+          <label class="check"><input type="checkbox" id="unexp"><span data-i="only_unexp"></span></label>
+          <span class="sp" style="flex:1"></span>
+          <div class="seg" id="pvSeg" role="group"></div>
+        </div>
+        <div class="row stats" id="stats"></div>
+        <p class="note" style="margin:0" id="pNote"></p>
+      </div>
+      <section class="panel tblp" aria-labelledby="tblH">
+        <div class="ph"><h2 id="tblH"></h2><span class="tiny mono" id="asof"></span></div>
+        <div class="scroll" id="ptbl"></div>
+      </section>
+      <section class="panel logp" aria-labelledby="logH">
+        <div class="ph"><h2 id="logH" data-i="log_title"></h2><span class="tiny" data-i="log_hint"></span></div>
+        <ul class="log" id="log"></ul>
+      </section>
+    </section>
+
+    <!-- ===== Traffic map ===== -->
+    <section class="view" id="vTraffic" aria-labelledby="h1" hidden>
+      <section class="panel mapp">
+        <div class="mtop">
+          <div class="seg" id="tvSeg" role="group"></div>
+          <div class="seg" id="kSeg" role="group"></div>
+        </div>
+        <div class="mapbox" id="mapbox">
+          <canvas id="map" role="img"></canvas>
+          <div class="lgd" id="lgd"></div>
+          <div id="tip" hidden></div>
+        </div>
+        <div class="ttbl" id="ltbl" hidden></div>
+        <div class="nodes" id="nodes" role="group"></div>
+      </section>
+      <aside class="panel insp" id="insp" aria-label="Node"></aside>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(()=>{"use strict";
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const RM=matchMedia('(prefers-reduced-motion: reduce)');
+const store={get(k,d){try{return localStorage.getItem(k)??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---------- strings: English and Italian ---------- */
+const D={
+en:{sec_ops:'Operations',sec_net:'Network',sec_admin:'Administration',t_room:'Machine room',t_nodes:'Nodes',t_ports:'Open ports',t_traffic:'Traffic map',t_audit:'Audit log',hub_active:'active hub',
+ f_search:'Filter by port, process or unit',ph_q:'Port, process, unit…',c_server:'Server',all_servers:'All servers',ex_all:'All',ex_out:'Outside the machine',ex_lo:'Loopback only',only_unexp:'Unexpected only',v_list:'List',v_port:'By port',
+ st_listen:'{n} listeners',st_srv:'{n} servers',st_out:'{n} reachable from outside the machine',st_unexp:'{n} unexpected',
+ p_note:'Sensitive: this list maps the attack surface. Visible with ports.read (admin by default); every view is audited. Sampled every 30 s. Without privilege the owner is the user and the systemd unit or container; the exact process needs the privileged grant (#60).',
+ tbl_list:'Listening ports',tbl_port:'Ports across servers',asof:'as of {t}',c_proto:'Proto',c_listen:'Listens on',c_exp:'Exposure',c_owner:'Owner',c_status:'Status',c_seen:'First seen',c_port:'Port',c_where:'Open on',
+ x_loopback:'loopback',x_lan:'LAN',x_all:'all interfaces',x_bridge:'container bridge',x_vpn:'VPN',
+ s_process:'process',s_unit:'unit',s_user:'user only',s_unknown:'owner unknown',s_kernel:'kernel socket',s_priv:'privileged grant',
+ r_regulus:'Regulus',r_expected:'expected',r_ack:'acknowledged',r_unexp:'unexpected',ack:'Acknowledge',toast_ack:'{p} on {s} acknowledged · written to the audit log',
+ w197:'Plaintext HTTP on all interfaces (#197)',differs:'differs between servers',same:'same everywhere',offline_asof:'offline · data from {t}',
+ log_title:'Change log',log_hint:'appeared and gone, not a time series',ch_appeared:'appeared',ch_gone:'gone',ch_owner:'owner changed',ch_exposure:'exposure changed',ch_baseline:'baseline',ch_flap:'flapping',
+ lg_base:'first snapshot: {n} listeners recorded as the baseline',lg_flap:'appeared and gone 7 times in an hour; collapsed into one entry',empty:'No port matches the filters.',
+ vm_map:'Map',vm_table:'Table',k_all:'All',k_agent:'agent protocol',k_update:'update download',k_repl:'replication',k_plugin:'plugin',k_other:'other',k_vpnt:'VPN transport',k_unknown:'unattributed',
+ l_inuse:'in use',l_idle:'idle',l_down:'down',l_unknown:'no data',ep_inet:'INTERNET',ep_lan:'LOCAL NETWORK',ep_vpn:'VPN PEERS',
+ how_exact:'exact',how_sampled:'sampled',how_rem:'remainder',tc_from:'From',tc_to:'To',tc_kind:'Kind',tc_state:'State',tc_rate:'Out / in',tc_since:'Since',tc_how:'How known',
+ i_links:'Links',i_share:'Interface total, attributed',i_attr:'attributed to sockets',i_unattr:'unattributed',i_dest:'Outbound destinations',d_name:'Name',d_proc:'Owner',d_bytes:'Out / in (5 min)',
+ d_off:'Destination collection is off for this node. The map shows its outside traffic as totals only, without addresses.',d_turn:'Turn on',d_refused:'This node refuses destination collection locally (agent.yaml). The hub cannot turn it on.',
+ n_rev:'reverse name',n_known:'known',hint443:'usually HTTPS',hint53:'usually DNS',udp_vol:'UDP: volume unknown',
+ t_note:'Sampled every 10 s from TCP sockets. Short connections and UDP volume can be missing; what no socket explains is shown as unattributed, never guessed.',
+ t_perm:'Destinations need destinations.read (admin by default); every view is audited. Names are reverse DNS (opt-in) or names Regulus knows exactly.',
+ toast_dest:'Destination collection turned on for {n} · audited',map_aria:'Map of the links between nodes, the hub and the outside. The same data is in the Table view.',nodes_aria:'Select a node',
+ hub:'HUB',standby:'STANDBY HUB',online:'online',offline:'offline',stale:'stale',design:'designed in #107, not implemented',since_m:'{n} min',since_h:'{n} h',since_d:'{n} d',ago:'{t} ago',now:'now',i_none:'No links in this filter.'},
+it:{sec_ops:'Operatività',sec_net:'Rete',sec_admin:'Amministrazione',t_room:'Sala macchine',t_nodes:'Nodi',t_ports:'Porte aperte',t_traffic:'Mappa del traffico',t_audit:'Registro di controllo',hub_active:'hub attivo',
+ f_search:'Filtra per porta, processo o unità',ph_q:'Porta, processo, unità…',c_server:'Server',all_servers:'Tutti i server',ex_all:'Tutte',ex_out:'Fuori dalla macchina',ex_lo:'Solo loopback',only_unexp:'Solo inattese',v_list:'Elenco',v_port:'Per porta',
+ st_listen:'{n} in ascolto',st_srv:'{n} server',st_out:'{n} raggiungibili da fuori della macchina',st_unexp:'{n} inattese',
+ p_note:'Dato delicato: questo elenco mostra la superficie d\'attacco. Visibile con ports.read (di default solo admin); ogni consultazione è registrata. Campionato ogni 30 s. Senza privilegi il proprietario è l\'utente e l\'unità systemd o il container; il processo esatto richiede il permesso privilegiato (#60).',
+ tbl_list:'Porte in ascolto',tbl_port:'Porte tra i server',asof:'aggiornato {t}',c_proto:'Proto',c_listen:'In ascolto su',c_exp:'Esposizione',c_owner:'Proprietario',c_status:'Stato',c_seen:'Vista la prima volta',c_port:'Porta',c_where:'Aperta su',
+ x_loopback:'loopback',x_lan:'LAN',x_all:'tutte le interfacce',x_bridge:'bridge dei container',x_vpn:'VPN',
+ s_process:'processo',s_unit:'unità',s_user:'solo utente',s_unknown:'proprietario sconosciuto',s_kernel:'socket del kernel',s_priv:'permesso privilegiato',
+ r_regulus:'Regulus',r_expected:'attesa',r_ack:'riconosciuta',r_unexp:'inattesa',ack:'Riconosci',toast_ack:'{p} su {s} riconosciuta · scritto nel registro di controllo',
+ w197:'HTTP in chiaro su tutte le interfacce (#197)',differs:'diversa tra i server',same:'uguale ovunque',offline_asof:'spento · dati di {t}',
+ log_title:'Registro delle modifiche',log_hint:'comparse e sparite, non una serie storica',ch_appeared:'comparsa',ch_gone:'sparita',ch_owner:'proprietario cambiato',ch_exposure:'esposizione cambiata',ch_baseline:'situazione iniziale',ch_flap:'instabile',
+ lg_base:'primo rilevamento: {n} porte registrate come situazione iniziale',lg_flap:'comparsa e sparita 7 volte in un\'ora; raccolta in una sola voce',empty:'Nessuna porta corrisponde ai filtri.',
+ vm_map:'Mappa',vm_table:'Tabella',k_all:'Tutti',k_agent:'protocollo agente',k_update:'download aggiornamento',k_repl:'replica',k_plugin:'plugin',k_other:'altro',k_vpnt:'trasporto VPN',k_unknown:'non attribuito',
+ l_inuse:'in uso',l_idle:'inattivo',l_down:'interrotto',l_unknown:'nessun dato',ep_inet:'INTERNET',ep_lan:'RETE LOCALE',ep_vpn:'NODI VPN',
+ how_exact:'esatto',how_sampled:'campionato',how_rem:'resto',tc_from:'Da',tc_to:'A',tc_kind:'Tipo',tc_state:'Stato',tc_rate:'Uscita / entrata',tc_since:'Da quando',tc_how:'Come si sa',
+ i_links:'Collegamenti',i_share:'Totale dell\'interfaccia, attribuito',i_attr:'attribuito ai socket',i_unattr:'non attribuito',i_dest:'Destinazioni in uscita',d_name:'Nome',d_proc:'Proprietario',d_bytes:'Uscita / entrata (5 min)',
+ d_off:'La raccolta delle destinazioni è spenta per questo nodo. La mappa mostra il suo traffico verso l\'esterno solo come totali, senza indirizzi.',d_turn:'Accendi',d_refused:'Questo nodo rifiuta localmente la raccolta delle destinazioni (agent.yaml). L\'hub non può accenderla.',
+ n_rev:'nome inverso',n_known:'noto',hint443:'di solito HTTPS',hint53:'di solito DNS',udp_vol:'UDP: volume sconosciuto',
+ t_note:'Campionato ogni 10 s dai socket TCP. Connessioni brevi e volume UDP possono mancare; ciò che nessun socket spiega è mostrato come non attribuito, mai indovinato.',
+ t_perm:'Le destinazioni richiedono destinations.read (di default solo admin); ogni consultazione è registrata. I nomi sono DNS inverso (su richiesta) o nomi che Regulus conosce con certezza.',
+ toast_dest:'Raccolta delle destinazioni accesa per {n} · registrato',map_aria:'Mappa dei collegamenti tra nodi, hub ed esterno. Gli stessi dati sono nella vista Tabella.',nodes_aria:'Seleziona un nodo',
+ hub:'HUB',standby:'HUB DI RISERVA',online:'in linea',offline:'spento',stale:'in ritardo',design:'progettata nella #107, non implementata',since_m:'{n} min',since_h:'{n} h',since_d:'{n} g',ago:'{t} fa',now:'adesso',i_none:'Nessun collegamento con questo filtro.'}};
+let LANG=store.get('rnet2-lang',(navigator.language||'en').toLowerCase().startsWith('it')?'it':'en');
+const t=(k,v)=>{let s=D[LANG][k]??D.en[k]??k;if(v)for(const x in v)s=s.replace('{'+x+'}',v[x]);return s};
+const ago=m=>m<1?t('now'):t('ago',{t:m<60?t('since_m',{n:m}):m<1440?t('since_h',{n:Math.round(m/60)}):t('since_d',{n:Math.round(m/1440)})});
+const dur=m=>m<60?t('since_m',{n:m}):m<1440?t('since_h',{n:Math.round(m/60)}):t('since_d',{n:Math.round(m/1440)});
+const fmtB=b=>b==null?'—':b<1024?b+' B':b<1048576?(b/1024).toFixed(b<10240?1:0)+' KB':b<1073741824?(b/1048576).toFixed(1)+' MB':(b/1073741824).toFixed(2)+' GB';
+const fmtR=b=>b==null?'—':fmtB(Math.round(b))+'/s';
+let toastT;function toast(m){const e=$('#toast');e.textContent=m;e.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>e.hidden=true,2800)}
+
+/* ---------- example data: nodes named only by node name ---------- */
+const NODES=[
+ {id:'atlas',role:'hub',x:4.6,y:2.9},{id:'aldebaran',role:'standby',x:7.6,y:2.9},
+ {id:'antares',x:1.0,y:.7},{id:'rigel',x:2.6,y:.7},{id:'sirius',x:6.0,y:.7},{id:'castor',x:7.6,y:.7},
+ {id:'polaris',x:1.0,y:2.9},{id:'ceres',x:1.0,y:5.1},{id:'vega',x:2.6,y:5.1},{id:'mira',x:6.0,y:5.1},{id:'altair',x:7.6,y:5.1,status:'offline',lastSeen:134}];
+NODES.forEach(n=>n.status=n.status||'online');
+const EP={inet:{x:10.3,y:.4,w:1.7,d:1.6,k:'ep_inet'},lan:{x:10.3,y:2.6,w:1.7,d:1.2,k:'ep_lan'},vpn:{x:10.3,y:4.5,w:1.7,d:1.2,k:'ep_vpn'}};
+// [server, proto, address, port, exposure, owner {u:user, unit, proc, ctr, src}, status, firstSeen (min ago)]
+const P=(s,pr,a,p,x,o,st,f)=>({s,pr,a,p,x,o,st,f});
+const PORTS=[
+ P('atlas','tcp','0.0.0.0',8443,'all',{u:'regulus',unit:'regulus.service',proc:'regulus',src:'process'},'regulus',57600),
+ P('atlas','tcp','0.0.0.0',8080,'all',{u:'regulus',unit:'regulus.service',proc:'regulus',src:'process'},'regulus',57600),
+ P('atlas','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',57600),
+ P('atlas','tcp','127.0.0.1',5432,'loopback',{u:'postgres',unit:'postgresql@16-main.service',src:'unit'},'expected',57600),
+ P('atlas','udp','127.0.0.53',53,'loopback',{u:'systemd-resolve',unit:'systemd-resolved.service',src:'unit'},'ack',57600),
+ P('atlas','tcp','0.0.0.0',9100,'all',{u:'prometheus',unit:'prometheus-node-exporter.service',src:'unit'},'unexp',128),
+ P('aldebaran','tcp','0.0.0.0',8443,'all',{u:'regulus',unit:'regulus.service',proc:'regulus',src:'process'},'regulus',20160),
+ P('aldebaran','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',20160),
+ P('antares','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('antares','tcp','0.0.0.0',111,'all',{u:'_rpc',unit:'rpcbind.service',src:'unit'},'unexp',1500),
+ P('antares','udp','0.0.0.0',111,'all',{u:'_rpc',unit:'rpcbind.service',src:'unit'},'unexp',1500),
+ P('rigel','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('rigel','tcp','10.0.0.12',5432,'lan',{u:'postgres',unit:'postgresql@16-main.service',src:'unit'},'ack',43000),
+ P('rigel','tcp','127.0.0.1',6379,'loopback',{u:'redis',unit:'redis-server.service',src:'unit'},'ack',43000),
+ P('rigel','tcp','0.0.0.0',8000,'all',{u:'root',unit:'docker.service',proc:'docker-proxy',ctr:'api-v2',src:'priv'},'expected',300),
+ P('ceres','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('ceres','tcp','0.0.0.0',445,'all',{u:'root',unit:'smbd.service',src:'unit'},'ack',43000),
+ P('ceres','tcp','0.0.0.0',139,'all',{u:'root',unit:'smbd.service',src:'unit'},'ack',43000),
+ P('ceres','tcp','0.0.0.0',2049,'all',{u:'root',src:'kernel'},'ack',43000),
+ P('ceres','udp','10.0.0.20',137,'lan',{u:'root',unit:'nmbd.service',src:'unit'},'ack',43000),
+ P('vega','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('vega','tcp','0.0.0.0',32400,'all',{u:'root',unit:'docker.service',ctr:'plex',src:'unit'},'expected',30000),
+ P('vega','tcp','0.0.0.0',7878,'all',{u:'root',unit:'docker.service',ctr:'radarr',src:'unit'},'expected',30000),
+ P('vega','tcp','0.0.0.0',8989,'all',{u:'root',unit:'docker.service',ctr:'sonarr',src:'unit'},'expected',30000),
+ P('polaris','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('mira','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',8640),
+ P('mira','tcp','127.0.0.1',3000,'loopback',{u:'gm',unit:'user@1000.service',src:'user'},'unexp',40),
+ P('mira','tcp','172.17.0.1',8081,'bridge',{u:'gm',src:'user'},'unexp',12),
+ P('sirius','tcp','0.0.0.0',443,'all',{u:'caddy',unit:'caddy.service',src:'unit'},'expected',43000),
+ P('sirius','tcp','0.0.0.0',80,'all',{u:'caddy',unit:'caddy.service',src:'unit'},'expected',43000),
+ P('sirius','tcp','127.0.0.1',2019,'loopback',{u:'caddy',unit:'caddy.service',src:'unit'},'expected',43000),
+ P('sirius','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000),
+ P('castor','tcp','100.101.7.3',22,'vpn',{u:'root',unit:'ssh.service',src:'unit'},'ack',4300),
+ P('castor','udp','0.0.0.0',41641,'all',{u:'root',unit:'tailscaled.service',src:'unit'},'expected',43000),
+ P('altair','tcp','0.0.0.0',22,'all',{u:'root',unit:'ssh.service',src:'unit'},'ack',43000)];
+const LOG=[
+ {m:12,s:'mira',c:'appeared',p:'tcp/8081',x:'172.17.0.1 (container bridge) · user gm'},
+ {m:40,s:'mira',c:'appeared',p:'tcp/3000',x:'127.0.0.1 · user gm'},
+ {m:128,s:'atlas',c:'appeared',p:'tcp/9100',x:'0.0.0.0 · prometheus-node-exporter.service'},
+ {m:300,s:'rigel',c:'owner',p:'tcp/8000',x:'container api → api-v2'},
+ {m:410,s:'rigel',c:'flap',p:'udp/5353',x:''},
+ {m:1500,s:'antares',c:'appeared',p:'tcp/111, udp/111',x:'0.0.0.0 · rpcbind.service'},
+ {m:1720,s:'vega',c:'gone',p:'tcp/8080',x:'container qbittorrent'},
+ {m:4300,s:'castor',c:'exposure',p:'tcp/22',x:'0.0.0.0 → 100.101.7.3 (VPN)'},
+ {m:20160,s:'aldebaran',c:'baseline',p:'',x:''}];
+const CHC={appeared:'var(--crit)',gone:'var(--off)',owner:'var(--warn)',exposure:'var(--info)',baseline:'var(--line-2)',flap:'var(--warn)'};
+const OUT=new Set(['lan','all','vpn','bridge']);
+
+/* ---------- traffic example data ---------- */
+// link: a, b (node id or ep:inet|lan|vpn), kind, state, out/in bytes per second (from a's side), since (min), how
+const L=(a,b,k,st,o,i,since,how,extra)=>Object.assign({a,b,k,st,o,i,since,how:how||'sampled'},extra||{});
+const LINKS=[
+ ...['aldebaran','antares','rigel','sirius','castor','polaris','ceres','vega'].map((n,j)=>L(n,'atlas','agent','idle',260+j*13,180+j*9,8000+j*700,'exact')),
+ L('mira','atlas','update','inuse',1400,1.9e6,2,'exact'),
+ L('altair','atlas','agent','down',null,null,134,'exact'),
+ L('atlas','aldebaran','repl','inuse',42e3,1.2e3,20160,'exact',{design:1}),
+ L('atlas','ep:inet','update','inuse',3.1e3,2.6e6,3,'exact'),
+ L('vega','ceres','other','inuse',9e3,7.4e6,95),
+ L('polaris','ceres','other','idle',120,90,610),
+ L('ep:lan','rigel','other','inuse',48e3,6.1e3,1300),
+ L('ep:inet','sirius','other','inuse',3.9e5,2.2e4,43000),
+ L('castor','ep:vpn','vpnt','inuse',1.1e4,9.5e3,4300),
+ L('castor','ep:vpn','other','inuse',8.2e3,7.1e3,240),
+ L('antares','ep:inet','other','idle',40,310,30),
+ L('vega','ep:inet','unknown','inuse',2.1e5,4.3e6,null,'rem'),
+ L('mira','ep:inet','other','inuse',2.4e4,3.3e5,18),
+ L('atlas','ep:inet','plugin','idle',30,80,700)];
+const KC={agent:'k-agent',update:'k-update',repl:'k-repl',plugin:'k-plugin',other:'k-other',vpnt:'k-vpn',unknown:'off'};
+const OWN={agent:'regulus.service',update:'regulus.service',repl:'regulus.service',plugin:'plugin speedtest'};
+const LOWN=[['vega','ceres','smbd.service (ceres, :445)'],['polaris','ceres','borg (polaris) → ssh.service (ceres, :22)'],['ep:lan','rigel','postgresql@16-main.service (:5432)'],['ep:inet','sirius','caddy.service (:443, :80)'],['castor','ep:vpn','tailscaled.service']];
+const DEST={
+ atlas:{on:1,rows:[['140.82.121.4',443,'github.com','k',0,'regulus.service',2.1e4,7.6e8,0],['185.199.110.133',443,'objects.githubusercontent.com','k',0,'regulus.service',1.2e4,4.1e8,1],['151.101.1.6',443,'rekor.sigstore.dev','k',0,'regulus.service',3.3e3,1.8e4,3],['1.1.1.1',53,null,null,'udp','systemd-resolved.service',null,null,0]]},
+ antares:{on:1,rows:[['91.189.91.82',80,'archive.ubuntu.com','r',0,'apt-daily-upgrade.service',4.2e3,2.1e6,31],['185.125.190.40',443,'api.snapcraft.io','r',0,'snapd.service',2.8e3,9e3,44],['1.1.1.1',53,null,null,'udp','systemd-resolved.service',null,null,0]]},
+ mira:{on:1,rows:[['140.82.112.3',443,'lb-140-82-112-3-iad.github.com','r',0,'user gm',8.1e4,2.2e6,0],['104.18.32.47',443,null,null,0,'user gm',3.3e5,5.8e6,0],['34.117.59.81',443,'81.59.117.34.bc.googleusercontent.com','r',0,'user gm',6e3,4.4e4,6],['8.8.8.8',53,null,null,'udp','user gm',null,null,1]]},
+ vega:{on:0},sirius:{on:1,rows:[['172.65.32.248',443,null,null,0,'caddy.service',4.1e3,1.2e4,180]]},
+ castor:{refused:1},rigel:{on:0},ceres:{on:0},polaris:{on:0},aldebaran:{on:1,rows:[]},altair:{on:0}};
+const IFT={atlas:2.75e6,vega:1.18e7,mira:2.4e6,castor:4.2e4,sirius:4.3e5,ceres:7.5e6,rigel:6e4,antares:900,aldebaran:4.5e4,polaris:900,altair:0};
+
+/* ---------- state ---------- */
+let view=store.get('rnet2-view','ports'),pv='list',ex='all',tv=innerWidth<700?'table':'map',kf='all',sel='vega';
+if(location.hash==='#traffic')view='traffic';if(location.hash==='#ports')view='ports';
+
+/* ---------- open ports ---------- */
+const nodeOf=id=>NODES.find(n=>n.id===id);
+function ownerHTML(o){const main=o.ctr?`container ${o.ctr}`:o.proc||o.unit||(o.src==='kernel'?'nfsd':'user '+o.u);
+  const sub=[o.ctr&&o.unit,!o.ctr&&o.proc&&o.unit,o.u&&main!=='user '+o.u&&('user '+o.u)].filter(Boolean).join(' · ');
+  return `<div class="own"><b>${main}</b><small>${sub?sub+' · ':''}${t('s_'+o.src)}</small></div>`}
+function exChip(x){return `<span class="chip ${x==='all'?'warn':''}"><i style="--c:var(${x==='loopback'?'--ok':x==='all'?'--warn':'--info'})"></i>${t('x_'+x)}</span>`}
+function stChip(r){return r.st==='regulus'?`<span class="chip hub">${t('r_regulus')}</span>`:r.st==='unexp'?`<span class="chip crit">${t('r_unexp')}</span>`:r.st==='ack'?`<span class="chip">${t('r_ack')}</span>`:`<span class="chip ok">${t('r_expected')}</span>`}
+function filtered(){const q=$('#q').value.trim().toLowerCase(),sv=$('#srv').value,u=$('#unexp').checked;
+  return PORTS.filter(r=>(sv==='all'||r.s===sv)&&(ex==='all'||(ex==='out'?OUT.has(r.x):r.x==='loopback'))&&(!u||r.st==='unexp')&&
+   (!q||[r.p,r.pr+'/'+r.p,r.o.unit,r.o.proc,r.o.ctr,r.o.u,r.s].filter(Boolean).join(' ').toLowerCase().includes(q)))}
+function renderPorts(){
+  const R=filtered();
+  $('#stats').innerHTML=[t('st_listen',{n:R.length}),t('st_srv',{n:new Set(R.map(r=>r.s)).size}),t('st_out',{n:R.filter(r=>OUT.has(r.x)).length})].map(s=>`<span class="chip">${s}</span>`).join('')+`<span class="chip crit">${t('st_unexp',{n:R.filter(r=>r.st==='unexp').length})}</span>`;
+  $('#tblH').textContent=t(pv==='list'?'tbl_list':'tbl_port');$('#asof').textContent=t('asof',{t:ago(0)});
+  if(!R.length){$('#ptbl').innerHTML=`<p class="tiny" style="padding:14px">${t('empty')}</p>`;return}
+  if(pv==='list'){
+    $('#ptbl').innerHTML=`<table class="tbl cards"><thead><tr>${['c_server','c_proto','c_listen','c_exp','c_owner','c_status','c_seen'].map(k=>`<th scope="col">${t(k)}</th>`).join('')}</tr></thead><tbody>${R.map((r,i)=>{const n=nodeOf(r.s),off=n.status==='offline';
+      const w=r.st==='regulus'&&r.p===8080?`<span class="flag">⚠ ${t('w197')}</span>`:'';
+      return `<tr><td data-l="${t('c_server')}" class="m"><div>${r.s}${n.role==='hub'?' <span class="chip hub">HUB</span>':''}${off?`<div class="hint">${t('offline_asof',{t:ago(n.lastSeen)})}</div>`:''}</div></td><td data-l="${t('c_proto')}" class="m"><div>${r.pr}</div></td><td data-l="${t('c_listen')}" class="m"><div>${r.a.includes(':')?'['+r.a+']':r.a}:${r.p}${w}</div></td><td data-l="${t('c_exp')}"><div>${exChip(r.x)}</div></td><td data-l="${t('c_owner')}"><div>${ownerHTML(r.o)}</div></td><td data-l="${t('c_status')}"><div>${stChip(r)}${r.st==='unexp'?` <button class="btn" data-ack="${PORTS.indexOf(r)}">${t('ack')}</button>`:''}</div></td><td data-l="${t('c_seen')}" class="m"><div>${ago(r.f)}</div></td></tr>`}).join('')}</tbody></table>`;
+  }else{
+    const g={};R.forEach(r=>{(g[r.pr+'/'+r.p]??=[]).push(r)});
+    const keys=Object.keys(g).sort((a,b)=>g[b].length-g[a].length||parseInt(a.split('/')[1])-parseInt(b.split('/')[1]));
+    $('#ptbl').innerHTML=`<table class="tbl cards"><thead><tr><th scope="col">${t('c_port')}</th><th scope="col">${t('c_where')}</th></tr></thead><tbody>${keys.map(k=>{const rs=g[k];const sig=new Set(rs.map(r=>r.x+'|'+(r.o.unit||r.o.ctr||r.o.u)));
+      return `<tr><td data-l="${t('c_port')}" class="m"><div><b style="font-size:14px">${k}</b><div class="hint">${t('st_srv',{n:rs.length})} · ${sig.size>1?`<span style="color:var(--warn)">${t('differs')}</span>`:t('same')}</div></div></td><td data-l="${t('c_where')}"><div><div class="srvs" style="display:flex;gap:5px;flex-wrap:wrap">${rs.map(r=>`<span class="chip ${r.st==='unexp'?'crit':''}" title="${r.a} · ${r.o.ctr||r.o.unit||r.o.u}"><i style="--c:var(${r.x==='loopback'?'--ok':r.x==='all'?'--warn':'--info'})"></i>${r.s} · ${t('x_'+r.x)}</span>`).join('')}</div></div></td></tr>`}).join('')}</tbody></table>`;
+  }
+  $$('[data-ack]').forEach(b=>b.onclick=()=>{const r=PORTS[+b.dataset.ack];r.st='ack';toast(t('toast_ack',{p:r.pr+'/'+r.p,s:r.s}));renderPorts()});
+}
+function renderLog(){
+  $('#log').innerHTML=LOG.map(e=>`<li class="li" style="--c:${CHC[e.c]}"><div class="lh"><b>${e.s}${e.p?' · '+e.p:''}</b><span>${ago(e.m)}</span></div><p><span class="st" style="color:${CHC[e.c]}">${t('ch_'+e.c).toUpperCase()}</span> ${e.c==='baseline'?t('lg_base',{n:2}):e.c==='flap'?t('lg_flap'):e.x}</p></li>`).join('');
+}
+function renderPortControls(){
+  $('#q').placeholder=t('ph_q');
+  const sv=$('#srv').value||'all';$('#srv').innerHTML=`<option value="all">${t('all_servers')}</option>`+NODES.map(n=>`<option value="${n.id}">${n.id}</option>`).join('');$('#srv').value=sv;
+  $('#exSeg').setAttribute('aria-label',t('c_exp'));
+  $('#exSeg').innerHTML=[['all','ex_all'],['out','ex_out'],['lo','ex_lo']].map(([k,l])=>`<button data-ex="${k}" aria-pressed="${ex===k}">${t(l)}</button>`).join('');
+  $$('[data-ex]').forEach(b=>b.onclick=()=>{ex=b.dataset.ex;renderPortControls();renderPorts()});
+  $('#pvSeg').innerHTML=[['list','v_list'],['port','v_port']].map(([k,l])=>`<button data-pv="${k}" aria-pressed="${pv===k}">${t(l)}</button>`).join('');
+  $$('[data-pv]').forEach(b=>b.onclick=()=>{pv=b.dataset.pv;renderPortControls();renderPorts()});
+  $('#pNote').textContent=t('p_note');
+}
+$('#q').oninput=renderPorts;$('#srv').onchange=renderPorts;$('#unexp').onchange=renderPorts;
+
+/* ---------- traffic: table, inspector ---------- */
+const epName=b=>b.startsWith('ep:')?t({inet:'ep_inet',lan:'ep_lan',vpn:'ep_vpn'}[b.slice(3)]):b;
+const shownLinks=()=>LINKS.filter(l=>kf==='all'||l.k===kf);
+const kindChip=l=>`<span class="chip"><i style="--c:var(--${KC[l.k]})"></i>${t('k_'+l.k)}</span>`;
+const stateOf=l=>l.st==='down'?'down':l.st;
+function ownerOf(l){const f=LOWN.find(x=>x[0]===l.a&&x[1]===l.b);return f?f[2]:OWN[l.k]||(l.k==='unknown'?'':l.a==='mira'?'user gm':l.a==='antares'?'apt-daily-upgrade.service':'—')}
+function renderLinkTable(){
+  const R=shownLinks();
+  $('#ltbl').innerHTML=`<table class="tbl cards"><caption class="sr">${t('t_traffic')}</caption><thead><tr>${['tc_from','tc_to','tc_kind','tc_state','tc_rate','tc_since','tc_how'].map(k=>`<th scope="col">${t(k)}</th>`).join('')}</tr></thead><tbody>${R.map(l=>`<tr class="${l.a===sel||l.b===sel?'sel':''}"><td data-l="${t('tc_from')}" class="m"><div>${epName(l.a)}</div></td><td data-l="${t('tc_to')}" class="m"><div>${epName(l.b)}</div></td><td data-l="${t('tc_kind')}"><div>${kindChip(l)}<div class="hint">${ownerOf(l)}${l.design?' · '+t('design'):''}</div></div></td><td data-l="${t('tc_state')}"><div><span class="st ${stateOf(l)}">${t('l_'+stateOf(l))}</span></div></td><td data-l="${t('tc_rate')}" class="m"><div>↑ ${fmtR(l.o)} · ↓ ${fmtR(l.i)}</div></td><td data-l="${t('tc_since')}" class="m"><div>${l.since==null?'—':dur(l.since)}</div></td><td data-l="${t('tc_how')}" class="m"><div>${t('how_'+(l.how==='rem'?'rem':l.how))}</div></td></tr>`).join('')}</tbody></table>`;
+}
+function renderInsp(){
+  const n=nodeOf(sel),mine=shownLinks().filter(l=>l.a===sel||l.b===sel),ds=DEST[sel]||{on:0};
+  const tot=IFT[sel]||0,unat=LINKS.filter(l=>l.a===sel&&l.k==='unknown').reduce((s,l)=>s+l.o+l.i,0),attr=Math.max(0,tot-unat);
+  const linkRow=l=>{const other=l.a===sel?l.b:l.a,out=l.a===sel;const o=out?l.o:l.i,i=out?l.i:l.o;
+    return `<div class="lk"><i style="--c:var(--${KC[l.k]})"></i><div><b class="mono" style="font-size:12px">${out?'→':'←'} ${epName(other)}</b> <span class="st ${stateOf(l)}">${t('l_'+stateOf(l))}</span><small>${[t('k_'+l.k),ownerOf(l),t('how_'+l.how)].filter(Boolean).join(' · ')}${l.design?' · '+t('design'):''}</small></div><div class="rate">↑ ${fmtR(o)}<br>↓ ${fmtR(i)}</div></div>`};
+  let dest='';
+  if(ds.refused)dest=`<div class="off">${t('d_refused')}</div>`;
+  else if(!ds.on)dest=`<div class="off">${t('d_off')}<button class="btn go" id="turnOn">${t('d_turn')} · traffic.configure</button></div>`;
+  else dest=ds.rows.length?`<ul class="dl">${ds.rows.map(r=>`<li><div class="dh"><b class="mono">${r[0]}:${r[1]}${r[4]?' udp':''}</b><span class="mono tiny">${ago(r[8])}</span></div>
+    <dl><dt>${t('d_name')}</dt><dd>${r[2]?`<span class="mono">${r[2]}</span> <span class="chip">${t(r[3]==='k'?'n_known':'n_rev')}</span>`:`<span class="hint">— ${r[1]===443?'· '+t('hint443'):r[1]===53?'· '+t('hint53'):''}</span>`}</dd>
+    <dt>${t('d_proc')}</dt><dd class="mono">${r[5]}</dd><dt>${t('d_bytes')}</dt><dd class="mono">${r[6]==null?`<span class="hint">${t('udp_vol')}</span>`:`↑ ${fmtB(r[6])} · ↓ ${fmtB(r[7])}`}</dd></dl></li>`).join('')}</ul>`:`<p class="tiny">${t('i_none')}</p>`;
+  $('#insp').innerHTML=`<div class="ins-hd"><div style="display:flex;gap:6px;flex-wrap:wrap">${n.role==='hub'?`<span class="chip hub">${t('hub')}</span>`:n.role==='standby'?`<span class="chip">${t('standby')}</span>`:''}<span class="chip"><i style="--c:var(${n.status==='online'?'--ok':'--off'})"></i>${t(n.status)}</span></div><h2>${n.id}</h2></div>
+  <div class="sec"><h3 class="label">${t('i_links')}<span class="tiny">${mine.length}</span></h3>${mine.map(linkRow).join('')||`<span class="tiny">${t('i_none')}</span>`}</div>
+  <div class="sec"><h3 class="label">${t('i_share')}<span class="mono tiny">${fmtR(tot)}</span></h3><div class="share" role="img" aria-label="${t('i_attr')} ${fmtR(attr)}, ${t('i_unattr')} ${fmtR(unat)}"><i style="width:${tot?attr/tot*100:0}%;background:var(--ink)"></i><i style="width:${tot?unat/tot*100:0}%;background:repeating-linear-gradient(45deg,var(--off) 0 3px,transparent 3px 6px)"></i></div><div class="tiny" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>■ ${t('i_attr')} · ${fmtR(attr)}</span><span>▨ ${t('i_unattr')} · ${fmtR(unat)}</span></div></div>
+  <div class="sec"><h3 class="label">${t('i_dest')}<span class="tiny">destinations.read</span></h3>${dest}</div>
+  <div class="sec" style="border-bottom:0"><p class="note" style="margin:0 0 6px">${t('t_note')}</p><p class="note" style="margin:0">${t('t_perm')}</p></div>`;
+  const b=$('#turnOn');if(b)b.onclick=()=>{DEST[sel]={on:1,rows:[]};toast(t('toast_dest',{n:sel}));renderInsp()};
+}
+function renderTrafficControls(){
+  $('#tvSeg').innerHTML=[['map','vm_map'],['table','vm_table']].map(([k,l])=>`<button data-tv="${k}" aria-pressed="${tv===k}">${t(l)}</button>`).join('');
+  $$('[data-tv]').forEach(b=>b.onclick=()=>{tv=b.dataset.tv;renderTrafficControls();applyTv()});
+  $('#kSeg').setAttribute('aria-label',t('tc_kind'));
+  $('#kSeg').innerHTML=['all','agent','update','repl','other','vpnt','unknown'].map(k=>`<button data-k="${k}" aria-pressed="${kf===k}">${t('k_'+k)}</button>`).join('');
+  $$('[data-k]').forEach(b=>b.onclick=()=>{kf=b.dataset.k;renderTrafficControls();renderLinkTable();renderInsp();draw()});
+  $('#nodes').setAttribute('aria-label',t('nodes_aria'));
+  $('#nodes').innerHTML=NODES.map(n=>`<button data-n="${n.id}" aria-pressed="${sel===n.id}">${n.id}</button>`).join('');
+  $$('[data-n]').forEach(b=>b.onclick=()=>select(b.dataset.n));
+  $('#map').setAttribute('aria-label',t('map_aria'));
+  $('#lgd').innerHTML=`<div>${['agent','update','repl','other','vpnt'].map(k=>`<span><i style="--c:var(--${KC[k]})"></i>${t('k_'+k)}</span>`).join('')}</div><div><span><i style="--c:var(--ink);border-top-width:3px"></i>${t('l_inuse')}</span><span><i class="t" style="--c:var(--muted)"></i>${t('l_idle')}</span><span><i class="d" style="--c:var(--crit)"></i>${t('l_down')}</span><span><i class="d" style="--c:var(--off)"></i>${t('k_unknown')}</span></div>`;
+}
+function applyTv(){$('#mapbox').hidden=tv!=='map';$('#ltbl').hidden=tv!=='table';if(tv==='map'){fit();draw()}else renderLinkTable()}
+function select(id){sel=id;$$('[data-n]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.n===id));renderInsp();if(tv==='table')renderLinkTable();draw()}
+
+/* ---------- traffic: isometric map ---------- */
+const cv=$('#map'),ctx=cv.getContext('2d'),box_=$('#mapbox');const C={};
+let W=0,H=0,DPR=1,sc=1,ox=0,oy=0,hover=null,raf=0;const TW=96,TH=48;
+function readColors(){const cs=getComputedStyle(document.documentElement);['floor','floor-line','zone','metal-top','metal-l','metal-r','metal-edge','signal','signal-ink','ok','warn','crit','info','off','ink','muted','faint','surface','line-2','k-agent','k-update','k-repl','k-plugin','k-other','k-vpn'].forEach(k=>C[k]=cs.getPropertyValue('--'+k).trim())}
+const Pt=(gx,gy,gz=0)=>({x:ox+((gx-gy)*TW/2)*sc,y:oy+((gx+gy)*TH/2-gz)*sc});
+function fit(){const r=box_.getBoundingClientRect();if(!r.width)return;W=r.width;H=r.height;DPR=Math.min(2,devicePixelRatio||1);cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  const xs=[(0-6.6)*TW/2,(12.2-0)*TW/2],ys=[-40,(12.2+6.6)*TH/2];sc=Math.min((W-20)/(xs[1]-xs[0]),(H-60)/(ys[1]-ys[0]));ox=W/2-((xs[0]+xs[1])/2)*sc;oy=(H-30)/2-((ys[0]+ys[1])/2)*sc}
+new ResizeObserver(()=>{fit();draw()}).observe(box_);
+function poly(pts,fill,stroke,lw=1){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw;ctx.stroke()}}
+function box(x,y,w,d,z,h,top){const e=C['metal-edge'];
+  poly([Pt(x+w,y,z),Pt(x+w,y+d,z),Pt(x+w,y+d,z+h),Pt(x+w,y,z+h)],C['metal-r'],e,.8);
+  poly([Pt(x,y+d,z),Pt(x+w,y+d,z),Pt(x+w,y+d,z+h),Pt(x,y+d,z+h)],C['metal-l'],e,.8);
+  poly([Pt(x,y,z+h),Pt(x+w,y,z+h),Pt(x+w,y+d,z+h),Pt(x,y+d,z+h)],top,e,.8);
+  return [Pt(x,y,z+h),Pt(x+w,y,z+h),Pt(x+w,y,z),Pt(x+w,y+d,z),Pt(x,y+d,z),Pt(x,y+d,z+h)]}
+function label(s,p,col,bold,al='left'){ctx.font=`${bold?600:500} ${Math.round(Math.max(9,Math.min(13,11*sc)))}px "IBM Plex Mono", monospace`;ctx.fillStyle=col;ctx.textAlign=al;ctx.fillText(s,p.x,p.y);ctx.textAlign='left'}
+const anchor=id=>{if(id.startsWith('ep:')){const e=EP[id.slice(3)];return{x:e.x+.15,y:e.y+e.d/2}}const n=nodeOf(id);return{x:n.x+.4,y:n.y+.3}};
+let segs=[];
+function route(l,j){const A=anchor(l.a),B=anchor(l.b),off=((j%5)-2)*.07;return[Pt(A.x,A.y+off),Pt(B.x+off,A.y+off),Pt(B.x+off,B.y)]}
+function draw(ms){
+  cancelAnimationFrame(raf);if(tv!=='map'||$('#vTraffic').hidden||!W)return;
+  const T=(ms||performance.now())/1000,still=RM.matches;
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle=C.floor;ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=C['floor-line'];ctx.lineWidth=1;
+  for(let i=0;i<=12;i++){const a=Pt(i,0),b=Pt(i,6.6);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+  for(let j=0;j<=6.6;j+=1.1){const a=Pt(0,j),b=Pt(12,j);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}
+  // outside endpoints: dashed zones, like the cloud zone of the room
+  for(const k in EP){const e=EP[k],p=[Pt(e.x,e.y),Pt(e.x+e.w,e.y),Pt(e.x+e.w,e.y+e.d),Pt(e.x,e.y+e.d)];ctx.setLineDash([6,5]);poly(p,C.zone,C['line-2'],1.2);ctx.setLineDash([])}
+  const tags=[];for(const k in EP){const e=EP[k],p=Pt(e.x+e.w/2,e.y+e.d/2);tags.push([t(e.k),{x:p.x,y:p.y+4*sc},C.muted,true])}
+  // cables
+  segs=[];const R=shownLinks();
+  R.forEach((l,j)=>{const pts=route(l,j),st=stateOf(l),col=l.k==='unknown'?C.off:C[KC[l.k]],on=l.a===sel||l.b===sel,hv=hover===l;
+    ctx.globalAlpha=sel&&!on&&!hv?.35:1;ctx.strokeStyle=st==='down'?C.crit:col;
+    const r=(l.o||0)+(l.i||0);ctx.lineWidth=st==='inuse'?Math.max(1.5,Math.min(5,Math.log10(r+10)-1.4)*sc*1.3):Math.max(1,sc);
+    ctx.setLineDash(st==='down'||l.k==='unknown'?[4,4]:l.design?[10,3]:[]);ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[1].x,pts[1].y);ctx.lineTo(pts[2].x,pts[2].y);ctx.stroke();ctx.setLineDash([]);
+    const L1=Math.hypot(pts[1].x-pts[0].x,pts[1].y-pts[0].y),L2=Math.hypot(pts[2].x-pts[1].x,pts[2].y-pts[1].y),Lt=L1+L2||1;
+    const at=d=>d<L1?{x:pts[0].x+(pts[1].x-pts[0].x)*d/(L1||1),y:pts[0].y+(pts[1].y-pts[0].y)*d/(L1||1)}:{x:pts[1].x+(pts[2].x-pts[1].x)*(d-L1)/(L2||1),y:pts[1].y+(pts[2].y-pts[1].y)*(d-L1)/(L2||1)};
+    const fwd=(l.o||0)>=(l.i||0); // dominant direction, from a to b
+    if(st==='inuse'){
+      if(!still){const n=r>1e6?3:r>2e4?2:1;for(let k=0;k<n;k++){let d=(T*70+k*Lt/n+j*31)%Lt;if(!fwd)d=Lt-d;const p=at(d);ctx.fillStyle=col;ctx.fillRect(p.x-2.2*sc,p.y-1.4*sc,4.4*sc,2.8*sc)}}
+      const m=at(Lt*.5),m2=at(Lt*.5+(fwd?6:-6));const ang=Math.atan2(m2.y-m.y,m2.x-m.x);ctx.save();ctx.translate(m.x,m.y);ctx.rotate(ang);ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(5*sc,0);ctx.lineTo(-3*sc,-3.5*sc);ctx.lineTo(-3*sc,3.5*sc);ctx.closePath();ctx.fill();ctx.restore();
+    }
+    if(on||hv){const m=at(Lt*.62);const txt=`${t('k_'+l.k)} · ${st==='down'?t('l_down'):fmtR(Math.max(l.o||0,l.i||0))}`;ctx.font=`500 ${Math.round(Math.max(9,Math.min(12,10.5*sc)))}px "IBM Plex Mono", monospace`;const w=ctx.measureText(txt).width;
+      ctx.globalAlpha=.92;ctx.fillStyle=C.surface;ctx.fillRect(m.x+6,m.y-11,w+8,15);ctx.globalAlpha=1;label(txt,{x:m.x+10,y:m.y},col===C.off?C.muted:col,true)}
+    ctx.globalAlpha=1;segs.push({l,pts});
+  });
+  // nodes
+  const hits=[];
+  [...NODES].sort((a,b)=>(a.x+a.y)-(b.x+b.y)).forEach(n=>{const w=.8,d=.6,h=(n.role?26:20),off=n.status==='offline';
+    ctx.globalAlpha=off?.55:1;const sil=box(n.x,n.y,w,d,0,h,n.role==='hub'?C.signal:n.role==='standby'?C.signal:C['metal-top']);
+    const led=Pt(n.x+.1,n.y+d,h*.5);ctx.fillStyle=off?C.off:C.ok;ctx.fillRect(led.x-1.6*sc,led.y-1.6*sc,3.2*sc,3.2*sc);
+    if(n.role==='standby'){poly(sil,null,C['metal-edge'],1)}
+    const lp=Pt(n.x+w/2,n.y+d+.1);tags.push([n.id+(n.role==='hub'?' · HUB':''),{x:lp.x,y:lp.y+14*sc},off?C.faint:C.ink,!!n.role]);
+    if(n.id===sel){ctx.save();ctx.setLineDash([5,4]);ctx.lineDashOffset=still?0:-T*14;poly(sil,null,C.info,2);ctx.restore()}
+    ctx.globalAlpha=1;hits.push({n,sil})});
+  tags.forEach(([s,p,col,b])=>{ctx.font=`${b?600:500} ${Math.round(Math.max(9,Math.min(13,11*sc)))}px "IBM Plex Mono", monospace`;const w=ctx.measureText(s).width;ctx.globalAlpha=.85;ctx.fillStyle=C.floor;ctx.fillRect(p.x-w/2-3,p.y-10,w+6,14);ctx.globalAlpha=1;label(s,p,col,b,'center')});
+  draw.hits=hits;
+  if(!still)raf=requestAnimationFrame(draw);
+}
+function inside(p,pts){let c=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const a=pts[i],b=pts[j];if((a.y>p.y)!==(b.y>p.y)&&p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x)c=!c}return c}
+function dseg(p,a,b){const dx=b.x-a.x,dy=b.y-a.y,L=dx*dx+dy*dy||1;let k=((p.x-a.x)*dx+(p.y-a.y)*dy)/L;k=Math.max(0,Math.min(1,k));return Math.hypot(p.x-a.x-k*dx,p.y-a.y-k*dy)}
+function pick(x,y){const p={x,y};for(const h of (draw.hits||[]).slice().reverse())if(inside(p,h.sil))return h.n;let best=null,bd=7;for(const s of segs){const d=Math.min(dseg(p,s.pts[0],s.pts[1]),dseg(p,s.pts[1],s.pts[2]));if(d<bd){bd=d;best=s.l}}return best}
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,o=pick(x,y),tp=$('#tip');
+  hover=o&&o.k?o:null;cv.style.cursor=o?'pointer':'default';
+  if(!o){tp.hidden=true;if(RM.matches)draw();return}
+  tp.hidden=false;if(o.k){const st=stateOf(o);tp.innerHTML=`<b class="mono">${epName(o.a)} → ${epName(o.b)}</b><div class="r"><span>${t('k_'+o.k)}</span><span>${t('l_'+st)}</span></div><div class="r"><span>↑ ${fmtR(o.o)}</span><span>↓ ${fmtR(o.i)}</span></div><div class="r"><span>${ownerOf(o)}</span></div><div class="r"><span>${t('tc_how')}</span><span>${t('how_'+o.how)}</span></div>`}
+  else tp.innerHTML=`<b class="mono">${o.id}</b><div class="r"><span>${t(o.status)}</span><span>${fmtR(IFT[o.id])}</span></div>`;
+  tp.style.left=Math.min(x+14,W-270)+'px';tp.style.top=Math.min(y+14,H-120)+'px';if(RM.matches)draw()});
+cv.addEventListener('pointerleave',()=>{hover=null;$('#tip').hidden=true;if(RM.matches)draw()});
+cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect(),o=pick(e.clientX-r.left,e.clientY-r.top);if(!o)return;select(o.k?(o.a.startsWith('ep:')?o.b:o.a):o.id)});
+
+/* ---------- live-ish rates ---------- */
+setInterval(()=>{LINKS.forEach(l=>{if(l.st==='inuse'&&l.o!=null){l.o*=.85+Math.random()*.3;l.i*=.85+Math.random()*.3}});if(view==='traffic'){if(!$('#insp').contains(document.activeElement))renderInsp();if(tv==='table')renderLinkTable();if(RM.matches)draw()}},3000);
+
+/* ---------- views, theme, language ---------- */
+function setView(v){view=v;store.set('rnet2-view',v);$('#vPorts').hidden=v!=='ports';$('#vTraffic').hidden=v!=='traffic';
+  $$('[data-v]').forEach(b=>{if(b.dataset.v===v)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  $('#h1').textContent=t(v==='ports'?'t_ports':'t_traffic');document.title=`Regulus · ${t(v==='ports'?'t_ports':'t_traffic')}`;
+  if(v==='traffic'){requestAnimationFrame(()=>{fit();applyTv();renderInsp()})}else cancelAnimationFrame(raf)}
+$$('[data-v]').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+function setTheme(v){if(v==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',v);store.set('rnet2-theme',v);$$('[data-th]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.th===v));requestAnimationFrame(()=>{readColors();draw()})}
+$$('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{readColors();draw()});
+RM.addEventListener('change',()=>draw());
+function applyLang(){document.documentElement.lang=LANG;$$('[data-i]').forEach(e=>e.textContent=t(e.dataset.i));$$('[data-l]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===LANG));
+  renderPortControls();renderPorts();renderLog();renderTrafficControls();renderInsp();if(tv==='table')renderLinkTable();setView(view)}
+$$('[data-l]').forEach(b=>b.onclick=()=>{LANG=b.dataset.l;store.set('rnet2-lang',LANG);applyLang()});
+addEventListener('keydown',e=>{if(e.key==='Escape')$('#tip').hidden=true});
+
+readColors();setTheme(store.get('rnet2-theme','system'));applyLang();
+})();
+</script>
+</body>
+</html>
