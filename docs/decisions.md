@@ -206,6 +206,19 @@ Choices made while writing the runtime, so they are not rediscovered:
 - **Agent first.** The supervisor is wired into `regulus agent` (`plugins_dir`, off by default). The hub's wiring needs its settings and status pages and is left for a follow-up.
 - **Not done, on purpose:** signatures, installation, enforcement of permissions, a user per plugin. Until #20, the plugins directory must be writable by root only: who can write it decides what runs.
 
+## Managers, backends and apps (epic #286, proposed)
+
+Agreed in conversation on 2026-11-19. **Proposed**: the names and the direction are decided, the design of each part is in the issues of #286. Nothing is implemented. The full page is [managers-and-apps.md](managers-and-apps.md).
+
+- **Four words, four meanings.** *Plugin* (code that extends Regulus, unchanged), *manager* (a function of a server Regulus manages), *backend* (the real tool behind a manager), *app* (third-party software in containers). **Rejected words:** *extension* and *add-on* (a second name for plugin), *snippet* (no feature needs it).
+- **Manager, not capability.** *Capability* is already in the glossary for what a node type does (#104, #160, #169). One word with two meanings would make "does this node have the firewall capability?" ambiguous.
+- **Use existing tools.** Regulus does not write its own RAID, firewall, container runtime or VPN. One **active backend per manager per server**. The firewall is the example: nftables is the kernel layer and ufw and firewalld sit on top of it, so Regulus detects the one the distribution uses instead of offering four equal choices; iptables is not supported. LVM is not an alternative to mdadm (arrays and logical volumes are different layers), so storage and volumes is a separate manager (#293) from RAID (#285).
+- **Apps run in containers**, with their data in a declared volume. **Rejected:** installing the software natively in a dedicated volume as a service. It would need an installation, update and cleanup method per program that Regulus would have to know. The container runtime is a backend (Docker or Podman, chosen by the administrator), not a hard-coded choice; the common format is the Compose specification. Kubernetes is out of scope for now. This answers the first item of #113 in direction; the details are #289.
+- **Apps are not plugins.** They need no gRPC and no Regulus API. An app that needs something from the host (an open port, a VPN) asks the matching manager and never changes the host itself.
+- **Docker was described as a plugin** (the "plugins such as Docker" remark under *Plugins: manifest and runtime* above). With this vocabulary Docker is a **backend** of the container manager; whether the code that drives it is built in or a plugin is open (#287).
+- **Milestones.** The model (#287), the apps (#288), the container manager (#289) and the three managers the maintainer named (firewall #290, VPN #291, wake #292) are in **M6**: they define how plugins are used and need #261 first. The other managers (#293 to #300) and the first apps (#301) have no milestone yet.
+- **Not decided:** built in or plugin for the part that changes state; how privileged actions work (#60); which guards each dangerous operation needs; observe or manage per manager (RAID proposes *observe first*, #285); whether a node type enables managers by default.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
