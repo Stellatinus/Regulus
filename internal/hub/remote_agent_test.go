@@ -68,7 +68,7 @@ func runAgent(t *testing.T, h *Hub, creds *agent.Credentials) (stop func(), resu
 
 func enrollNew(t *testing.T, h *Hub, name string) *agent.Credentials {
 	t.Helper()
-	grant, err := h.CreateEnrollment(context.Background(), "admin", name)
+	grant, err := h.CreateEnrollment(context.Background(), "admin", name, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestRemoteAgentEnrollsConnectsAndIsRevoked(t *testing.T) {
 func TestEnrollmentRefusals(t *testing.T) {
 	h := startRemoteHub(t)
 	ctx := context.Background()
-	grant, err := h.CreateEnrollment(ctx, "admin", "")
+	grant, err := h.CreateEnrollment(ctx, "admin", "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,9 +301,84 @@ func TestEnrollmentAPI(t *testing.T) {
 	}
 }
 
+func TestEnrollmentTokensCanBeListedAndRevoked(t *testing.T) {
+	h := startRemoteHub(t)
+	admin := newAPI(t, h, auth.RoleAdmin)
+
+	create := func(body map[string]string) (token, fingerprint string) {
+		rec := admin.do("POST", "/api/enrollment-tokens", body)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create: status = %d, body = %s", rec.Code, rec.Body)
+		}
+		var grant struct {
+			Token         string `json:"token"`
+			CAFingerprint string `json:"ca_fingerprint"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &grant); err != nil {
+			t.Fatal(err)
+		}
+		return grant.Token, grant.CAFingerprint
+	}
+	token, fingerprint := create(map[string]string{"name": "db1", "ttl": "15m"})
+	create(map[string]string{"name": "db2"})
+
+	list := func() []struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		CreatedBy string `json:"created_by"`
+		ExpiresAt string `json:"expires_at"`
+	} {
+		rec := admin.do("GET", "/api/enrollment-tokens", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("list: status = %d, body = %s", rec.Code, rec.Body)
+		}
+		if strings.Contains(rec.Body.String(), token) {
+			t.Fatal("the list shows the secret of a token")
+		}
+		var out []struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			CreatedBy string `json:"created_by"`
+			ExpiresAt string `json:"expires_at"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	pending := list()
+	if len(pending) != 2 || pending[0].Name != "db1" || pending[0].CreatedBy != "admin" || pending[0].ID == "" || pending[0].ExpiresAt == "" {
+		t.Fatalf("pending = %+v", pending)
+	}
+
+	if rec := admin.do("DELETE", "/api/enrollment-tokens/"+pending[0].ID, struct{}{}); rec.Code != http.StatusNoContent {
+		t.Fatalf("revoke: status = %d, body = %s", rec.Code, rec.Body)
+	}
+	if _, err := agent.Enroll(context.Background(), h.AgentAddr(), fingerprint, token, "1", t.TempDir()); err == nil {
+		t.Fatal("enrolled with a revoked token")
+	}
+	if after := list(); len(after) != 1 || after[0].Name != "db2" {
+		t.Errorf("after revoking: %+v", after)
+	}
+	if rec := admin.do("DELETE", "/api/enrollment-tokens/"+pending[0].ID, struct{}{}); rec.Code != http.StatusNotFound {
+		t.Errorf("revoke twice: status = %d, want 404", rec.Code)
+	}
+	for _, ttl := range []string{"soon", "1s", "9999h"} {
+		if rec := admin.do("POST", "/api/enrollment-tokens", map[string]string{"ttl": ttl}); rec.Code != http.StatusBadRequest {
+			t.Errorf("ttl %q: status = %d, want 400", ttl, rec.Code)
+		}
+	}
+}
+
 func TestEnrollmentAPIIsAdminOnly(t *testing.T) {
 	h := startRemoteHub(t)
 	viewer := newAPI(t, h, auth.RoleViewer)
+	if rec := viewer.do("GET", "/api/enrollment-tokens", nil); rec.Code != http.StatusForbidden {
+		t.Errorf("viewer listing tokens: status = %d, want 403", rec.Code)
+	}
+	if rec := viewer.do("DELETE", "/api/enrollment-tokens/0123456789abcdef", struct{}{}); rec.Code != http.StatusForbidden {
+		t.Errorf("viewer revoking a token: status = %d, want 403", rec.Code)
+	}
 	if rec := viewer.do("POST", "/api/enrollment-tokens", map[string]string{}); rec.Code != http.StatusForbidden {
 		t.Errorf("viewer creating a token: status = %d, want 403", rec.Code)
 	}

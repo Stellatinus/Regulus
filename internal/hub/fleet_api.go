@@ -30,20 +30,23 @@ type Enrollment struct {
 // FleetControl is what the HTTP API needs to enroll and revoke remote agents.
 // *Hub implements it.
 type FleetControl interface {
-	CreateEnrollment(ctx context.Context, by, name string) (Enrollment, error)
+	CreateEnrollment(ctx context.Context, by, name string, ttl time.Duration) (Enrollment, error)
+	PendingEnrollments(ctx context.Context) ([]fleet.PendingToken, error)
+	RevokeEnrollment(ctx context.Context, by, id string) error
 	RevokeAgent(ctx context.Context, by, id string) error
 	RenameAgent(ctx context.Context, by, id, name string) error
 	AgentListener(ctx context.Context) (AgentListener, error)
 	EnableAgents(ctx context.Context, by string, port int) (AgentListener, error)
 }
 
-// CreateEnrollment makes a one-time enrollment token.
-func (h *Hub) CreateEnrollment(ctx context.Context, by, name string) (Enrollment, error) {
+// CreateEnrollment makes a one-time enrollment token, valid for ttl (the
+// default of fleet.TokenTTL when zero).
+func (h *Hub) CreateEnrollment(ctx context.Context, by, name string, ttl time.Duration) (Enrollment, error) {
 	addr := h.AgentAddr()
 	if addr == "" {
 		return Enrollment{}, ErrAgentsOff
 	}
-	token, expires, err := h.fleet.CreateToken(ctx, by, name)
+	token, expires, err := h.fleet.CreateToken(ctx, by, name, ttl)
 	if err != nil {
 		return Enrollment{}, err
 	}
@@ -56,6 +59,16 @@ func (h *Hub) CreateEnrollment(ctx context.Context, by, name string) (Enrollment
 		CAFingerprint: h.fleet.CA().Fingerprint(),
 		AgentPort:     n,
 	}, nil
+}
+
+// PendingEnrollments lists the enrollment tokens that can still be used.
+func (h *Hub) PendingEnrollments(ctx context.Context) ([]fleet.PendingToken, error) {
+	return h.fleet.PendingTokens(ctx)
+}
+
+// RevokeEnrollment cancels a pending enrollment token.
+func (h *Hub) RevokeEnrollment(ctx context.Context, by, id string) error {
+	return h.fleet.RevokeToken(ctx, by, id)
 }
 
 // RevokeAgent stops an agent from connecting again and drops its connection.
@@ -89,17 +102,30 @@ func (f fleetHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Name string `json:"name"`
+		// TTL is how long the token can be used, a duration such as "15m" or
+		// "24h"; empty is the default of one hour.
+		TTL string `json:"ttl"`
 	}
 	if !decodeBody(w, r, &req) {
 		return
 	}
+	var ttl time.Duration
+	if req.TTL != "" {
+		d, err := time.ParseDuration(req.TTL)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, `ttl must be a duration such as "15m" or "24h"`)
+			return
+		}
+		ttl = d
+	}
 	by, _ := auth.UserFrom(r.Context())
-	grant, err := f.fleet.CreateEnrollment(r.Context(), by.Username, req.Name)
+	grant, err := f.fleet.CreateEnrollment(r.Context(), by.Username, req.Name, ttl)
 	var nameErr *fleet.NameError
+	var ttlErr *fleet.TTLError
 	switch {
 	case errors.Is(err, ErrAgentsOff):
 		writeJSONError(w, http.StatusConflict, err.Error())
-	case errors.As(err, &nameErr):
+	case errors.As(err, &nameErr), errors.As(err, &ttlErr):
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 	case err != nil:
 		writeJSONError(w, http.StatusInternalServerError, "internal error")
@@ -117,6 +143,53 @@ func (f fleetHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 			body["hub_version"] = v.String()
 		}
 		writeJSONBody(w, http.StatusCreated, body)
+	}
+}
+
+// listTokens answers with the enrollment tokens that can still be used. The
+// secret of a token was shown once, when it was made, and is not kept.
+func (f fleetHandlers) listTokens(w http.ResponseWriter, r *http.Request) {
+	if f.fleet == nil {
+		http.NotFound(w, r)
+		return
+	}
+	pending, err := f.fleet.PendingEnrollments(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	type item struct {
+		ID        string    `json:"id"`
+		Name      string    `json:"name"`
+		CreatedBy string    `json:"created_by"`
+		CreatedAt time.Time `json:"created_at"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	out := make([]item, 0, len(pending))
+	for _, p := range pending {
+		out = append(out, item{p.ID, p.Name, p.CreatedBy, p.CreatedAt.UTC(), p.ExpiresAt.UTC()})
+	}
+	writeJSONBody(w, http.StatusOK, out)
+}
+
+func (f fleetHandlers) revokeToken(w http.ResponseWriter, r *http.Request) {
+	if f.fleet == nil {
+		http.NotFound(w, r)
+		return
+	}
+	var req struct{}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	by, _ := auth.UserFrom(r.Context())
+	err := f.fleet.RevokeEnrollment(r.Context(), by.Username, r.PathValue("id"))
+	switch {
+	case errors.Is(err, fleet.ErrTokenNotFound):
+		writeJSONError(w, http.StatusNotFound, "no pending enrollment token with this id")
+	case err != nil:
+		writeJSONError(w, http.StatusInternalServerError, "internal error")
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
