@@ -21,6 +21,11 @@ export const accountIt: Record<keyof typeof account, string> = {
   "account.sessions.thisOne": "adesso (questa sessione)",
   "account.sessions.signOutFrom": "Disconnetti {from}",
   "account.sessions.signOutSession": "Disconnetti la sessione",
+  "account.appearance.title": "Aspetto e lingua",
+  "account.appearance.hint": "Salvati in questo browser. Sistema segue l'impostazione chiara o scura del dispositivo; lingua del browser segue il tuo browser.",
+  "account.sessions.signOut": "Disconnetti",
+  "account.sessions.signOutNamed": "Disconnetti {device}, {from}, {used}",
+  "account.sessions.device": "{browser} su {os}",
 
   "account.twoFactor.title": "Autenticazione a due fattori",
   "account.twoFactor.loadError": "Impossibile caricare lo stato: {message}",

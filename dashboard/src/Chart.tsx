@@ -36,6 +36,19 @@ export function niceMax(value: number, min = 1): number {
   return 10 * power;
 }
 
+// firstFrom returns the index of the first time at or after start, or -1. The
+// times are ascending, so a binary search keeps a long series cheap.
+export function firstFrom(times: number[], start: number): number {
+  let lo = 0;
+  let hi = times.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] < start) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < times.length ? lo : -1;
+}
+
 // paths builds the line and the filled area of one series. Missing values
 // split it into separate runs.
 export function paths(times: number[], values: (number | null)[], start: number, end: number, max: number) {
@@ -66,12 +79,13 @@ export function paths(times: number[], values: (number | null)[], start: number,
 export function Chart({ title, times, series, max, minTop, formatValue, windowMs = DEFAULT_WINDOW_MS }: Props) {
   const t = useT();
   const end = times.length > 0 ? times[times.length - 1] : 0;
-  const from = times.findIndex((time) => time >= end - windowMs);
+  const from = firstFrom(times, end - windowMs);
   if (times.length < 2 || from < 0 || from >= times.length - 1) {
     return <p className="chart-empty">{t("servers.chart.collecting")}</p>;
   }
-  const visibleTimes = times.slice(from);
-  const visible = series.map((s) => ({ ...s, values: s.values.slice(from) }));
+  // The live widgets already pass only the window; slice only when needed.
+  const visibleTimes = from === 0 ? times : times.slice(from);
+  const visible = from === 0 ? series : series.map((s) => ({ ...s, values: s.values.slice(from) }));
   const top = max ?? niceMax(Math.max(0, ...visible.flatMap((s) => s.values.filter((v): v is number => v !== null))), minTop);
   const start = end - windowMs;
 

@@ -20,6 +20,11 @@ export const account = {
   "account.sessions.thisOne": "now (this session)",
   "account.sessions.signOutFrom": "Sign out {from}",
   "account.sessions.signOutSession": "Sign out session",
+  "account.appearance.title": "Appearance and language",
+  "account.appearance.hint": "Saved in this browser. System follows the light or dark setting of your device; browser language follows your browser.",
+  "account.sessions.signOut": "Sign out",
+  "account.sessions.signOutNamed": "Sign out {device}, {from}, {used}",
+  "account.sessions.device": "{browser} on {os}",
 
   "account.twoFactor.title": "Two-factor authentication",
   "account.twoFactor.loadError": "Could not load the state: {message}",

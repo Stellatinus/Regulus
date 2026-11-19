@@ -72,7 +72,6 @@ function renderAs(user: User, page: React.ReactNode) {
 }
 
 beforeEach(() => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -159,7 +158,7 @@ describe("ServersPage", () => {
     expect((screen.getByLabelText("Agent command") as HTMLInputElement).value).toBe(
       `regulus agent ${options} --data-dir /var/lib/regulus-agent`,
     );
-    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "Web" });
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ name: "Web", ttl: "1h" });
     // The list is fetched again so the new server shows up.
     await waitFor(() => expect(calls.filter((c) => c.path === "/api/agents?all=true").length).toBeGreaterThan(1));
   });
@@ -177,7 +176,6 @@ describe("ServersPage", () => {
         return { status: 204 };
       },
     });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
@@ -187,9 +185,11 @@ describe("ServersPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel token Web" }));
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
 
-    confirm.mockReturnValue(true);
     await user.click(screen.getByRole("button", { name: "Cancel token Web" }));
+    await user.click(screen.getByRole("button", { name: "Cancel the token" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel token Web" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Cancel token (no name)" })).toBeInTheDocument();
   });
@@ -341,15 +341,12 @@ describe("ServerPage", () => {
       "GET /api/agents/web1": () => ({ data: online }),
       "DELETE /api/agents/web1": () => ({ status: 204 }),
     });
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const user = userEvent.setup();
     renderAs(admin, <ServerPage id="web1" />);
 
     await user.click(await screen.findByRole("button", { name: "Revoke this server" }));
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
-
-    confirm.mockReturnValue(true);
-    await user.click(screen.getByRole("button", { name: "Revoke this server" }));
+    await user.click(screen.getByRole("button", { name: "Revoke the server" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
   });
 

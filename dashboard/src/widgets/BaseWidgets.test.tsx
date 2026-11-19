@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Agent, MetricsPoint } from "../api";
 import { FakeSocket } from "../fake-socket";
-import { LiveProvider } from "../LiveProvider";
+import { LiveProvider, retryDelay, STABLE_MS } from "../LiveProvider";
 import { CpuWidget, DiskWidget, MemoryWidget, NetworkWidget, SystemWidget, UptimeWidget } from "./BaseWidgets";
 import { registry } from "./index";
 import type { WidgetProps } from "./registry";
@@ -284,6 +284,70 @@ describe("live updates", () => {
     expect(FakeSocket.instances).toHaveLength(0);
   });
 
+  it("drops a malformed report and keeps drawing; fills in missing lists", async () => {
+    mockHub();
+    await show(
+      <>
+        <CpuWidget {...props()} />
+        <NetworkWidget {...props()} />
+      </>,
+    );
+    act(() => FakeSocket.last.open());
+    // A number is missing, then a string where a number goes, then no time.
+    const bad = { ...point(5), cpu_percent: undefined };
+    act(() => FakeSocket.last.send({ type: "agent.metrics", id: "local", point: bad }));
+    act(() => FakeSocket.last.send({ type: "agent.metrics", id: "local", point: { ...point(6), cpu_percent: "99" } }));
+    act(() => FakeSocket.last.send({ type: "agent.metrics", id: "local", point: { ...point(7), at: "yesterday" } }));
+    expect(screen.getByText("42%")).toBeInTheDocument();
+
+    // No network list at all (or null, as Go writes an empty one): no crash.
+    const noNetworks: Partial<MetricsPoint> = point(8, { cpu_percent: 64 });
+    delete noNetworks.networks;
+    act(() => FakeSocket.last.send({ type: "agent.metrics", id: "local", point: noNetworks }));
+    expect(screen.getByText("64%")).toBeInTheDocument();
+    expect(screen.getByText("↓ 0 B/s")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("backs off longer each time the hub accepts and closes at once", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(1); // no jitter, to read the delays
+    mockHub();
+    await show(<CpuWidget {...props()} />, 100);
+
+    // nextDelay drops the open socket and measures the wait for the next one.
+    const nextDelay = async (code?: number, reason?: string) => {
+      const before = FakeSocket.instances.length;
+      act(() => FakeSocket.last.drop(code, reason));
+      let waited = 0;
+      while (FakeSocket.instances.length === before && waited < 20000) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10);
+        });
+        waited += 10;
+      }
+      act(() => FakeSocket.last.open());
+      return waited;
+    };
+
+    act(() => FakeSocket.last.open());
+    const delays = [await nextDelay(), await nextDelay(), await nextDelay(), await nextDelay()];
+    expect(delays).toEqual([100, 200, 400, 800]);
+
+    // Once a connection stays up for a while, the next wait is short again.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STABLE_MS + 10);
+    });
+    expect(await nextDelay()).toBe(100);
+
+    // "too slow" from the hub: wait at least a few seconds.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(STABLE_MS + 10);
+    });
+    expect(await nextDelay(1008, "too slow")).toBeGreaterThanOrEqual(5000);
+    vi.mocked(Math.random).mockRestore();
+  });
+
   it("retries while the hub cannot be reached", async () => {
     vi.useFakeTimers();
     const hub = mockHub({ agentsStatus: 503 });
@@ -295,5 +359,18 @@ describe("live updates", () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(screen.getByText("42%")).toBeInTheDocument();
+  });
+});
+
+describe("retryDelay", () => {
+  it("doubles up to a ceiling and leaves out a random part of up to half", () => {
+    expect([0, 1, 2, 3].map((n) => retryDelay(1000, n, () => 1))).toEqual([1000, 2000, 4000, 8000]);
+    expect(retryDelay(1000, 10, () => 1)).toBe(15000);
+    expect(retryDelay(1000, 2, () => 0)).toBe(2000);
+    for (let i = 0; i < 50; i++) {
+      const d = retryDelay(1000, 3);
+      expect(d).toBeGreaterThanOrEqual(4000);
+      expect(d).toBeLessThanOrEqual(8000);
+    }
   });
 });

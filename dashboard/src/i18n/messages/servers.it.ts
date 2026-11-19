@@ -24,7 +24,8 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.status.revoked": "revocato",
   "servers.status.incompatible": "incompatibile",
 
-  "servers.list.heading": "Agenti",
+  "servers.list.heading": "Server",
+  "servers.list.counts": "Server per stato",
   "servers.list.loadError": "Impossibile caricare gli agenti: {message}",
   "servers.list.noServers": "Nessun server per ora.",
   "servers.list.noneConnected": "Nessun agente connesso.",
@@ -51,6 +52,9 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.server.rename": "Rinomina",
   "servers.server.revoke": "Revoca questo server",
   "servers.server.revokeConfirm": "Revocare {name}? Verrà disconnesso e non potrà mai più connettersi.",
+  "servers.server.revokeYes": "Revoca il server",
+  "servers.server.manage": "Gestione",
+  "servers.server.hubBadge": "hub",
 
   "servers.remoteOff.title": "Gli agenti remoti sono disattivati",
   "servers.remoteOff.intro":
@@ -64,6 +68,12 @@ export const serversIt: Record<keyof typeof servers, string> = {
 
   "servers.add.title": "Aggiungi un server",
   "servers.add.nameLabel": "Nome (facoltativo)",
+  "servers.add.ttlLabel": "Valido per",
+  "servers.add.ttl15m": "15 minuti",
+  "servers.add.ttl1h": "1 ora",
+  "servers.add.ttl24h": "24 ore",
+  "servers.add.ttl7d": "7 giorni",
+  "servers.add.shownOnce": "Questo token è mostrato solo ora: copia il comando prima di lasciare la pagina.",
   "servers.add.createToken": "Crea token di registrazione",
   "servers.add.tokenLabel": "Token di registrazione",
   "servers.add.instructions":
@@ -86,6 +96,7 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.pending.detail": "creato da {user}, scade il {expires}",
   "servers.pending.cancel": "Annulla il token {name}",
   "servers.pending.confirm": "Annullare il token {name}? Un server che non l'ha ancora usato non potrà registrarsi con esso.",
+  "servers.pending.confirmCancel": "Annulla il token",
   "servers.pending.loadError": "Non è stato possibile caricare i token di registrazione in attesa.",
 
   "servers.widget.system.title": "Sistema",
@@ -142,6 +153,8 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.dashboard.add": "Aggiungi",
   "servers.dashboard.addNamed": "Aggiungi {title}",
   "servers.dashboard.removeNamed": "Rimuovi {title}",
+  "servers.dashboard.moveUp": "Sposta {title} in alto",
+  "servers.dashboard.moveDown": "Sposta {title} in basso",
   "servers.dashboard.unavailable": "Widget non disponibile",
   "servers.dashboard.notInstalledBefore": "Il tipo di widget",
   "servers.dashboard.notInstalledAfter": "non è installato. Puoi rimuoverlo.",
