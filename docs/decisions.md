@@ -300,6 +300,15 @@ Written on 2026-11-19. **Proposed**: waiting for the maintainer's agreement. Not
 - **Secrets:** token rules unchanged. The token is shown once and never appears in the docs, the configurator, URLs, logs, audit details or the wizard's saved record.
 - **Not decided:** the permission name and whether `operator` gets the light changes; whether `accept_promotion` moves into `allow`; a redundant hub that also carries agent capabilities (proposed no); leaving the development type; the minimum resources per type (to measure).
 
+## Capabilities: consent is part of the model (audit issue #317)
+
+The draft `internal/capability` turned `relay` and `inbound-listener` on in the gateway preset, while [node-types.md](node-types.md) called them opt-in, and `Has(Relay)` was true without the node's agreement: code written later against it could open a public listener on a node that never agreed. Choices (the package is still a draft that nothing calls):
+
+- **Consent is modelled, not left to callers.** `Resolve(preset, override, allowed)` takes the node's `allow` list (as the node reported it) and returns only the effective set: a capability that needs consent is in it only when assigned **and** allowed; otherwise it is in `Withheld` ("assigned, not allowed by the node"). `Defaults(p)` is `Resolve` with no override and an empty list, so no preset reports an exposure capability by default. **Rejected:** only removing relay from the gateway defaults: it would agree with the table but `Has` would still mean "the hub said so", and the next exposure capability would have the same hole.
+- **The gateway preset still assigns `relay` and `inbound-listener`**: choosing the type is the hub's key, as in [node-type-changes.md](node-type-changes.md) (`--allow gateway` writes `relay`); the table in node-types.md now says `consent` for them and keeps `opt-in` (administrator **and** node) for `notifications` and `authentication`.
+- **The listener follows the capabilities**: `inbound-listener` is effective only while a consent-needing capability is effective (`PermissionNeedsConsent`), because `allow` names capabilities only.
+- **Unknown names are refused** in an override and in the allow list (`ErrUnknown`), and the allow list may hold only capabilities that need consent (`ErrNoConsentNeeded`), as node-type-changes.md says for the file.
+
 ## Web terminal and file browser (#236, #237, proposed)
 
 Proposed on 2026-11-19, **waiting for the maintainer's agreement**; nothing is implemented. The full design, with the threat model, is [node-access.md](node-access.md); the prototype is `design-drafts/node-access-v2.html`.

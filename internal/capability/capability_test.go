@@ -57,9 +57,9 @@ func TestPresetSpecifics(t *testing.T) {
 		{capability.Backup, []capability.Capability{capability.BackupStorage},
 			[]capability.Capability{capability.Workloads, capability.Relay, capability.PrivilegedActions},
 			[]capability.Permission{capability.ReceiveBackups}, []capability.Permission{capability.EgressNetwork, capability.InboundListener}, "hub only"},
-		{capability.Gateway, []capability.Capability{capability.Relay},
-			[]capability.Capability{capability.Notifications, capability.Authentication, capability.Workloads},
-			[]capability.Permission{capability.InboundListener}, []capability.Permission{capability.ReceiveBackups}, "notifications and authentication are opt-in"},
+		{capability.Gateway, nil,
+			[]capability.Capability{capability.Relay, capability.Notifications, capability.Authentication, capability.Workloads},
+			nil, []capability.Permission{capability.InboundListener, capability.ReceiveBackups}, "nothing exposed until the machine allows it"},
 		{capability.Development, nil,
 			[]capability.Capability{capability.Workloads, capability.PrivilegedActions, capability.Relay, capability.BackupStorage},
 			nil, []capability.Permission{capability.EgressNetwork, capability.InboundListener, capability.UsePrivilegedActs}, "isolated"},
@@ -104,14 +104,14 @@ func TestUnknownPreset(t *testing.T) {
 	if _, err := capability.Defaults("nope"); !errors.Is(err, capability.ErrUnknownPreset) {
 		t.Errorf("Defaults: %v, want ErrUnknownPreset", err)
 	}
-	if _, err := capability.Resolve("nope", capability.Override{}); !errors.Is(err, capability.ErrUnknownPreset) {
+	if _, err := capability.Resolve("nope", capability.Override{}, nil); !errors.Is(err, capability.ErrUnknownPreset) {
 		t.Errorf("Resolve: %v, want ErrUnknownPreset", err)
 	}
 }
 
 func TestResolveWithoutOverrideEqualsDefaults(t *testing.T) {
 	for _, p := range presets {
-		got, err := capability.Resolve(p, capability.Override{})
+		got, err := capability.Resolve(p, capability.Override{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,7 +127,7 @@ func TestResolveOneBinaryAnyMachine(t *testing.T) {
 	a, err := capability.Resolve(capability.Compute, capability.Override{
 		Enable: []capability.Capability{capability.BackupStorage, capability.BackupStorage},
 		Allow:  []capability.Permission{capability.ReceiveBackups},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestResolveRemovingWinsOverAdding(t *testing.T) {
 		Enable:  []capability.Capability{capability.Relay},
 		Disable: []capability.Capability{capability.Relay, capability.Workloads},
 		Deny:    []capability.Permission{capability.EgressNetwork},
-	})
+	}, []capability.Capability{capability.Relay})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,20 +155,27 @@ func TestResolveRemovingWinsOverAdding(t *testing.T) {
 
 func TestResolveRefusals(t *testing.T) {
 	cases := []struct {
-		name   string
-		preset capability.Preset
-		o      capability.Override
-		want   error
+		name    string
+		preset  capability.Preset
+		o       capability.Override
+		allowed []capability.Capability
+		want    error
 	}{
-		{"cannot disable report", capability.Compute, capability.Override{Disable: []capability.Capability{capability.Report}}, capability.ErrFixed},
-		{"cannot deny the hub", capability.Backup, capability.Override{Deny: []capability.Permission{capability.ReachHub}}, capability.ErrFixed},
-		{"development cannot be a gateway", capability.Development, capability.Override{Enable: []capability.Capability{capability.Relay}}, capability.ErrNotAllowed},
-		{"development cannot listen", capability.Development, capability.Override{Allow: []capability.Permission{capability.InboundListener}}, capability.ErrNotAllowed},
-		{"development needs a grant for shared resources", capability.Development, capability.Override{Allow: []capability.Permission{capability.SharedResources}}, capability.ErrNeedsGrant},
-		{"development needs a grant to reach peers", capability.Development, capability.Override{Allow: []capability.Permission{capability.ReachPeers}}, capability.ErrNeedsGrant},
+		{"cannot disable report", capability.Compute, capability.Override{Disable: []capability.Capability{capability.Report}}, nil, capability.ErrFixed},
+		{"cannot deny the hub", capability.Backup, capability.Override{Deny: []capability.Permission{capability.ReachHub}}, nil, capability.ErrFixed},
+		{"development cannot be a gateway", capability.Development, capability.Override{Enable: []capability.Capability{capability.Relay}}, nil, capability.ErrNotAllowed},
+		{"development cannot listen", capability.Development, capability.Override{Allow: []capability.Permission{capability.InboundListener}}, nil, capability.ErrNotAllowed},
+		{"development needs a grant for shared resources", capability.Development, capability.Override{Allow: []capability.Permission{capability.SharedResources}}, nil, capability.ErrNeedsGrant},
+		{"development needs a grant to reach peers", capability.Development, capability.Override{Allow: []capability.Permission{capability.ReachPeers}}, nil, capability.ErrNeedsGrant},
+		{"unknown capability enabled", capability.Compute, capability.Override{Enable: []capability.Capability{"teleport"}}, nil, capability.ErrUnknown},
+		{"unknown capability disabled", capability.Compute, capability.Override{Disable: []capability.Capability{"Relay"}}, nil, capability.ErrUnknown},
+		{"unknown permission allowed", capability.Compute, capability.Override{Allow: []capability.Permission{"root"}}, nil, capability.ErrUnknown},
+		{"unknown permission denied", capability.Compute, capability.Override{Deny: []capability.Permission{""}}, nil, capability.ErrUnknown},
+		{"unknown name in the allow list", capability.Gateway, capability.Override{}, []capability.Capability{"gateway"}, capability.ErrUnknown},
+		{"allow list names a capability without consent", capability.Gateway, capability.Override{}, []capability.Capability{capability.Workloads}, capability.ErrNoConsentNeeded},
 	}
 	for _, c := range cases {
-		if _, err := capability.Resolve(c.preset, c.o); !errors.Is(err, c.want) {
+		if _, err := capability.Resolve(c.preset, c.o, c.allowed); !errors.Is(err, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, err, c.want)
 		}
 	}
@@ -183,6 +190,105 @@ func TestNeedsConsent(t *testing.T) {
 	for _, c := range []capability.Capability{capability.Report, capability.SelfUpdate, capability.BackupStorage, capability.Workloads} {
 		if capability.NeedsConsent(c) {
 			t.Errorf("%s should not need the machine's consent", c)
+		}
+	}
+}
+
+func TestPermissionNeedsConsent(t *testing.T) {
+	if !capability.PermissionNeedsConsent(capability.InboundListener) {
+		t.Error("inbound-listener should need the machine's consent")
+	}
+	for _, p := range []capability.Permission{capability.ReachHub, capability.EgressNetwork, capability.ReceiveBackups} {
+		if capability.PermissionNeedsConsent(p) {
+			t.Errorf("%s should not need the machine's consent", p)
+		}
+	}
+}
+
+// The two keys of docs/node-types.md: what changes what a machine exposes is
+// effective only when the hub assigns it and the machine allows it (#317).
+func TestExposureNeedsBothKeys(t *testing.T) {
+	relay := []capability.Capability{capability.Relay}
+
+	// The hub's key alone: the gateway preset without the machine's consent.
+	a, err := capability.Resolve(capability.Gateway, capability.Override{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Has(capability.Relay) || a.Allows(capability.InboundListener) {
+		t.Errorf("exposure without consent: %+v", a)
+	}
+	if !slices.Equal(a.Withheld, relay) || !slices.Equal(a.WithheldPermissions, []capability.Permission{capability.InboundListener}) {
+		t.Errorf("withheld = %v %v, want relay and inbound-listener", a.Withheld, a.WithheldPermissions)
+	}
+
+	// Both keys.
+	a, err = capability.Resolve(capability.Gateway, capability.Override{}, relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Has(capability.Relay) || !a.Allows(capability.InboundListener) || len(a.Withheld) != 0 || len(a.WithheldPermissions) != 0 {
+		t.Errorf("gateway with relay allowed: %+v", a)
+	}
+
+	// The machine's key alone: allowing relay on a compute machine the hub
+	// did not make a gateway turns nothing on.
+	a, err = capability.Resolve(capability.Compute, capability.Override{}, relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Has(capability.Relay) || a.Allows(capability.InboundListener) {
+		t.Errorf("consent without the hub's key: %+v", a)
+	}
+
+	// Allowing relay does not consent to the gateway's other capabilities.
+	a, err = capability.Resolve(capability.Gateway, capability.Override{
+		Enable: []capability.Capability{capability.Notifications, capability.Authentication},
+	}, relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !a.Has(capability.Relay) || a.Has(capability.Notifications) || a.Has(capability.Authentication) {
+		t.Errorf("consent leaked from relay: %+v", a)
+	}
+	if !slices.Equal(a.Withheld, []capability.Capability{capability.Authentication, capability.Notifications}) {
+		t.Errorf("withheld = %v", a.Withheld)
+	}
+
+	// The listener cannot be given on its own: with no exposure capability
+	// effective, it stays withheld whatever the override says.
+	a, err = capability.Resolve(capability.Compute, capability.Override{
+		Allow: []capability.Permission{capability.InboundListener},
+	}, relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Allows(capability.InboundListener) || !slices.Contains(a.WithheldPermissions, capability.InboundListener) {
+		t.Errorf("listener without an exposure capability: %+v", a)
+	}
+
+	// An override that removes relay wins, and the listener goes with it.
+	a, err = capability.Resolve(capability.Gateway, capability.Override{Disable: relay}, relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Has(capability.Relay) || a.Allows(capability.InboundListener) || len(a.Withheld) != 0 {
+		t.Errorf("relay disabled on the hub: %+v", a)
+	}
+}
+
+// No preset, whatever the allow list, reports an exposure capability or
+// permission without consent.
+func TestNoPresetExposesWithoutConsent(t *testing.T) {
+	for _, p := range presets {
+		a := mustDefaults(t, p)
+		for _, c := range []capability.Capability{capability.Relay, capability.Notifications, capability.Authentication} {
+			if a.Has(c) {
+				t.Errorf("%s: %s on without consent", p, c)
+			}
+		}
+		if a.Allows(capability.InboundListener) {
+			t.Errorf("%s: inbound-listener without consent", p)
 		}
 	}
 }
