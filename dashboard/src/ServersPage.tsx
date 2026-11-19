@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import { AgentList } from "./AgentList";
-import { createEnrollment, enableRemoteAgents, fetchAgentListener, type AgentListener, type Enrollment } from "./api";
+import {
+  createEnrollment,
+  enableRemoteAgents,
+  fetchAgentListener,
+  fetchEnrollmentTokens,
+  revokeEnrollmentToken,
+  type AgentListener,
+  type Enrollment,
+  type PendingEnrollment,
+} from "./api";
 import { useT } from "./i18n";
 import { useCan } from "./session";
-import { errorMessage } from "./useApiList";
+import { errorMessage, useApiList, type ListState } from "./useApiList";
 
 // ServersPage lists the servers and, for those who may manage servers, adds new
 // ones. While remote agents are off it says so first, and lets those who may
@@ -118,6 +127,7 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
   const [grant, setGrant] = useState<Enrollment | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pending, reloadPending] = useApiList<PendingEnrollment>(fetchEnrollmentTokens);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,6 +136,7 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
     try {
       setGrant(await createEnrollment(name.trim()));
       setName("");
+      reloadPending();
       onAdded();
     } catch (err) {
       setGrant(null);
@@ -164,7 +175,55 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
           <CommandBox label={t("servers.add.agentCommand")} copyLabel={t("servers.add.copyAgent")} command={agentCommand(grant, host)} />
         </div>
       )}
+      <PendingTokens state={pending} onChanged={reloadPending} />
     </section>
+  );
+}
+
+// PendingTokens lists the enrollment tokens nobody has used yet, so one that
+// was pasted where it should not have been can be cancelled. A list that
+// cannot be loaded (an older hub has none) is left out; it is not an error of
+// the page.
+function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollment>; onChanged: () => void }) {
+  const t = useT();
+  const [error, setError] = useState("");
+  if (state.kind === "error") return <p className="muted">{t("servers.pending.loadError")}</p>;
+  if (state.kind !== "ready" || state.items.length === 0) return null;
+
+  const cancel = async (token: PendingEnrollment) => {
+    const name = token.name || t("servers.pending.noName");
+    if (!window.confirm(t("servers.pending.confirm", { name }))) return;
+    setError("");
+    try {
+      await revokeEnrollmentToken(token.id);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+    onChanged();
+  };
+
+  return (
+    <div aria-labelledby="pending-tokens-heading">
+      <h4 id="pending-tokens-heading">{t("servers.pending.title")}</h4>
+      <p className="muted">{t("servers.pending.intro")}</p>
+      {error && <p role="alert">{error}</p>}
+      <ul>
+        {state.items.map((token) => {
+          const name = token.name || t("servers.pending.noName");
+          return (
+            <li key={token.id}>
+              <strong>{name}</strong>{" "}
+              <span className="muted">
+                {t("servers.pending.detail", { user: token.created_by, expires: new Date(token.expires_at).toLocaleString() })}
+              </span>{" "}
+              <button type="button" onClick={() => void cancel(token)}>
+                {t("servers.pending.cancel", { name })}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 

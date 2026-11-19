@@ -1,5 +1,5 @@
 // Package fleet manages the remote agents of the hub: the single-use tokens
-// that let a new agent enroll, the registry of the agents that did, and the
+// that let a new agent enroll (made, listed and cancelled here), the registry of the agents that did, and the
 // revocation of an agent. The certificates themselves come from package pki.
 package fleet
 
@@ -20,8 +20,12 @@ import (
 )
 
 const (
-	// TokenTTL is how long an enrollment token can be used.
+	// TokenTTL is how long an enrollment token can be used when the caller
+	// does not choose.
 	TokenTTL = time.Hour
+	// MinTokenTTL and MaxTokenTTL bound the lifetime a caller can ask for.
+	MinTokenTTL = time.Minute
+	MaxTokenTTL = 7 * 24 * time.Hour
 
 	maxNameLen  = 64
 	maxFailures = 10
@@ -34,6 +38,7 @@ const (
 	EventTokenCreated  = "enroll_token_created"
 	EventAgentEnrolled = "agent_enrolled"
 	EventEnrollFailed  = "agent_enroll_failed"
+	EventTokenRevoked  = "enroll_token_revoked"
 	EventAgentRevoked  = "agent_revoked"
 	EventAgentRenamed  = "agent_renamed"
 )
@@ -45,6 +50,8 @@ var (
 	ErrInvalidToken = errors.New("this enrollment token is invalid or has expired")
 	ErrRateLimited  = errors.New("too many failed attempts, try again later")
 	ErrNotFound     = errors.New("agent not found")
+	// ErrTokenNotFound is returned when no pending enrollment token has the id.
+	ErrTokenNotFound = errors.New("enrollment token not found")
 	// ErrRevoked is returned for an agent that was revoked, or whose
 	// certificate is not the one the hub issued last.
 	ErrRevoked = errors.New("this agent is revoked")
@@ -139,20 +146,32 @@ func cleanName(name string) (string, error) {
 	return name, nil
 }
 
-// CreateToken makes a single-use enrollment token, valid for TokenTTL. The
-// name, if given, becomes the name of the server that enrolls with it. The
-// token is returned once; only its hash is kept.
-func (s *Service) CreateToken(ctx context.Context, by, name string) (token string, expires time.Time, err error) {
+// TTLError is a problem with the lifetime asked for an enrollment token.
+type TTLError struct{ msg string }
+
+func (e *TTLError) Error() string { return e.msg }
+
+// CreateToken makes a single-use enrollment token, valid for ttl (TokenTTL when
+// ttl is zero, otherwise between MinTokenTTL and MaxTokenTTL). The name, if
+// given, becomes the name of the server that enrolls with it. The token is
+// returned once; only its hash is kept.
+func (s *Service) CreateToken(ctx context.Context, by, name string, ttl time.Duration) (token string, expires time.Time, err error) {
 	name, err = cleanName(name)
 	if err != nil {
 		return "", time.Time{}, err
+	}
+	if ttl == 0 {
+		ttl = TokenTTL
+	}
+	if ttl < MinTokenTTL || ttl > MaxTokenTTL {
+		return "", time.Time{}, &TTLError{fmt.Sprintf("the lifetime of a token must be between %v and %v", MinTokenTTL, MaxTokenTTL)}
 	}
 	token, err = randomToken(24)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	now := s.now()
-	expires = now.Add(TokenTTL)
+	expires = now.Add(ttl)
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM enrollment_tokens WHERE expires_at <= ?`, ts(now)); err != nil {
 		return "", time.Time{}, err
 	}
@@ -161,8 +180,67 @@ func (s *Service) CreateToken(ctx context.Context, by, name string) (token strin
 		hashToken(token), name, ts(now), ts(expires), by); err != nil {
 		return "", time.Time{}, err
 	}
-	s.record(ctx, by, EventTokenCreated, name, "valid for "+TokenTTL.String())
+	s.record(ctx, by, EventTokenCreated, name, "valid for "+ttl.String())
 	return token, expires, nil
+}
+
+// idLen is how much of a token's hash names it in the API: enough to tell
+// tokens apart, and no use for enrolling (the hash cannot be turned back into
+// the token).
+const idLen = 16
+
+// PendingToken is an enrollment token that has not been used or expired. It
+// never carries the secret: that was shown once, when it was made.
+type PendingToken struct {
+	ID        string
+	Name      string
+	CreatedBy string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+// PendingTokens lists the enrollment tokens that can still be used, oldest
+// first.
+func (s *Service) PendingTokens(ctx context.Context) ([]PendingToken, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT token_hash, name, created_by, created_at, expires_at FROM enrollment_tokens WHERE expires_at > ? ORDER BY created_at, token_hash`,
+		ts(s.now()))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	list := []PendingToken{}
+	for rows.Next() {
+		var hash, created, expires string
+		t := PendingToken{}
+		if err := rows.Scan(&hash, &t.Name, &t.CreatedBy, &created, &expires); err != nil {
+			return nil, err
+		}
+		t.ID, t.CreatedAt, t.ExpiresAt = hash[:idLen], parseTS(created), parseTS(expires)
+		list = append(list, t)
+	}
+	return list, rows.Err()
+}
+
+// RevokeToken cancels a pending enrollment token, for one that was pasted
+// where it should not have been or is no longer needed. Enrolling with it
+// fails from then on.
+func (s *Service) RevokeToken(ctx context.Context, by, id string) error {
+	if len(id) != idLen || strings.Trim(id, "0123456789abcdef") != "" {
+		return ErrTokenNotFound
+	}
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`DELETE FROM enrollment_tokens WHERE substr(token_hash, 1, ?) = ? AND expires_at > ? RETURNING name`,
+		idLen, id, ts(s.now())).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrTokenNotFound
+	}
+	if err != nil {
+		return err
+	}
+	s.record(ctx, by, EventTokenRevoked, name, "token "+id)
+	return nil
 }
 
 // Enrolled is the result of a successful enrollment.
@@ -172,9 +250,12 @@ type Enrolled struct {
 	CACertificateDER []byte
 }
 
-// Enroll registers a new agent: it uses the token up and signs the agent's
-// certificate request. remote is the address of the agent, for the limit on
-// failed attempts and the audit log.
+// Enroll registers a new agent: it signs the agent's certificate request,
+// then, in one transaction, uses the token up and records the agent. A request
+// that fails (a malformed certificate request, a signing or database error)
+// leaves the token usable, so the admin does not have to make another. remote
+// is the address of the agent, for the limit on failed attempts and the audit
+// log.
 func (s *Service) Enroll(ctx context.Context, remote, token string, csrDER []byte, hostname string) (Enrolled, error) {
 	if s.limited(remote) {
 		return Enrolled{}, ErrRateLimited
@@ -183,16 +264,19 @@ func (s *Service) Enroll(ctx context.Context, remote, token string, csrDER []byt
 	if len(hostname) > 255 {
 		hostname = hostname[:255]
 	}
-
-	now := s.now()
-	var name string
-	err := s.db.QueryRowContext(ctx,
-		`DELETE FROM enrollment_tokens WHERE token_hash = ? AND expires_at > ? RETURNING name`,
-		hashToken(token), ts(now)).Scan(&name)
-	if errors.Is(err, sql.ErrNoRows) {
+	invalid := func() (Enrolled, error) {
 		s.fail(remote)
 		s.record(ctx, "", EventEnrollFailed, "", "invalid token")
 		return Enrolled{}, ErrInvalidToken
+	}
+
+	now := s.now()
+	hash := hashToken(token)
+	var name string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT name FROM enrollment_tokens WHERE token_hash = ? AND expires_at > ?`, hash, ts(now)).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return invalid()
 	}
 	if err != nil {
 		return Enrolled{}, err
@@ -204,13 +288,31 @@ func (s *Service) Enroll(ctx context.Context, remote, token string, csrDER []byt
 	}
 	certDER, serial, err := s.ca.SignClient(csrDER, id, now)
 	if err != nil {
-		// The token is already used up: a bad request wastes it, and the admin
-		// makes another.
 		return Enrolled{}, &RequestError{err}
 	}
-	if _, err := s.db.ExecContext(ctx,
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Enrolled{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Using the token up is what makes it single-use: of two requests that
+	// passed the check above with the same token, only one deletes the row.
+	res, err := tx.ExecContext(ctx, `DELETE FROM enrollment_tokens WHERE token_hash = ? AND expires_at > ?`, hash, ts(now))
+	if err != nil {
+		return Enrolled{}, err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return Enrolled{}, err
+	} else if n != 1 {
+		return invalid()
+	}
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO agents (id, name, hostname, created_at, enrolled_from, cert_serial) VALUES (?, ?, ?, ?, ?, ?)`,
 		id, name, hostname, ts(now), remote, serial); err != nil {
+		return Enrolled{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Enrolled{}, err
 	}
 	s.clear(remote)

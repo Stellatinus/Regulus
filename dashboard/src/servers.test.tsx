@@ -164,6 +164,43 @@ describe("ServersPage", () => {
     await waitFor(() => expect(calls.filter((c) => c.path === "/api/agents?all=true").length).toBeGreaterThan(1));
   });
 
+  it("lists the pending enrollment tokens and cancels one after confirmation", async () => {
+    let tokens = [
+      { id: "aaaa1111bbbb2222", name: "Web", created_by: "admin", created_at: now, expires_at: now },
+      { id: "cccc3333dddd4444", name: "", created_by: "ana", created_at: now, expires_at: now },
+    ];
+    const calls = mockHub({
+      "GET /api/agents?all=true": () => ({ data: [] }),
+      "GET /api/enrollment-tokens": () => ({ data: tokens }),
+      "DELETE /api/enrollment-tokens/aaaa1111bbbb2222": () => {
+        tokens = tokens.slice(1);
+        return { status: 204 };
+      },
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const user = userEvent.setup();
+    renderAs(admin, <ServersPage />);
+
+    expect(await screen.findByRole("heading", { name: "Pending enrollment tokens" })).toBeInTheDocument();
+    expect(screen.getByText("(no name)")).toBeInTheDocument();
+    expect(screen.getByText(/made by ana/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel token Web" }));
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+
+    confirm.mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: "Cancel token Web" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel token Web" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Cancel token (no name)" })).toBeInTheDocument();
+  });
+
+  it("shows nothing about tokens when none is pending", async () => {
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [] }), "GET /api/enrollment-tokens": () => ({ data: [] }) });
+    renderAs(admin, <ServersPage />);
+    await screen.findByRole("heading", { name: "Add a server" });
+    expect(screen.queryByRole("heading", { name: "Pending enrollment tokens" })).not.toBeInTheDocument();
+  });
+
   it("says when remote agents are off and lets an administrator turn them on", async () => {
     const off = { enabled: false, ca_fingerprint: "sha256:f", editable: true };
     const on = { enabled: true, port: 8443, source: "dashboard", ca_fingerprint: "sha256:f", editable: false };

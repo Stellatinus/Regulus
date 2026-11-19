@@ -155,6 +155,22 @@ export const enableRemoteAgents = (port: number) => request<AgentListener>("PUT"
 export const createEnrollment = (name: string) =>
   request<Enrollment>("POST", "/api/enrollment-tokens", { name });
 
+// A token that can still be used (see GET /api/enrollment-tokens). The secret
+// was shown once, when the token was made, and is not part of it.
+export interface PendingEnrollment {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export const fetchEnrollmentTokens = (signal?: AbortSignal) =>
+  request<PendingEnrollment[]>("GET", "/api/enrollment-tokens", undefined, signal);
+
+export const revokeEnrollmentToken = (id: string) =>
+  request<void>("DELETE", `/api/enrollment-tokens/${encodeURIComponent(id)}`, {});
+
 export const renameAgent = (id: string, name: string) =>
   request<void>("PATCH", `/api/agents/${encodeURIComponent(id)}`, { name });
 

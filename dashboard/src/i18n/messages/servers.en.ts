@@ -88,6 +88,15 @@ export const servers = {
     "if the server reaches the hub under another name. The fingerprint lets the server check that it is talking to this hub before it sends the token.",
   "servers.add.alreadyInstalled": "Regulus already installed on that server? Enroll and run the agent with:",
 
+  // Enrollment tokens nobody has used yet.
+  "servers.pending.title": "Pending enrollment tokens",
+  "servers.pending.intro": "These tokens have not been used yet. Cancel one that was shared by mistake: a server that tries it is refused.",
+  "servers.pending.noName": "(no name)",
+  "servers.pending.detail": "made by {user}, expires {expires}",
+  "servers.pending.cancel": "Cancel token {name}",
+  "servers.pending.confirm": "Cancel the token {name}? A server that has not used it yet will not be able to enroll with it.",
+  "servers.pending.loadError": "The pending enrollment tokens could not be loaded.",
+
   // Widgets: titles and descriptions shown in the picker and the frames.
   "servers.widget.system.title": "System",
   "servers.widget.system.description": "What the server is: host, system, kernel, memory, load and uptime.",

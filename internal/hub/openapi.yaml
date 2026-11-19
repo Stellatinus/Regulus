@@ -287,13 +287,63 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /api/enrollment-tokens/{id}:
+    delete:
+      tags: [agents]
+      summary: Cancel a pending enrollment token (needs servers.manage)
+      description: |
+        For a token that was pasted where it should not have been, or is no
+        longer needed. Enrolling with it fails from then on. The id comes from
+        `GET /api/enrollment-tokens`. The request needs a JSON body (`{}`).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "204": { description: The token is cancelled. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/enrollment-tokens:
+    get:
+      tags: [agents]
+      summary: Enrollment tokens that can still be used (needs servers.manage)
+      description: |
+        Oldest first. The secret of a token is shown once, when it is made, and is
+        not kept: the list has an `id` to cancel it by, its name, who made it and
+        when it expires.
+      responses:
+        "200":
+          description: The pending tokens.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, created_by, created_at, expires_at]
+                  properties:
+                    id: { type: string, example: "3fa9c1d2e07b4a55" }
+                    name: { type: string }
+                    created_by: { type: string }
+                    created_at: { type: string, format: date-time }
+                    expires_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [agents]
       summary: Make a one-time token to enroll a remote agent (needs servers.manage)
       description: |
-        The token works once and expires after an hour; it is shown only in this
-        answer. The agent needs the token, the address of the agent listener
+        The token works once and expires after an hour (or after `ttl`); it is shown only in this
+        answer. It can be listed and cancelled until it is used (`GET` and
+        `DELETE /api/enrollment-tokens`). The agent needs the token, the address of the agent listener
         (the host of the hub and `agent_port`) and the `ca_fingerprint`, which it
         pins to be sure it talks to this hub. Answers 409 when the hub runs
         without `agent_listen`. The request needs a JSON body.
@@ -309,6 +359,10 @@ paths:
                   type: string
                   maxLength: 64
                   description: Optional name for the server that enrolls with the token.
+                ttl:
+                  type: string
+                  example: "15m"
+                  description: How long the token can be used, a duration from 1m to 168h; default 1h. Answers 400 outside that range.
       responses:
         "201":
           description: The enrollment token.

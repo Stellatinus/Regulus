@@ -80,6 +80,14 @@ export const serversIt: Record<keyof typeof servers, string> = {
     "se il server raggiunge l'hub con un altro nome. L'impronta della CA permette al server di verificare che sta parlando con questo hub prima di inviare il token.",
   "servers.add.alreadyInstalled": "Regulus è già installato su quel server? Registra ed esegui l'agente con:",
 
+  "servers.pending.title": "Token di registrazione in attesa",
+  "servers.pending.intro": "Questi token non sono ancora stati usati. Annulla quello condiviso per errore: un server che lo prova viene rifiutato.",
+  "servers.pending.noName": "(senza nome)",
+  "servers.pending.detail": "creato da {user}, scade il {expires}",
+  "servers.pending.cancel": "Annulla il token {name}",
+  "servers.pending.confirm": "Annullare il token {name}? Un server che non l'ha ancora usato non potrà registrarsi con esso.",
+  "servers.pending.loadError": "Non è stato possibile caricare i token di registrazione in attesa.",
+
   "servers.widget.system.title": "Sistema",
   "servers.widget.system.description": "Cos'è il server: host, sistema, kernel, memoria, carico e uptime.",
   "servers.widget.cpu.title": "CPU",

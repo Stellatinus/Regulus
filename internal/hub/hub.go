@@ -458,6 +458,8 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(l.put))), needsAuth: true},
+		{pattern: "GET /api/enrollment-tokens", handler: need(auth.PermServersManage, http.HandlerFunc(f.listTokens)), needsAuth: true},
+		{pattern: "DELETE /api/enrollment-tokens/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.revokeToken))), needsAuth: true},
 		{pattern: "POST /api/enrollment-tokens", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.createToken))), needsAuth: true},
 		{pattern: "PATCH /api/agents/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.rename))), needsAuth: true},
 		{pattern: "DELETE /api/agents/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.revoke))), needsAuth: true},
