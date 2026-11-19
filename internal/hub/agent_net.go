@@ -2,12 +2,15 @@ package hub
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
 
@@ -15,7 +18,46 @@ import (
 	"github.com/CodexCircle/Regulus/internal/fleet"
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/pki"
+	"github.com/CodexCircle/Regulus/internal/protocol"
 )
+
+// agentKeepalive is the keepalive of the agent listener (#222, #244).
+type agentKeepalive struct {
+	// MinTime: a client that pings more often is disconnected after two
+	// warnings ("too_many_pings"). Pings with no stream open are allowed:
+	// an agent pings between two sessions too.
+	MinTime time.Duration
+	// Time and Timeout: the hub pings a connection it has read nothing from
+	// for Time and closes it when the answer does not come within Timeout.
+	Time, Timeout time.Duration
+}
+
+func defaultAgentKeepalive() agentKeepalive {
+	return agentKeepalive{
+		MinTime: protocol.KeepaliveMinTime,
+		Time:    protocol.HubKeepaliveTime,
+		Timeout: protocol.HubKeepaliveTimeout,
+	}
+}
+
+// agentServerOptions are the options of the gRPC server of the agent listener.
+func (h *Hub) agentServerOptions(tlsConfig *tls.Config) []grpc.ServerOption {
+	return []grpc.ServerOption{
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.StreamInterceptor(h.requireAgent),
+		grpc.MaxRecvMsgSize(maxAgentMessageBytes),
+		grpc.MaxConcurrentStreams(maxAgentStreams),
+		grpc.ConnectionTimeout(20 * time.Second), // the TLS handshake of a client that never finishes it
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             h.agentKeepalive.MinTime,
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    h.agentKeepalive.Time,
+			Timeout: h.agentKeepalive.Timeout,
+		}),
+	}
+}
 
 // identityKey carries the verified identity of a remote agent in the context
 // of its stream. The in-process connection of the built-in agent has none.

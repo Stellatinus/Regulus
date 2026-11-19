@@ -64,6 +64,7 @@ flowchart LR
 **A connection (`Connect`).** The agent sends `Hello` with its version, system information and the protocol range it speaks. The hub answers `Welcome` (the negotiated protocol version, the heartbeat interval, the metrics interval) or `Reject` with a reason (`internal/hub/agents.go` `Connect`). After that the agent sends `Heartbeat` and `MetricsReport` messages and the hub may send `Command` messages (`Ping`, `SetIntervals`, `ApplyUpdate`), each answered with a `CommandResult`.
 
 - Heartbeat default: every 15 s. An agent silent for 2 intervals is reported `stale` in the API, for 3 intervals it is dropped (`defaultHeartbeatInterval`, `staleAfter`, `missedHeartbeats`).
+- Keepalive (HTTP/2 PING, `internal/protocol/keepalive.go`): the agent pings after 30 s without hearing from the hub and drops the connection after 10 s without an answer, so a dead hub is noticed within about 40 s; the hub allows a ping every 15 s at most and pings a silent agent the same way. Reports collected while the hub is away are not replayed.
 - Metrics: the hub keeps the last hour per agent, at most 3600 samples, **in memory only** (`internal/hub/metrics.go`).
 
 **Versions: protocol, and N / N-1.** Two separate checks (#17):

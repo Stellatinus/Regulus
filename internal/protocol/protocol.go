@@ -1,7 +1,8 @@
 // Package protocol holds the version of the agent-hub contract defined in
 // proto/regulus/agent/v1 and the rules to negotiate it: the full protocol
-// (Negotiate) and the update contract that every released agent still gets
-// (UpdateContract, NegotiateUpdateOnly). It does not decide which agent
+// (Negotiate), the update contract that every released agent still gets
+// (UpdateContract, NegotiateUpdateOnly), and the keepalive both ends of the
+// connection agree on (keepalive.go). It does not decide which agent
 // releases a hub serves (that is update.CheckCompat) and holds no generated
 // code: that lives in internal/gen and must not be edited by hand (`make
 // proto`). The rules for changing any of it are in docs/versioning.md.
