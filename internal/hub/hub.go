@@ -529,7 +529,7 @@ func NewHandler(d Deps) http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
-	return mux
+	return withSecurityHeaders(mux)
 }
 
 // stillAllowed makes the check an open stream repeats (see streamHandler); nil

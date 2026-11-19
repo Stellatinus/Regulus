@@ -7,6 +7,8 @@
 //   - hub.go: New builds a Hub from the configuration, Serve runs it. Serve
 //     starts the HTTP server (dashboard, API, the /api/stream WebSocket) and,
 //     when agent_listen is set, the gRPC server for remote agents.
+//   - headers.go: the browser security headers (CSP, framing, sniffing, referrer,
+//     HSTS) set on every response.
 //   - api.go, openapi.go, layout.go, updates_api.go: the HTTP API and its
 //     OpenAPI description.
 //   - agents.go, agent_net.go, local.go: the server side of the agent-hub
