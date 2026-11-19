@@ -5,6 +5,7 @@ The hub reads, in increasing priority: defaults, a YAML file (`--config` or `REG
 | Setting (YAML) | Flag | Environment | Default |
 |---|---|---|---|
 | `listen` | `--listen` | `REGULUS_LISTEN` | `:8080` |
+| `trusted_proxies` (a list of addresses or CIDR blocks) | - | `REGULUS_TRUSTED_PROXIES` (comma separated) | empty: forwarding headers are ignored |
 | `data_dir` | `--data-dir` | `REGULUS_DATA_DIR` | `data` |
 | `builtin_agent` (`true`, `false`) | `--builtin-agent` | `REGULUS_BUILTIN_AGENT` | `true` |
 | `metrics_interval` (for example `10s`, minimum `1s`) | `--metrics-interval` | `REGULUS_METRICS_INTERVAL` | `10s` |

@@ -190,7 +190,7 @@ func (s *Service) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if err := s.ResetPassword(withRequestClient(r), remoteIP(r), req.Token, req.Password); err != nil {
+	if err := s.ResetPassword(s.withRequestClient(r), s.remoteIP(r), req.Token, req.Password); err != nil {
 		s.fail(w, err)
 		return
 	}
