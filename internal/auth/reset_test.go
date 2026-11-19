@@ -285,3 +285,20 @@ func TestRecoverAdminChoosesTheAccount(t *testing.T) {
 		t.Errorf("login after recovery: %v", err)
 	}
 }
+
+func TestAdminCannotMakeAResetLinkForTheirOwnAccount(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	admin, session := setup(t, s)
+	if _, _, err := s.CreateReset(ctx, admin, admin.Username); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("an admin made a reset link for themselves: %v", err)
+	}
+	if _, err := s.Authenticate(ctx, session); err != nil {
+		t.Fatalf("a refused self-reset must not end the session: %v", err)
+	}
+	// Another admin still can, and the console command (reset-admin) does not go through here.
+	other := addUser(t, s, admin, "frank", RoleAdmin)
+	if _, _, err := s.CreateReset(ctx, other, admin.Username); err != nil {
+		t.Fatalf("another admin: %v", err)
+	}
+}

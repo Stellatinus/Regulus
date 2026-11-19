@@ -30,11 +30,17 @@ var ErrInvalidReset = errors.New("this reset link is invalid or has expired")
 // CreateReset makes a one-time token that lets the owner of an account choose
 // a new password, and ends all the sessions of the account, since its
 // credentials can no longer be trusted. The admin never learns the password.
-// The caller must be an admin; that is checked by the HTTP layer.
+// The caller must be an admin (checked by the HTTP layer) and cannot target
+// their own account: a stolen session would otherwise turn into a new
+// password without ever knowing the old one. ChangePassword is the flow for
+// oneself, and it asks for the current password.
 func (s *Service) CreateReset(ctx context.Context, by User, username string) (string, time.Time, error) {
 	target, err := s.userByName(ctx, username)
 	if err != nil {
 		return "", time.Time{}, err
+	}
+	if by.ID == target.ID {
+		return "", time.Time{}, fmt.Errorf("%w: you cannot make a reset link for your own account: change your password from Account, which asks for the current one", ErrForbidden)
 	}
 	if err := s.mayManage(ctx, by, target); err != nil {
 		return "", time.Time{}, err

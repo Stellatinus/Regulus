@@ -431,11 +431,17 @@ func (s *Service) RenewRecoveryCodes(ctx context.Context, u User, password, code
 
 // ResetTwoFactor removes the second factor of another user, for someone who
 // lost the app and the recovery codes. The caller must be an admin (checked by
-// the HTTP layer). The sessions of the user end.
+// the HTTP layer) and cannot target their own account: that is what
+// DisableTwoFactor is for, and it asks for the password and a code. An admin
+// who lost both is reset on the machine with `regulus hub reset-admin`. The
+// sessions of the user end.
 func (s *Service) ResetTwoFactor(ctx context.Context, by User, username string) error {
 	target, err := s.userByName(ctx, username)
 	if err != nil {
 		return err
+	}
+	if by.ID == target.ID {
+		return fmt.Errorf("%w: you cannot reset your own two-factor authentication: turn it off from Account, which asks for your password and a code", ErrForbidden)
 	}
 	if err := s.mayManage(ctx, by, target); err != nil {
 		return err
