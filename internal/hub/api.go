@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -307,7 +308,9 @@ func toPoint(s MetricsSample, prev *MetricsSample) pointJSON {
 
 // metricsHandler serves the recent metrics of an agent, oldest first. The
 // optional query parameter since (RFC 3339) returns only points received after
-// it, which lets a client poll cheaply.
+// it, which lets a client poll cheaply; limit (a positive integer) returns only
+// the newest that many, so a chart of the last minutes does not download the
+// whole hour.
 func metricsHandler(src AgentSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -319,6 +322,15 @@ func metricsHandler(src AgentSource) http.HandlerFunc {
 				return
 			}
 			since = t
+		}
+		limit := 0
+		if v := r.URL.Query().Get("limit"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 1 {
+				http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+				return
+			}
+			limit = n
 		}
 		if src == nil {
 			http.Error(w, "unknown agent", http.StatusNotFound)
@@ -333,6 +345,9 @@ func metricsHandler(src AgentSource) http.HandlerFunc {
 		points := toPoints(samples)
 		if !since.IsZero() {
 			points = slices.DeleteFunc(points, func(p pointJSON) bool { return !p.At.After(since) })
+		}
+		if limit > 0 && len(points) > limit {
+			points = points[len(points)-limit:]
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

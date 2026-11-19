@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Agent, MetricsPoint } from "./api";
-import { initialLiveState, isStale, liveReducer, mergePoints, parseStreamMessage, pickAgent, MAX_POINTS, type LiveState } from "./live";
+import { agentKey, isStale, LiveStore, MAX_POINTS, parseStreamMessage, pickAgent, PointRing, ROSTER, STATUS, WATCH } from "./live";
 
 function agent(id: string, over: Partial<Agent> = {}): Agent {
   return {
@@ -34,64 +34,167 @@ function point(at: string, over: Partial<MetricsPoint> = {}): MetricsPoint {
   };
 }
 
-const withAgents = (...ids: string[]): LiveState =>
-  liveReducer(initialLiveState, { type: "agents", agents: ids.map((id) => agent(id)), staleAfterSeconds: 30 });
+const at = (second: number) => new Date(Date.UTC(2026, 0, 1) + second * 1000).toISOString();
 
-describe("liveReducer", () => {
+function withAgents(...ids: string[]): LiveStore {
+  const store = new LiveStore();
+  store.dispatch({ type: "agents", agents: ids.map((id) => agent(id)), staleAfterSeconds: 30 });
+  return store;
+}
+
+const series = (store: LiveStore, id: string) => store.entries.get(id)?.points.toArray().map((p) => p.at);
+
+describe("LiveStore", () => {
   it("replaces the agents on a snapshot, sorted, and keeps the history of those still there", () => {
-    let s = withAgents("b", "a");
-    expect(s.agents.map((a) => a.id)).toEqual(["a", "b"]);
+    const s = withAgents("b", "a");
+    expect(s.roster.map((a) => a.id)).toEqual(["a", "b"]);
     expect(s.ready).toBe(true);
     expect(s.staleAfterMs).toBe(30000);
 
-    s = liveReducer(s, { type: "history", id: "a", points: [point("2026-01-01T00:00:01Z")] });
-    s = liveReducer(s, { type: "history", id: "b", points: [point("2026-01-01T00:00:01Z")] });
-    s = liveReducer(s, { type: "agents", agents: [agent("b")] });
-    expect(Object.keys(s.metrics)).toEqual(["b"]);
+    s.dispatch({ type: "history", id: "a", points: [point(at(1))] });
+    s.dispatch({ type: "history", id: "b", points: [point(at(1))] });
+    s.dispatch({ type: "agents", agents: [agent("b")] });
+    expect([...s.entries.keys()]).toEqual(["b"]);
+    expect(series(s, "b")).toEqual([at(1)]);
     expect(s.staleAfterMs).toBe(30000); // not sent this time: unchanged
   });
 
   it("adds, and removes with its metrics, an agent", () => {
-    let s = withAgents("a");
-    s = liveReducer(s, { type: "connected", agent: agent("0") });
-    expect(s.agents.map((a) => a.id)).toEqual(["0", "a"]);
-    s = liveReducer(s, { type: "metrics", id: "a", point: point("2026-01-01T00:00:01Z") });
-    s = liveReducer(s, { type: "disconnected", id: "a" });
-    expect(s.agents.map((a) => a.id)).toEqual(["0"]);
-    expect(s.metrics).toEqual({});
+    const s = withAgents("a");
+    s.dispatch({ type: "connected", agent: agent("0") });
+    expect(s.roster.map((a) => a.id)).toEqual(["0", "a"]);
+    s.dispatch({ type: "metrics", id: "a", point: point(at(1)) });
+    s.dispatch({ type: "disconnected", id: "a" });
+    expect(s.roster.map((a) => a.id)).toEqual(["0"]);
+    expect(s.entries.has("a")).toBe(false);
   });
 
   it("a heartbeat revives a stale agent", () => {
-    let s = liveReducer(initialLiveState, { type: "agents", agents: [agent("a", { status: "stale" })] });
-    s = liveReducer(s, { type: "heartbeat", id: "a", at: "2026-01-01T00:00:09Z" });
-    expect(s.agents[0]).toMatchObject({ status: "connected", last_heartbeat: "2026-01-01T00:00:09Z" });
+    const s = new LiveStore();
+    s.dispatch({ type: "agents", agents: [agent("a", { status: "stale" })] });
+    s.dispatch({ type: "heartbeat", id: "a", at: at(9) });
+    expect(s.entries.get("a")?.agent).toMatchObject({ status: "connected", last_heartbeat: at(9) });
   });
 
   it("appends metrics and updates the agent, ignoring unknown agents", () => {
-    let s = withAgents("a");
-    s = liveReducer(s, { type: "metrics", id: "a", point: point("2026-01-01T00:00:01Z", { uptime_seconds: 77 }) });
-    expect(s.agents[0]).toMatchObject({ metrics_at: "2026-01-01T00:00:01Z", uptime_seconds: 77 });
-    expect(s.metrics.a).toHaveLength(1);
-    expect(liveReducer(s, { type: "metrics", id: "ghost", point: point("2026-01-01T00:00:02Z") })).toBe(s);
-    expect(liveReducer(s, { type: "history", id: "ghost", points: [point("2026-01-01T00:00:02Z")] })).toBe(s);
+    const s = withAgents("a");
+    s.dispatch({ type: "metrics", id: "a", point: point(at(1), { uptime_seconds: 77 }) });
+    expect(s.entries.get("a")?.agent).toMatchObject({ metrics_at: at(1), uptime_seconds: 77 });
+    expect(series(s, "a")).toHaveLength(1);
+    s.dispatch({ type: "metrics", id: "ghost", point: point(at(2)) });
+    s.dispatch({ type: "history", id: "ghost", points: [point(at(2))] });
+    expect(s.entries.has("ghost")).toBe(false);
+  });
+
+  it("wakes only the subscribers of the agent that changed", () => {
+    const s = withAgents("a", "b");
+    const calls: string[] = [];
+    for (const key of [agentKey("a"), agentKey("b"), ROSTER, STATUS]) s.subscribe(key, () => calls.push(key));
+    const before = s.entries.get("b");
+    s.dispatch({ type: "metrics", id: "a", point: point(at(1)) });
+    s.dispatch({ type: "heartbeat", id: "a", at: at(2) });
+    expect(calls).toEqual([agentKey("a"), agentKey("a")]);
+    expect(s.entries.get("b")).toBe(before);
+    // A repeated report from the history changes nothing and wakes nobody.
+    s.dispatch({ type: "history", id: "a", points: [point(at(1))] });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("tells when an agent starts being shown", () => {
+    const s = new LiveStore();
+    let woken = 0;
+    s.subscribe(WATCH, () => woken++);
+    const off1 = s.watch("a");
+    const off2 = s.watch("a");
+    expect(s.watched()).toEqual(["a"]);
+    expect(woken).toBe(1);
+    off1();
+    off1(); // twice is harmless
+    expect(s.watched()).toEqual(["a"]);
+    off2();
+    expect(s.watched()).toEqual([]);
   });
 });
 
-describe("mergePoints", () => {
-  it("orders by time, drops repeats and caps the length", () => {
+describe("PointRing", () => {
+  it("orders by time, drops repeats and invalid times, and caps the length", () => {
+    const ring = new PointRing();
     const a = point("2026-01-01T00:00:01Z");
     const b = point("2026-01-01T00:00:02Z");
     const c = point("2026-01-01T00:00:03.5Z");
-    expect(mergePoints([a, c], [b, a]).map((p) => p.at)).toEqual([a.at, b.at, c.at]);
-    expect(mergePoints([a], [])).toEqual([a]);
+    ring.add([a, c]);
+    expect(ring.add([b, a])).toBe(true);
+    expect(ring.toArray().map((p) => p.at)).toEqual([a.at, b.at, c.at]);
+    expect(ring.add([])).toBe(false);
+    expect(ring.add([a, point("not a time")])).toBe(false);
     // 2026-01-01T00:00:03Z sorts after 00:00:03.5Z as text but not as a time
-    expect(mergePoints([c], [point("2026-01-01T00:00:03Z")]).map((p) => p.at)).toEqual(["2026-01-01T00:00:03Z", c.at]);
+    const late = new PointRing();
+    late.add([c, point("2026-01-01T00:00:03Z")]);
+    expect(late.toArray().map((p) => p.at)).toEqual(["2026-01-01T00:00:03Z", c.at]);
 
-    const many = Array.from({ length: MAX_POINTS + 5 }, (_, i) => point(new Date(Date.UTC(2026, 0, 1) + i * 1000).toISOString()));
-    const capped = mergePoints([], many);
-    expect(capped).toHaveLength(MAX_POINTS);
-    expect(capped[0]).toBe(many[5]);
-    expect(mergePoints(capped, [point(new Date(Date.UTC(2027, 0, 1)).toISOString())])).toHaveLength(MAX_POINTS);
+    const many = Array.from({ length: MAX_POINTS + 5 }, (_, i) => point(at(i)));
+    const capped = new PointRing();
+    capped.add(many);
+    expect(capped.size).toBe(MAX_POINTS);
+    expect(capped.pointAt(0)).toBe(many[5]);
+    capped.add([point(at(MAX_POINTS + 100))]);
+    expect(capped.size).toBe(MAX_POINTS);
+    expect(capped.pointAt(0)).toBe(many[6]);
+    expect(capped.last?.at).toBe(at(MAX_POINTS + 100));
+    // An older report that is missing still lands in order after wrapping.
+    capped.add([point(at(MAX_POINTS + 50))]);
+    expect(capped.size).toBe(MAX_POINTS);
+    expect(capped.toArray().at(-2)?.at).toBe(at(MAX_POINTS + 50));
+  });
+
+  it("gives the window up to the newest report, cached until the series changes", () => {
+    const ring = new PointRing(100);
+    ring.add(Array.from({ length: 150 }, (_, i) => point(at(i))));
+    const w = ring.window(10_000);
+    expect(w.points.map((p) => p.at)).toEqual(Array.from({ length: 11 }, (_, i) => at(139 + i)));
+    expect(w.times).toEqual(w.points.map((p) => Date.parse(p.at)));
+    expect(ring.window(10_000)).toBe(w);
+    ring.add([point(at(150))]);
+    expect(ring.window(10_000)).not.toBe(w);
+    expect(new PointRing().window(1000)).toEqual({ points: [], times: [] });
+  });
+});
+
+// Per-message cost: a report appended to a full series must not cost more
+// than one appended to a short one. Timing with a wide margin, so it only
+// fails when the cost grows with the series (the old code copied 3600 points
+// per report, about 100 times the work of a 36-point series).
+describe("per-message cost", () => {
+  const AGENTS = 50;
+
+  function loaded(perAgent: number): LiveStore {
+    const s = new LiveStore();
+    s.dispatch({ type: "agents", agents: Array.from({ length: AGENTS }, (_, i) => agent(`a${i}`)) });
+    for (let i = 0; i < AGENTS; i++) {
+      s.dispatch({ type: "history", id: `a${i}`, points: Array.from({ length: perAgent }, (_, n) => point(at(n))) });
+    }
+    return s;
+  }
+
+  function cost(s: LiveStore, from: number): number {
+    const messages = 20000;
+    const start = performance.now();
+    for (let n = 0; n < messages; n++) {
+      s.dispatch({ type: "metrics", id: `a${n % AGENTS}`, point: point(at(from + n)) });
+    }
+    return performance.now() - start;
+  }
+
+  it("does not grow with the length of the series (50 agents x 3600 points)", () => {
+    const short = loaded(36);
+    const long = loaded(MAX_POINTS);
+    cost(short, 100); // warm up
+    cost(long, MAX_POINTS);
+    const best = (s: LiveStore, from: number) => Math.min(...[0, 1, 2].map((r) => cost(s, from + 100000 * (r + 1))));
+    const tShort = best(short, 1000);
+    const tLong = best(long, MAX_POINTS + 1000);
+    expect(long.entries.get("a0")?.points.size).toBe(MAX_POINTS);
+    expect(tLong).toBeLessThan(tShort * 5 + 20);
   });
 });
 

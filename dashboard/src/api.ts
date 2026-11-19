@@ -275,13 +275,18 @@ export interface NetworkUsage {
 }
 
 // fetchMetrics returns the recent metrics of an agent, oldest first; with
-// since only the points received after that time.
+// since only the points received after that time, with limit only the newest
+// that many.
 export async function fetchMetrics(
   id: string,
   since?: string,
   signal?: AbortSignal,
+  limit?: number,
 ): Promise<MetricsPoint[]> {
-  const query = since ? `?since=${encodeURIComponent(since)}` : "";
+  const params = new URLSearchParams();
+  if (since) params.set("since", since);
+  if (limit !== undefined) params.set("limit", String(limit));
+  const query = params.toString() === "" ? "" : `?${params.toString()}`;
   const res = await request<{ agent: string; points: MetricsPoint[] }>(
     "GET",
     `/api/agents/${encodeURIComponent(id)}/metrics${query}`,
