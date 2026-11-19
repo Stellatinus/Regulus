@@ -23,6 +23,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | read the design of the Android access app and the access gateway (skeleton, not implemented) | [Regulus Access](regulus-access.md) |
 | understand why a choice was made | [Design decisions](decisions.md) |
 | understand plugins: the manifest, how they run, how to write one | [Plugins](plugins/README.md), [Manifest](plugins/manifest.md), [Runtime](plugins/runtime.md), [Writing a plugin](plugins/writing-a-plugin.md) |
+| understand managers, backends and apps (RAID, firewall, containers, VPN, Plex and the like; design only) | [Managers, backends and apps](managers-and-apps.md) |
 | build and test Regulus | [Development](development.md) and [CONTRIBUTING](../CONTRIBUTING.md) |
 | work on Regulus as an AI coding agent | [AGENTS.md](../AGENTS.md) |
 | report a security problem | [SECURITY](../SECURITY.md) |

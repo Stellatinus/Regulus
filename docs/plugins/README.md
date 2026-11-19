@@ -2,6 +2,8 @@
 
 A plugin adds features to Regulus: on the servers (agent side), on the hub, and in the dashboard. It is a **separate program**, released on its own, that Regulus starts and talks to over gRPC on a local Unix socket. A plugin that crashes or hangs ends its own process, never the agent's or the hub's.
 
+A plugin is **code that extends Regulus**. It is not how third-party software such as Plex or Radarr is installed (those are **apps**, which run in containers and need no plugin), and it is not the same as a **manager** (a function of a server such as the firewall or RAID, which a plugin may implement). See [Managers, backends and apps](../managers-and-apps.md). The words *extension* and *add-on* are not used.
+
 This folder is the guide to the plugin system. Read the pages in order:
 
 | Page | What it covers | Status |
