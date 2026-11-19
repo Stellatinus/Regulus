@@ -9,7 +9,7 @@ This folder is the guide to the plugin system. Read the pages in order:
 | Page | What it covers | Status |
 |---|---|---|
 | [Manifest](manifest.md) | `plugin.yaml`: id, version, plugin API, the Regulus versions it needs, components, permissions | implemented (#19) |
-| [Runtime](runtime.md) | how Regulus finds, starts, checks, restarts and stops plugins; the contract on the socket; limits and security | implemented on the agent (#19); the hub does not run plugins yet |
+| [Runtime](runtime.md) | how Regulus finds, starts, checks, restarts and stops plugins; the contract on the socket; limits and security; where their state is shown | implemented on the agent (#19) and the hub (#262) |
 | [Writing a plugin](writing-a-plugin.md) | the example plugin, the SDK for Go, other languages, how to try a plugin | implemented (#19) |
 
 The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/plugin/sdk` (for plugins written in Go), `proto/regulus/plugin/v1` (the contract) and `plugins/example-hello` (the example).
@@ -21,7 +21,8 @@ The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/pl
 | Manifest format, validation, version ranges | #19 | **implemented**, unit tests |
 | Discovery of the plugins directory | #19 | **implemented**, unit tests |
 | Runtime: separate processes, gRPC on a Unix socket, identity check, health checks, restart with backoff, giving up, stopping the process group | #19 | **implemented** for the agent (`plugins_dir`), tests with real processes; **not verified** on a real server (no `[Test]` run yet) |
-| Running plugins on the hub | #19 follow-up | not wired: the supervisor supports the role `hub`, but the hub does not start it yet |
+| Running plugins on the hub | #262 | **implemented** (`plugins_dir` of the hub), tests with real processes; **not verified** on an installed hub |
+| State of the plugins outside the log | #262 | **implemented**: `GET /api/plugins` (hub and agents), the console's Status tab and `regulus status` (hub); agents report theirs with their metrics. The dashboard page is not built yet |
 | The host side of plugin features (what a plugin can ask Regulus for, how its data reaches the dashboard) | #19 follow-up | **not designed**: today a plugin can only prove it runs and is healthy |
 | Index, installation, updates, removal, signatures, per-plugin update mode | #20 | designed below, not implemented |
 | Dashboard widgets loaded at runtime | #21 | designed below, not implemented (the manifest already accepts `components.ui`) |

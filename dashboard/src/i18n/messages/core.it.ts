@@ -16,6 +16,7 @@ export const coreIt: Record<keyof typeof core, string> = {
   "nav.main": "Principale",
   "nav.dashboard": "Dashboard",
   "nav.servers": "Server",
+  "nav.plugins": "Plugin",
   "nav.users": "Utenti",
   "nav.updates": "Aggiornamenti",
   "nav.account": "Account",

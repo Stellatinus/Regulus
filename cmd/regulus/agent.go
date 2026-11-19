@@ -12,8 +12,11 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	"github.com/CodexCircle/Regulus/internal/agent"
 	"github.com/CodexCircle/Regulus/internal/config"
+	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/logging"
 	"github.com/CodexCircle/Regulus/internal/plugin"
 	"github.com/CodexCircle/Regulus/internal/update"
@@ -87,10 +90,12 @@ func agentMain(ctx context.Context, args []string, getenv func(string) string, s
 		opts.Verifier = &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(cfg.DataDir, "tuf"))}
 	}
 	// Plugins run beside the agent, each in its own process: nothing they do
-	// reaches agent.Run, and the agent stops them when it stops.
-	plugins := startPlugins(ctx, cfg, log)
+	// reaches agent.Run, and the agent stops them when it stops. Their state
+	// goes to the hub with the metrics.
+	plugins, stopPlugins := startPlugins(ctx, cfg, log)
+	opts.Plugins = plugins
 	err = agent.Run(ctx, conn, opts)
-	plugins()
+	stopPlugins()
 	var rejected *agent.RejectedError
 	if errors.As(err, &rejected) {
 		log.Error("the hub does not accept this agent: it was revoked or removed. To use this server again, remove the agent data directory and enroll with a new token", "dir", cfg.DataDir, "err", err)
@@ -104,10 +109,11 @@ func agentMain(ctx context.Context, args []string, getenv func(string) string, s
 }
 
 // startPlugins runs the plugins of cfg.PluginsDir, if set, until ctx ends.
-// The returned function stops them and waits until they are gone.
-func startPlugins(ctx context.Context, cfg config.Agent, log *slog.Logger) (stop func()) {
+// status reports their state for the hub (nil when plugins are off); stop
+// stops them and waits until they are gone.
+func startPlugins(ctx context.Context, cfg config.Agent, log *slog.Logger) (status func() []*agentv1.PluginStatus, stop func()) {
 	if cfg.PluginsDir == "" {
-		return func() {}
+		return nil, func() {}
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	sup := &plugin.Supervisor{
@@ -125,5 +131,18 @@ func startPlugins(ctx context.Context, cfg config.Agent, log *slog.Logger) (stop
 			log.Error("plugins are not running", "err", err)
 		}
 	}()
-	return func() { cancel(); <-done }
+	return func() []*agentv1.PluginStatus { return pluginReport(sup.Status()) }, func() { cancel(); <-done }
+}
+
+// pluginReport turns the supervisor's view into the agent protocol's.
+func pluginReport(sts []plugin.Status) []*agentv1.PluginStatus {
+	out := make([]*agentv1.PluginStatus, 0, len(sts))
+	for _, st := range sts {
+		p := &agentv1.PluginStatus{Id: st.ID, Version: st.Version, State: st.State, Restarts: uint32(max(st.Restarts, 0)), LastError: st.LastError}
+		if !st.Since.IsZero() {
+			p.Since = timestamppb.New(st.Since)
+		}
+		out = append(out, p)
+	}
+	return out
 }

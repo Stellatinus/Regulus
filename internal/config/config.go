@@ -45,10 +45,14 @@ type Config struct {
 	BuiltinAgent bool `yaml:"builtin_agent"`
 	// MetricsInterval is how often agents report their metrics to the hub.
 	MetricsInterval time.Duration `yaml:"metrics_interval"`
-	Database        Database      `yaml:"database"`
-	Log             Log           `yaml:"log"`
-	Console         Console       `yaml:"console"`
-	Updates         Updates       `yaml:"updates"`
+	// PluginsDir, when set, is the directory of the plugins the hub runs, each
+	// as its own process with the role hub (docs/plugins/runtime.md). Empty:
+	// no plugin is run.
+	PluginsDir string   `yaml:"plugins_dir"`
+	Database   Database `yaml:"database"`
+	Log        Log      `yaml:"log"`
+	Console    Console  `yaml:"console"`
+	Updates    Updates  `yaml:"updates"`
 }
 
 // Database says where the hub keeps its data: a SQLite file in data_dir (the
@@ -185,6 +189,7 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 	dataDir := fs.String("data-dir", "", "directory for the hub data (env REGULUS_DATA_DIR)")
 	builtinAgent := fs.Bool("builtin-agent", true, "run an agent inside the hub (env REGULUS_BUILTIN_AGENT)")
 	metricsInterval := fs.Duration("metrics-interval", 0, "how often agents report metrics, for example 10s (env REGULUS_METRICS_INTERVAL)")
+	pluginsDir := fs.String("plugins-dir", "", "directory of the plugins the hub runs; empty runs none (env REGULUS_PLUGINS_DIR)")
 	logLevel := fs.String("log-level", "", "log level: debug, info, warn, error (env REGULUS_LOG_LEVEL)")
 	logFormat := fs.String("log-format", "", "log format: text, json (env REGULUS_LOG_FORMAT)")
 	if err := fs.Parse(args); err != nil {
@@ -204,6 +209,7 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 	setIfNotEmpty(&cfg.Listen, getenv("REGULUS_LISTEN"))
 	setIfNotEmpty(&cfg.DataDir, getenv("REGULUS_DATA_DIR"))
 	setIfNotEmpty(&cfg.AgentListen, getenv("REGULUS_AGENT_LISTEN"))
+	setIfNotEmpty(&cfg.PluginsDir, getenv("REGULUS_PLUGINS_DIR"))
 	if v := getenv("REGULUS_TRUSTED_PROXIES"); v != "" {
 		cfg.TrustedProxies = nil
 		for _, e := range strings.Split(v, ",") {
@@ -271,6 +277,8 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 			cfg.BuiltinAgent = *builtinAgent
 		case "metrics-interval":
 			cfg.MetricsInterval = *metricsInterval
+		case "plugins-dir":
+			cfg.PluginsDir = *pluginsDir
 		case "log-level":
 			cfg.Log.Level = *logLevel
 		case "log-format":

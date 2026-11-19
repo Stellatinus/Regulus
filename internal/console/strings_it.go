@@ -124,6 +124,7 @@ var it = strs{
 		"database.sslrootcert": "File con il certificato della CA che ha firmato il certificato del server PostgreSQL (per verify-ca e verify-full)",
 		"database.schema":      "Schema PostgreSQL che contiene le tabelle; vuoto vuol dire public",
 		"builtin_agent":        "Esegue un agent dentro l'hub, così viene gestito anche il suo server",
+		"plugins_dir":          "Directory dei plugin che l'hub esegue, ciascuno come processo a sé; vuota non ne esegue nessuno. Tienila di proprietà di root: tutto ciò che contiene viene eseguito",
 		"metrics_interval":     "Ogni quanto gli agent inviano le metriche, per esempio 10s (almeno 1s)",
 		"log.level":            "Quanto dettaglio scrive l'hub nel log",
 		"log.format":           "Formato del log",
@@ -181,4 +182,16 @@ var it = strs{
 	CertEnded:      "%s: scaduto il %s",
 	CertRenewAgent: "I certificati degli agent non si rinnovano ancora da soli (#128): revoca il server e registralo di nuovo con un nuovo token.",
 	CertRenewCA:    "La CA non si rinnova ancora da sola (#128): una nuova CA vuol dire registrare di nuovo ogni agent.",
+
+	// --- Plugin dell'hub (#262).
+	Plugins:            "Plugin dell'hub",
+	NoPlugins:          "La directory dei plugin non contiene plugin per l'hub.",
+	PluginRestarts:     "riavvii",
+	PluginStarting:     "in avvio",
+	PluginRunning:      "in esecuzione",
+	PluginRestarting:   "in riavvio",
+	PluginFailed:       "fallito",
+	PluginIncompatible: "incompatibile",
+	PluginStopped:      "fermato",
+	// --- end of the plugins block.
 }

@@ -59,6 +59,7 @@ func Settings() []Setting {
 		{Key: "database.schema", Env: "REGULUS_DATABASE_SCHEMA", Description: "PostgreSQL schema that holds the tables; empty means public", Restart: true, quote: true},
 		{Key: "builtin_agent", Env: "REGULUS_BUILTIN_AGENT", Description: "Run an agent inside the hub so its own server is managed too", Choices: []string{"true", "false"}, Restart: true},
 		{Key: "metrics_interval", Env: "REGULUS_METRICS_INTERVAL", Description: "How often agents report metrics, such as 10s (at least 1s)", Restart: true},
+		{Key: "plugins_dir", Env: "REGULUS_PLUGINS_DIR", Description: "Directory of the plugins the hub runs, each as its own process; empty runs none. Keep it owned by root: whatever is in it runs", Restart: true, quote: true},
 		{Key: "log.level", Env: "REGULUS_LOG_LEVEL", Description: "How much the hub logs", Choices: []string{"debug", "info", "warn", "error"}, Restart: true},
 		{Key: "log.format", Env: "REGULUS_LOG_FORMAT", Description: "Log format", Choices: []string{"text", "json"}, Restart: true},
 		{Key: "updates.check", Env: "REGULUS_UPDATES_CHECK", Description: "Look for new releases on GitHub every few hours; false keeps the hub from contacting any server for updates", Choices: []string{"true", "false"}, Restart: true},
@@ -121,6 +122,8 @@ func (c Config) Get(key string) (string, bool) {
 		return strconv.FormatBool(c.BuiltinAgent), true
 	case "metrics_interval":
 		return c.MetricsInterval.String(), true
+	case "plugins_dir":
+		return c.PluginsDir, true
 	case "log.level":
 		return c.Log.Level, true
 	case "log.format":
@@ -160,7 +163,7 @@ func Normalize(key, raw string) (string, error) {
 		return oneOf(v, "sqlite", "postgres")
 	case "database.sslmode":
 		return oneOf(v, "disable", "allow", "prefer", "require", "verify-ca", "verify-full")
-	case "database.host", "database.sslrootcert":
+	case "database.host", "database.sslrootcert", "plugins_dir":
 		return v, nil
 	case "database.name", "database.user":
 		if v == "" {

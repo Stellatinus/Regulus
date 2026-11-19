@@ -105,6 +105,13 @@ type strs struct {
 	CertCA, CertListener, CertAgent string
 	CertEnds, CertEnded             string
 	CertRenewAgent, CertRenewCA     string
+
+	// --- Plugins of the hub, on the Status tab (#262). Kept together so
+	// that other changes to this table do not touch these lines.
+	Plugins, NoPlugins, PluginRestarts              string
+	PluginStarting, PluginRunning, PluginRestarting string
+	PluginFailed, PluginIncompatible, PluginStopped string
+	// --- end of the plugins block.
 }
 
 var en = strs{
@@ -260,6 +267,18 @@ var en = strs{
 	CertEnded:      "%s: ended on %s",
 	CertRenewAgent: "Agent certificates are not renewed automatically yet (#128): revoke the server and enroll it again with a new token.",
 	CertRenewCA:    "The CA is not renewed automatically yet (#128): a new CA means every agent must enroll again.",
+
+	// --- Plugins of the hub (#262).
+	Plugins:            "Plugins of the hub",
+	NoPlugins:          "The plugins directory holds no plugin for the hub.",
+	PluginRestarts:     "restarts",
+	PluginStarting:     "starting",
+	PluginRunning:      "running",
+	PluginRestarting:   "restarting",
+	PluginFailed:       "failed",
+	PluginIncompatible: "incompatible",
+	PluginStopped:      "stopped",
+	// --- end of the plugins block.
 }
 
 // T is the language in use. It is English until UseLocale picks another.

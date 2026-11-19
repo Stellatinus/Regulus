@@ -17,6 +17,7 @@ Regulus v0.3.0  Hub ● in esecuzione
    database.schema        (vuoto)                    predefinito
    builtin_agent          true                       file
    metrics_interval       10s                        file
+   plugins_dir            (vuoto)                    predefinito
    log.level              info                       file
    log.format             text                       file
    updates.check          true                       predefinito
@@ -24,7 +25,6 @@ Regulus v0.3.0  Hub ● in esecuzione
    console.tui            true                       predefinito
 
  listen  predefinito: :8080
- Indirizzo della dashboard e dell'API: host:porta, oppure solo la porta (8080)
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

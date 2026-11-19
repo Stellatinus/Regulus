@@ -41,12 +41,28 @@ type Status struct {
 	// empty while the database answers.
 	Database        string `json:"database,omitempty"`
 	DatabaseProblem string `json:"database_problem,omitempty"`
+	// PluginsEnabled is true when the hub has a plugins directory; Plugins
+	// is the state of each plugin it runs, and PluginsProblem why none runs
+	// (the directory cannot be read).
+	PluginsEnabled bool     `json:"plugins_enabled,omitempty"`
+	PluginsProblem string   `json:"plugins_problem,omitempty"`
+	Plugins        []Plugin `json:"plugins,omitempty"`
 	// CertSoonest is the certificate that ends first (the CA, the agent
 	// listener's or an agent's); CertWarnings are the CA and agent
 	// certificates that end within 90 days, soonest first. Both are empty
 	// from a hub older than #245.
 	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
 	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
+}
+
+// Plugin is one plugin of the hub (docs/plugins/runtime.md).
+type Plugin struct {
+	ID        string    `json:"id"`
+	Version   string    `json:"version"`
+	State     string    `json:"state"`
+	Restarts  int       `json:"restarts"`
+	LastError string    `json:"last_error,omitempty"`
+	Since     time.Time `json:"since,omitzero"`
 }
 
 // Certificate is one of the hub's certificates and when it ends.
