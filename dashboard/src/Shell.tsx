@@ -6,6 +6,7 @@ import { ServersPage } from "./ServersPage";
 import { useRoute, type Route } from "./route";
 import { can } from "./api";
 import { LanguageSelect, ThemeSwitch } from "./Appearance";
+import { useConnection } from "./LiveProvider";
 import { useT, type MessageKey } from "./i18n";
 import type { Session } from "./session";
 import { UpdatesPage } from "./UpdatesPage";
@@ -95,6 +96,24 @@ function savedCollapsed(): boolean {
   } catch {
     return false;
   }
+}
+
+// LiveState shows whether the live updates (/api/stream) are flowing:
+// colour and a word, announced politely when it changes.
+function LiveState() {
+  const t = useT();
+  const connection = useConnection();
+  const look = {
+    live: { sev: "var(--ok)", text: t("live.connected") },
+    connecting: { sev: "var(--warn)", text: t("live.connecting") },
+    offline: { sev: "var(--crit)", text: t("live.lost") },
+  }[connection];
+  return (
+    <span className="live-state" role="status" style={{ "--sev": look.sev } as React.CSSProperties} title={t("live.title")}>
+      <i aria-hidden="true" />
+      {look.text}
+    </span>
+  );
 }
 
 // Shell is the frame of the signed-in dashboard: the sidebar with the
@@ -196,6 +215,7 @@ export function Shell({ user, signOut }: Session) {
             <span aria-hidden="true">{t("app.brand")} /</span>
             <strong>{t(titles[route] ?? "nav.dashboard")}</strong>
           </div>
+          <LiveState />
           <ThemeSwitch />
           <LanguageSelect />
         </header>

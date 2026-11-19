@@ -1148,7 +1148,7 @@ td.wrap {
 .chart-plot {
   position: relative;
   height: 7rem;
-  margin-left: 3.2rem;
+  margin-left: 4.2rem;
 }
 
 .chart-plot svg {
@@ -1216,7 +1216,7 @@ td.wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem 1rem;
-  margin: 0.4rem 0 0 3.2rem;
+  margin: 0.4rem 0 0 4.2rem;
   font-size: 12px;
   color: var(--muted);
 }
@@ -1506,4 +1506,19 @@ p.command input {
 .root-error pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* the top bar on a phone: the title takes its own row */
+@media (max-width: 40rem) {
+  .crumb {
+    flex-basis: calc(100% - 52px);
+  }
+
+  .crumb span {
+    display: none;
+  }
+
+  .topbar .live-state {
+    margin-right: auto;
+  }
 }

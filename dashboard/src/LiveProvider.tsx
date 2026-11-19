@@ -275,3 +275,14 @@ export function useLiveAgent(preferred: unknown): LiveView {
     latest: entry.points.last,
   };
 }
+
+// useConnection is the state of the live stream (/api/stream): connecting,
+// live or offline (retrying). Without a provider it reports "connecting".
+export function useConnection(): Connection {
+  const store = useContext(LiveContext) ?? noStore;
+  return useSyncExternalStore(
+    (onChange) => store.subscribe(STATUS, onChange),
+    () => store.connection,
+    () => store.connection,
+  );
+}

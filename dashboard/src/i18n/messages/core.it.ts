@@ -31,6 +31,10 @@ export const coreIt: Record<keyof typeof core, string> = {
   "ui.cancel": "Annulla",
   "ui.actions": "Azioni",
   "ui.actionsFor": "Azioni per {name}",
+  "live.connected": "In diretta",
+  "live.connecting": "Connessione…",
+  "live.lost": "Riconnessione…",
+  "live.title": "Aggiornamenti in diretta dall'hub",
   "ui.copied": "Copiato",
   "ui.copyManual": "Qui il browser non può copiare (l'hub non è in HTTPS): seleziona il testo e premi Ctrl+C.",
 

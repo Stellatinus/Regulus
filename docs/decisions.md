@@ -239,6 +239,18 @@ Agreed in conversation on 2026-11-19. **Proposed**: the names and the direction 
 - **Milestones.** The model (#287), the apps (#288), the container manager (#289) and the three managers the maintainer named (firewall #290, VPN #291, wake #292) are in **M6**: they define how plugins are used and need #261 first. The other managers (#293 to #300) and the first apps (#301) have no milestone yet.
 - **Not decided:** built in or plugin for the part that changes state; how privileged actions work (#60); which guards each dangerous operation needs; observe or manage per manager (RAID proposes *observe first*, #285); whether a node type enables managers by default.
 
+## Web UI: the machine room direction (#91)
+
+The maintainer chose the "machine room" drafts on 2026-11-19 (only `design-drafts/machine-room-v2.html` counts). This pull request rebuilds the existing pages in that look; it adds no page.
+
+- **No component library.** The pieces the issue lists (badge, confirmation, row menu, chips, command box, notices, cards on narrow screens) are a few small components in `dashboard/src/ui.tsx` and classes in `styles.css`. A library would bring its own look and more code to review, for about ten components.
+- **Fonts are bundled** (`@fontsource-variable/archivo`, `@fontsource/ibm-plex-mono`, about 180 KB of woff2 in the binary) because the CSP (#201) is `default-src 'self'`; loading them from Google would also tell a third party who opens the dashboard.
+- **Theme and language are saved in the browser** (`regulus.theme`, `regulus.language`; "System" and "Browser language" remove the saved value). Saving them per user on the hub is possible later; nothing else needs it now.
+- **Navigation:** a sidebar with two sections, a drawer below 52rem. **Rejected:** a bottom bar (four items today, more with plugins).
+- **Small screens:** one column below 40rem, two up to 1024 px, in the saved order, with Move up and Move down instead of dragging (touch and keyboard). The saved layout is the wide one; moving swaps two widgets' positions.
+- **Confirmations in place** instead of `window.confirm`: they say what happens, can be styled and translated, and can be tested.
+- **Not built:** the isometric room, the alert pins and the load wall of the draft. They need the physical location of nodes and an alert model, which need their own design issues (`design-drafts/README.md`). The "custom build" badge and the solar-system idea in the issue's comments are not part of this.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)

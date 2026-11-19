@@ -30,6 +30,10 @@ export const core = {
   "ui.cancel": "Cancel",
   "ui.actions": "Actions",
   "ui.actionsFor": "Actions for {name}",
+  "live.connected": "Live",
+  "live.connecting": "Connecting…",
+  "live.lost": "Reconnecting…",
+  "live.title": "Live updates from the hub",
   "ui.copied": "Copied",
   "ui.copyManual": "This browser cannot copy here (the hub is not on HTTPS): select the text and press Ctrl+C.",
 
