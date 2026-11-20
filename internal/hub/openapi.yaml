@@ -774,8 +774,11 @@ paths:
         agents that report a plugins directory, ordered by id, with what they
         last reported (every metrics interval). Agents without one, the built-in
         agent, agents admitted only to be updated and agents older than this
-        report are not listed. The lists are empty, never null. See
-        docs/plugins/runtime.md for the states.
+        report are not listed. The lists are empty, never null. A directory in
+        the plugins directory that is not a usable plugin (a missing or invalid
+        `plugin.yaml`, a name that is not the id, a symbolic link) is listed with
+        the state `invalid`, its directory name as `id`, an empty `version` and
+        the reason in `last_error`. See docs/plugins/runtime.md for the states.
       responses:
         "200":
           description: The plugins.
@@ -797,7 +800,11 @@ paths:
 
         Message types (the `type` field): `snapshot` (`StreamSnapshot`),
         `agent.connected` (`agent`), `agent.disconnected` (`id`), `agent.heartbeat`
-        (`id`, `at`) and `agent.metrics` (`id`, `point`).
+        (`id`, `at`), `agent.metrics` (`id`, `point`) and `plugins.changed`
+        (`source`: `hub` or `agent`, with the agent's `id`): a plugin of the hub or
+        of that agent changed state, restart count or last error, or appeared. It
+        carries no state; read `GET /api/plugins` again (also after a `snapshot`
+        and when an agent connects or disconnects).
       responses:
         "101":
           description: Switching protocols.
@@ -1716,7 +1723,7 @@ components:
         state:
           type: string
           description: One of these; an agent of a newer release may report another, shown as it is.
-          examples: [starting, running, restarting, failed, incompatible, stopped]
+          examples: [starting, running, restarting, failed, incompatible, stopped, invalid]
         restarts: { type: integer, description: "Times it was started again since the hub or agent started" }
         last_error:
           type: string

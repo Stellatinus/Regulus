@@ -285,7 +285,7 @@ There is no TLS on the dashboard port; put a reverse proxy in front outside a tr
 
 ## 10. What does not exist yet
 
-- **Plugins**: the manifest and the runtime exist (#19): an agent or a hub with `plugins_dir` runs plugins as separate processes, checks and restarts them, and their state is in `GET /api/plugins` and the console (`internal/plugin`, `internal/hub/plugins.go`, [Plugins](plugins/README.md)). **Unverified** on a real server. Not yet: the dashboard page, what a plugin can do beyond proving it runs, installing and updating them (#20), widgets (#21).
+- **Plugins**: the manifest and the runtime exist (#19): an agent or a hub with `plugins_dir` runs plugins as separate processes, checks and restarts them, and their state is in `GET /api/plugins` and the console (`internal/plugin`, `internal/hub/plugins.go`, [Plugins](plugins/README.md)). **Unverified** on a real server. The dashboard has a Plugins page, updated from the live stream (#319). Not yet: what a plugin can do beyond proving it runs, installing and updating them (#20), widgets (#21).
 - **Containers** and workload management: not started (#113).
 - **Hub redundancy, promotion and failover**: designed in the issues of epic #103, not implemented. In particular **the hub address list and the term (epoch) concept do not exist anywhere in the code** (checked with `grep` on 2026-10-29), so nothing on this page about connections to "the hub" assumes more than one.
 - **Moving data between SQLite and PostgreSQL** (#124) and the **installer choice** of the database (#123); PostgreSQL itself works through configuration (#122) but has not been installed on a real VM yet (#81).

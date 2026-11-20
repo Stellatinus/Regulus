@@ -20,7 +20,8 @@ var sessionRecheck = 30 * time.Second
 
 // streamHandler upgrades GET /api/stream to a WebSocket and pushes JSON
 // events: first a "snapshot" of the connected agents, then "agent.connected",
-// "agent.disconnected", "agent.heartbeat" and "agent.metrics" as they happen.
+// "agent.disconnected", "agent.heartbeat", "agent.metrics" and
+// "plugins.changed" (see pluginsEvent) as they happen.
 // The client sends nothing. The upgrade refuses a cross-origin page, and the
 // session cookie is checked before the handler runs, and again every
 // sessionRecheck: a stream whose session ended (logout, disabled account, new

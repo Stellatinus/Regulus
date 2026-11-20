@@ -345,8 +345,12 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		p.Metrics.Plugins, p.Metrics.PluginsEnabled = nil, false
 		s.mu.Lock()
 		sess.info.LastMetrics = p.Metrics
+		same := samePlugins(sess.info.PluginsEnabled, sess.info.Plugins, enabled, plugins)
 		sess.info.PluginsEnabled, sess.info.Plugins = enabled, plugins
 		s.mu.Unlock()
+		if !same {
+			s.events.publish(pluginsEvent{Type: "plugins.changed", Source: "agent", ID: sess.info.ID})
+		}
 		if sample, prev := s.metrics.add(sess.info.ID, p.Metrics); sample.Report != nil {
 			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: toPoint(sample, prev)})
 		}

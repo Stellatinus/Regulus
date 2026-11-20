@@ -4,6 +4,7 @@ import { DEFAULT_WINDOW_MS } from "./Chart";
 import {
   HISTORY_POINTS,
   LiveStore,
+  PLUGINS,
   ROSTER,
   STATUS,
   WATCH,
@@ -274,6 +275,18 @@ export function useLiveAgent(preferred: unknown): LiveView {
     times: series.times,
     latest: entry.points.last,
   };
+}
+
+// usePluginsVersion is a number that grows whenever the plugins may have
+// changed (LiveStore.pluginsVersion): a view of the plugins loads them again
+// when it changes, instead of polling. Without a provider it stays 0.
+export function usePluginsVersion(): number {
+  const store = useContext(LiveContext) ?? noStore;
+  return useSyncExternalStore(
+    (onChange) => store.subscribe(PLUGINS, onChange),
+    () => store.pluginsVersion,
+    () => store.pluginsVersion,
+  );
 }
 
 // useConnection is the state of the live stream (/api/stream): connecting,
