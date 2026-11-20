@@ -124,7 +124,7 @@ Before, an agent more than one release series behind (or speaking a protocol the
 - **Chosen: an update-only session on a frozen update contract.** The hub admits an *enrolled* agent that is too old with `Welcome.update_only`; in that session only `Hello`, `Welcome`, `Heartbeat`, `Ping`, `ApplyUpdate`, `CommandResult` and `FetchUpdate` are used, and their meaning never changes in any protocol version (`protocol.UpdateContract` stays 1, tested). The update goes straight to the hub's version. An old agent that does not know the field keeps sending metrics; the hub drops them, because their format may have changed. The hub refuses every other command for that agent (`ErrUpdateOnly`).
 - **Still refused:** an agent with no certificate (nothing enrolled, nothing to update), and an agent newer than the hub (the hub is the one to update).
 - **Not solved by this:** an agent that cannot verify today's signatures (a build that trusts the old repository identity) or that has no update helper: `install.sh` once. Both are said in the documents and the dashboard.
-- **Not verified on a real machine:** a real agent of an old release against a new hub (#233 would add it as an end-to-end test).
+- **Not verified on a real machine:** a real agent of an old release against a new hub. The end-to-end test (#233) checks the refusal of another protocol version over the real listener with a hand-made Hello, not an old binary.
 
 ## Versioning: contracts instead of modules (#227)
 
@@ -179,6 +179,20 @@ Agent certificates last five years and the CA twenty, with no renewal (#128), an
 - **What is warned about:** the CA and agents that are not revoked, within 90 days or already ended. The listener is not: it renews itself 30 days before its end (#204). The warning carries data only; the dashboard writes the text in both languages.
 - **One log line a day**, not one per certificate: checked every hour, logged at start and then at most once in 24 hours while something ends soon. A restart logs it again.
 - **Not verified on a real machine:** the dates shown on a real install and the daily log line under journald (to be added to the certificate test, #241).
+
+## Fuzz tests for the /proc parsers and the network rates (audit issue #228)
+
+- **Six fuzz targets, seeds in the code.** `FuzzParseCPUTimes`, `FuzzParseMemInfo`, `FuzzParseMounts`, `FuzzParseNetDev`, `FuzzUnescapeMount` (`internal/agent/collector_fuzz_test.go`) and `FuzzNetworkRate` (`internal/hub/rate_fuzz_test.go`). They check invariants, not exact values: busy time within the total and a CPU share between 0 and 100, used plus available equal to the total, one mount per device of a real filesystem, interfaces named, not `lo` and listed once, mount paths that decode back to what the kernel encoded, and network rates that are either absent (a counter went back, the interval cannot be trusted) or finite, non-negative and exact. Their seeds are `f.Add` calls, so every `go test` runs them; inputs a fuzzer finds go under `testdata/fuzz/<Target>`, or become a named unit test as below.
+- **Nightly, not per pull request.** `.github/workflows/fuzz.yml` runs each target for 30 seconds every night (and by hand); `make fuzz` does the same locally. Fuzzing on every pull request would add minutes without finding much more.
+- **What the fuzzers found, now fixed:** a `/proc/stat` line whose counters overflow 64 bits gave busy time larger than the total (now an error); a `/proc/meminfo` value in kB that does not fit in bytes wrapped to a small number (now skipped, and the old-kernel fallback sum saturates); `/proc/net/dev` lines without a name, or a name twice, were reported (now skipped: the hub pairs counters by name). None of these come from a real kernel. `unescapeMount` was suspected of mishandling an escape at the very end (`a\040`); it does not, and a test keeps it so.
+- **Not done:** a CPU share of 0 still cannot be told from an unreadable `/proc/stat` (it needs a field in the agent protocol, the API and the dashboard), and memory inside a container (cgroup v2, LXC) is still the host's. Both are left for separate issues.
+
+## An end-to-end test with the real binaries (audit issue #233)
+
+- **A Go test, not a shell script.** `internal/e2e` drives the processes from Go, so it can also act as a misbehaving agent over the real listener (a Hello with another protocol version, a certificate from another CA or expired) with the project's own `pki` and generated client, which a shell script could not without extra tools. `scripts/smoke.sh` stays for the packaged binary (dashboard, console, configuration, admin reset) and keeps its short enroll-and-revoke check.
+- **Run on every pull request, in its own job.** Gated by `REGULUS_E2E=1` so that `go test ./...` stays fast; `make e2e` and the CI job `e2e` set it, and the job fails if the test was skipped. It takes about 30 seconds after the build; the binary is built with `-race` and a data race in any process fails the test.
+- **The agent listener has a fixed port per run** (a free port picked by the test), because a restarted hub on port 0 would get another port and the agent would have nowhere to reconnect.
+- **Not covered,** listed in [development.md](development.md#end-to-end-test-hub-and-remote-agent): an update over the stream, an older release's binary, an expired hub CA, PostgreSQL, systemd.
 
 ## Certificate kinds: every certificate of the hub CA says what it is for (audit issue #316)
 
