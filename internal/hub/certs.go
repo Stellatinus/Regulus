@@ -65,6 +65,10 @@ type Certificates struct {
 	// the hub does not know yet: enrolled before it kept it and not connected
 	// since.
 	AgentsUnknown int
+	// LegacyAgents counts the connected agents that present a certificate
+	// with no kind, issued before #316 (#322). When it is 0 and every agent
+	// has connected since, the legacy case can be removed.
+	LegacyAgents int
 }
 
 // Soonest is the certificate that ends first, of all of them.
@@ -123,6 +127,11 @@ func (h *Hub) Certificates(ctx context.Context) (Certificates, error) {
 		}
 	}
 	slices.SortStableFunc(c.Agents, func(a, b CertEnd) int { return a.NotAfter.Compare(b.NotAfter) })
+	for _, a := range h.Agents() {
+		if a.LegacyCert {
+			c.LegacyAgents++
+		}
+	}
 	return c, nil
 }
 
@@ -150,6 +159,7 @@ type certificatesJSON struct {
 	Listener      *certJSON  `json:"listener"`
 	Soonest       certJSON   `json:"soonest"`
 	AgentsUnknown int        `json:"agents_unknown"`
+	LegacyAgents  int        `json:"legacy_agents"`
 	WarnDays      int        `json:"warn_days"`
 	Warnings      []certJSON `json:"warnings"`
 }
@@ -159,6 +169,7 @@ func toCertificatesJSON(c Certificates, now time.Time) certificatesJSON {
 		CA:            toCertJSON(c.CA, now),
 		Soonest:       toCertJSON(c.Soonest(), now),
 		AgentsUnknown: c.AgentsUnknown,
+		LegacyAgents:  c.LegacyAgents,
 		WarnDays:      int(CertWarnBefore / (24 * time.Hour)),
 		Warnings:      []certJSON{},
 	}

@@ -1927,7 +1927,7 @@ components:
         days_left: { type: integer, description: Whole days until it ends; negative once it has ended. }
     Certificates:
       type: object
-      required: [ca, listener, soonest, agents_unknown, warn_days, warnings]
+      required: [ca, listener, soonest, agents_unknown, legacy_agents, warn_days, warnings]
       properties:
         ca: { $ref: "#/components/schemas/Certificate" }
         listener:
@@ -1944,6 +1944,12 @@ components:
         agents_unknown:
           type: integer
           description: Enrolled agents (not revoked) whose end date the hub does not know yet; it learns it when they connect.
+        legacy_agents:
+          type: integer
+          description: |
+            Connected agents whose certificate has no kind (issued by a hub
+            before #316). They keep working; this tells when the last one is
+            gone (#322). Agents that are not connected are not counted.
         warn_days: { type: integer, example: 90, description: How many days before its end a certificate is in `warnings`. }
         warnings:
           type: array

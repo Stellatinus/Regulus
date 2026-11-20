@@ -64,6 +64,11 @@ type AgentInfo struct {
 	// be updated (Welcome.update_only). Its metrics are ignored and the only
 	// commands it gets are Ping and ApplyUpdate.
 	UpdateOnly bool
+	// LegacyCert is true while the agent is connected with a certificate from
+	// before certificate kinds (#316): it has no kind, only the organization
+	// "Regulus agent". The hub counts them (#322) to tell when the last one
+	// is gone. False for the built-in agent.
+	LegacyCert bool
 	// PluginsEnabled and Plugins are what the agent last reported about its
 	// plugins (MetricsReport.plugins); they are kept here, not in the metrics
 	// history.
@@ -250,6 +255,10 @@ func (s *agentServer) Connect(stream grpc.BidiStreamingServer[agentv1.AgentMessa
 	}
 	sess := s.register(id, hello, negotiated, compat, updateOnly)
 	defer s.unregister(sess)
+	if who, ok := identityFrom(ctx); ok && who.Legacy {
+		s.markLegacy(sess)
+		s.log.Warn("agent connected with a legacy certificate (no kind, issued before #316): it still works, and is counted in GET /api/certificates (legacy_agents) until its certificate is replaced", "agent", id)
+	}
 	welcome := &agentv1.Welcome{
 		ProtocolVersion:   negotiated,
 		AgentId:           id,
@@ -414,6 +423,13 @@ func (s *agentServer) logReportProblem(sess *session, msg string) {
 	}
 	sess.reportsLogd = true
 	s.log.Warn(msg, "agent", sess.info.ID)
+}
+
+// markLegacy records that the agent connected with a legacy certificate.
+func (s *agentServer) markLegacy(sess *session) {
+	s.mu.Lock()
+	sess.info.LegacyCert = true
+	s.mu.Unlock()
 }
 
 // register adds the agent to the registry. A previous connection with the same
