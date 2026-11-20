@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,6 +52,8 @@ type Hub struct {
 	// data directory (see lockDataDir). Close does both.
 	store     *storage.HubDB
 	unlockDir func()
+	closeOnce sync.Once
+	closeErr  error
 
 	dbState dbHealth
 	ui      fs.FS
@@ -267,14 +270,18 @@ func (h *Hub) AgentConn() (*grpc.ClientConn, error) {
 	return h.transport.Dial()
 }
 
-// Close releases the hub resources.
+// Close releases the hub resources. Only the first call does anything: a
+// second one must not release the data directory or the database lock again,
+// which by then may belong to the next hub.
 func (h *Hub) Close() error {
-	h.rollout.stop()
-	h.updates.Close()
-	h.seen.close() // records the connected agents a last time, before the database closes
-	err := h.store.Close()
-	h.unlockDir()
-	return err
+	h.closeOnce.Do(func() {
+		h.rollout.stop()
+		h.updates.Close()
+		h.seen.close() // records the connected agents a last time, before the database closes
+		h.closeErr = h.store.Close()
+		h.unlockDir()
+	})
+	return h.closeErr
 }
 
 // Serve serves HTTP on ln until ctx is cancelled, then shuts down gracefully.
