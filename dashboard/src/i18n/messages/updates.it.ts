@@ -57,6 +57,8 @@ export const updatesIt: Record<keyof typeof updates, string> = {
     "L'hub si riavvia tra un momento e questa pagina può smettere di rispondere per un po'; ricontrolla da sola. Se la nuova versione non si avvia correttamente, viene rimessa la precedente.",
   "updates.stalled":
     "Nessuno ha preso in carico la richiesta da alcuni minuti. L'unità che installa gli aggiornamenti probabilmente non è in esecuzione:",
+  "updates.noStatusSocket":
+    "Questo hub non ha il socket di stato locale, quindi `regulus status` non mostra dati in tempo reale, e un aggiornamento da una release che non scrive ancora running.json (precedente alla correzione di #312) viene annullato su di esso. Gli aggiornamenti da questa versione in poi funzionano. Motivo:",
   "updates.last.applied": "Aggiornato alla {version} {ago}.",
   "updates.last.appliedFrom": "Aggiornato alla {version} dalla {from} {ago}.",
   "updates.last.rolledBack":

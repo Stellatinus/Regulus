@@ -55,6 +55,8 @@ export const updates = {
     "The hub restarts in a moment and this page may stop answering for a short while; it checks again by itself. If the new version does not start properly, the previous one is put back.",
   "updates.stalled":
     "Nothing has picked up the request for a few minutes. The unit that installs updates is probably not running:",
+  "updates.noStatusSocket":
+    "This hub has no local status socket, so `regulus status` shows no live data, and an update from a release that does not yet write running.json (made before the fix of #312) rolls back on it. Updates from this version on work. Reason:",
   "updates.last.applied": "Updated to {version} {ago}.",
   "updates.last.appliedFrom": "Updated to {version} from {from} {ago}.",
   "updates.last.rolledBack":

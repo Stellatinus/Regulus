@@ -358,6 +358,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 
 	stopLocal, socketProblem := h.serveLocal(ln.Addr().String())
 	defer stopLocal()
+	h.updates.SetStatusSocket(socketProblem)
 	h.watchDatabase(ctx)
 	h.watchCertificates(ctx)
 

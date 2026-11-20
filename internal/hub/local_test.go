@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -141,6 +142,18 @@ func TestHubWithoutStatusSocketWritesRunning(t *testing.T) {
 	if _, err := os.Lstat(localstatus.SocketPath(dir)); !os.IsNotExist(err) {
 		t.Errorf("a socket was made at a path too long for one: %v", err)
 	}
+
+	// #338: the administrator is told, in GET /api/updates.
+	st, err := h.updates.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(st.StatusSocket, "longer than") {
+		t.Errorf("status_socket = %q, want the reason the socket is missing", st.StatusSocket)
+	}
+	if body, err := json.Marshal(st); err != nil || !strings.Contains(string(body), `"status_socket":"the path of the socket`) {
+		t.Errorf("JSON %s (%v) does not carry status_socket", body, err)
+	}
 }
 
 func TestHubWithStatusSocketWritesRunning(t *testing.T) {
@@ -153,5 +166,8 @@ func TestHubWithStatusSocketWritesRunning(t *testing.T) {
 	})
 	if r.Version != "9.9.9" || r.StatusSocket != "" {
 		t.Errorf("running = %+v", r)
+	}
+	if st, err := h.updates.Status(context.Background()); err != nil || st.StatusSocket != "" {
+		t.Errorf("a hub with its socket reports status_socket %q (%v), want none", st.StatusSocket, err)
 	}
 }

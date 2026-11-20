@@ -1614,6 +1614,14 @@ components:
         apply_available: { type: boolean, description: A verified release is waiting and nothing is being installed. }
         applying: { type: boolean, description: An installation was requested or is running. }
         apply_stalled: { type: boolean, description: The request was not picked up for minutes; the helper unit is probably not enabled. }
+        status_socket:
+          type: string
+          description: >-
+            Why the hub has no local status socket (for example a data directory path
+            too long for a Unix socket); absent while it has one. Without it
+            `regulus status` shows no live data, the hub is updated through
+            `<data_dir>/running.json`, and an update from a version older than the
+            #312 fix rolls back on this hub.
         last_apply:
           oneOf:
             - { $ref: "#/components/schemas/UpdateApplyResult" }

@@ -723,6 +723,8 @@ export interface UpdateStatus {
   applying: boolean;
   // The request was not picked up for minutes: the helper unit is not enabled.
   apply_stalled?: boolean;
+  // Why the hub has no local status socket; absent while it has one (#338).
+  status_socket?: string;
   last_apply: UpdateApplyResult | null;
   // Maintenance window of the automatic mode, "HH:MM" in the hub's local time.
   window_start?: string;

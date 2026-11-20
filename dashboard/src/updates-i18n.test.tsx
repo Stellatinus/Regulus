@@ -58,6 +58,30 @@ const rollout: RolloutStatus = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("UpdatesPage in Italian", () => {
+  // #338: the note about a missing status socket is translated too.
+  it("explains in Italian that the hub has no local status socket", async () => {
+    window.localStorage.setItem("regulus.language", "it");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(path === "/api/updates/rollout" ? rollout : { ...status, status_socket: "il percorso è troppo lungo" }),
+        }),
+      ),
+    );
+    render(
+      <LanguageProvider>
+        <SessionContext.Provider value={{ user: admin, signOut: () => Promise.resolve(), expired: vi.fn() }}>
+          <UpdatesPage />
+        </SessionContext.Provider>
+      </LanguageProvider>,
+    );
+    expect(await screen.findByText(/Questo hub non ha il socket di stato locale/)).toHaveTextContent(/il percorso è troppo lungo/);
+  });
+
   it("shows the texts of the page in Italian", async () => {
     window.localStorage.setItem("regulus.language", "it");
     vi.stubGlobal(
