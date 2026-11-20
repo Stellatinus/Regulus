@@ -34,6 +34,15 @@ export interface Agent {
   // built-in agent, and for an agent enrolled before the hub kept the date
   // until it next connects.
   cert_not_after?: string;
+  // The container the agent runs in ("lxc", "docker", ...), if it can tell;
+  // CPU and memory may then be the host's (#230).
+  container?: string;
+  // From the last metrics report: the agent's collector ("linux", or "basic"
+  // on a system without /proc) and the parts it could not read (see
+  // MetricsPoint.unavailable). Absent before the first report and for an
+  // older agent.
+  collector?: string;
+  unavailable?: string[];
 }
 
 // User as returned by the authentication endpoints (see internal/auth).
@@ -316,6 +325,10 @@ export interface MetricsPoint {
   uptime_seconds: number;
   disks: DiskUsage[];
   networks: NetworkUsage[];
+  // The parts of this report the agent could not read ("cpu", "load",
+  // "memory", "disks", "network", "uptime"); their numbers are zero and mean
+  // nothing. Absent when everything was read.
+  unavailable?: string[];
 }
 
 export interface DiskUsage {

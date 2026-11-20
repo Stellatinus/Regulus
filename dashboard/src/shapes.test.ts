@@ -34,6 +34,11 @@ describe("toMetricsPoint", () => {
     expect(p?.disks).toHaveLength(1);
     expect(p?.networks).toEqual([{ interface: "lo", rx_bytes: 0, tx_bytes: 0, rx_bytes_per_sec: null, tx_bytes_per_sec: null }]);
   });
+
+  it("keeps the names of the parts the agent could not read", () => {
+    expect(toMetricsPoint({ ...point, unavailable: ["memory", 3, "disks"] })?.unavailable).toEqual(["memory", "disks"]);
+    expect(toMetricsPoint({ ...point, unavailable: "memory" })?.unavailable).toBeUndefined();
+  });
 });
 
 describe("toAgent", () => {

@@ -1789,6 +1789,30 @@ components:
             When the agent's client certificate ends. Absent for the built-in
             agent, and for an agent enrolled before the hub kept the date until
             it next connects. See `GET /api/certificates` for the warnings.
+        container:
+          type: string
+          example: lxc
+          description: |
+            The container the agent says it runs in (`docker`, `podman`, `lxc`,
+            `systemd-nspawn` or another name systemd gives). Absent on a machine
+            of its own, when the agent cannot tell, and for an older agent. In a
+            container, CPU and memory may be the host's figures
+            (docs/remote-agents.md, "Supported platforms").
+        collector:
+          type: string
+          example: linux
+          description: |
+            Which collector made the last metrics report: `linux` (everything
+            from /proc and statfs) or `basic` (a system without /proc: time and
+            uptime only). Absent before the first report and for an older agent;
+            a newer agent may send another name.
+        unavailable:
+          type: array
+          items: { type: string, example: memory }
+          description: |
+            The parts of the last metrics report the agent could not read on
+            this system; their numbers are zero and mean nothing. Absent when
+            everything was read. A newer agent may send another name.
     Certificate:
       type: object
       required: [kind, not_after, days_left]
@@ -1875,6 +1899,12 @@ components:
               tx_bytes: { type: integer }
               rx_bytes_per_sec: { type: [number, "null"] }
               tx_bytes_per_sec: { type: [number, "null"] }
+        unavailable:
+          type: array
+          items: { type: string, example: memory }
+          description: |
+            The parts of this report the agent could not read (see `Agent.unavailable`);
+            their numbers are zero and mean nothing. Absent when everything was read.
     Layout:
       type: object
       required: [layout, updated_at]

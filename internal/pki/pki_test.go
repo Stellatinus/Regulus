@@ -166,7 +166,7 @@ func TestMutualTLSHandshake(t *testing.T) {
 	}
 	_ = conn.Close()
 	leaf, _ := x509.ParseCertificate(der)
-	if id := <-got; id.AgentID != "agent-1" || id.Serial != serial || !id.NotAfter.Equal(leaf.NotAfter) {
+	if id := <-got; id.ID != "agent-1" || id.Kind != KindAgent || id.Legacy || id.Serial != serial || !id.NotAfter.Equal(leaf.NotAfter) {
 		t.Errorf("identity = %+v, want agent-1 / %s / %v", id, serial, leaf.NotAfter)
 	}
 
@@ -185,7 +185,7 @@ func TestMutualTLSHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = conn.Close()
-	if id := <-got; id.AgentID != "" {
+	if id := <-got; id.ID != "" {
 		t.Errorf("anonymous client got identity %+v", id)
 	}
 
