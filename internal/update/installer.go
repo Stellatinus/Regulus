@@ -64,7 +64,8 @@ type Installer struct {
 	Run      Runner
 	// Agent is true on a server that runs the agent: its health is that it
 	// connected to the hub again (see WriteConnected), not the hub's local
-	// status socket.
+	// status socket. A hub's health is its socket, or, when the hub has no
+	// socket, the file it writes when it starts serving (WriteRunning).
 	Agent bool
 	// Probe returns the version of the service that is running, or an error
 	// while it is not up. Only a process that started at or after since counts:
@@ -123,7 +124,12 @@ func (in *Installer) probeUnit(ctx context.Context, since time.Time) (string, er
 	}
 	st, err := localstatus.Fetch(ctx, in.DataDir)
 	if err != nil {
-		return "", err
+		// The hub runs without its socket when it cannot make one (#312);
+		// what it wrote when it started is the proof then.
+		if r, ok := ReadRunning(in.DataDir); ok && !r.StartedAt.Before(since) {
+			return r.Version, nil
+		}
+		return "", fmt.Errorf("the hub does not answer on its local status socket %s (%v) and has not written %s since the restart", localstatus.SocketPath(in.DataDir), err, RunningName)
 	}
 	if st.StartedAt.Before(since) {
 		return "", errors.New("the hub that answers is the one from before the restart")

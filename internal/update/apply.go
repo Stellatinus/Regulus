@@ -171,3 +171,33 @@ func ReadConnected(dataDir string) (Connected, bool) {
 	var c Connected
 	return c, readJSON(filepath.Join(dataDir, ConnectedName), &c)
 }
+
+// RunningName is the file a hub writes in its data directory once it serves
+// (#312).
+const RunningName = "running.json"
+
+// Running is written by a hub each time it starts serving. After an update the
+// helper reads it when the hub's local status socket cannot be reached (the
+// hub runs without the socket when the data directory's path is too long for
+// one, or the file system has no Unix sockets): a hub that started after the
+// restart with the new version is a healthy one, like an agent that connected
+// again (Connected). The socket is still asked first, because it proves the
+// hub answers, not only that it got this far.
+type Running struct {
+	Version   string    `json:"version"`
+	StartedAt time.Time `json:"started_at"`
+	// StatusSocket is why the hub has no local status socket, empty while it
+	// has one.
+	StatusSocket string `json:"status_socket,omitempty"`
+}
+
+// WriteRunning records that the hub of dataDir is serving.
+func WriteRunning(dataDir string, r Running) error {
+	return writeJSON(filepath.Join(dataDir, RunningName), r, 0o644)
+}
+
+// ReadRunning returns what the hub of dataDir last wrote.
+func ReadRunning(dataDir string) (Running, bool) {
+	var r Running
+	return r, readJSON(filepath.Join(dataDir, RunningName), &r)
+}

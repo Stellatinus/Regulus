@@ -759,7 +759,14 @@ describe("UpdatesPage", () => {
             ...idle,
             state: "stopped",
             finished_at: now,
-            agents: [{ ...web1, status: "failed", message: "stopped" }],
+            agents: [
+              {
+                ...web1,
+                status: "unknown",
+                message:
+                  "the update of the servers was stopped before this server's result was known",
+              },
+            ],
           },
         },
       ],
@@ -776,6 +783,9 @@ describe("UpdatesPage", () => {
     expect(
       await screen.findByText(/Last update of the servers: stopped/),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("list", { name: "Last update" }),
+    ).toHaveTextContent("web1 (0.1.0): result unknown — the update");
   });
 
   it("says when no server is behind", async () => {

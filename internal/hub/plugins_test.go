@@ -157,7 +157,7 @@ func TestTheHubRunsItsPlugins(t *testing.T) {
 	if st := h.HubPlugins().Plugins[1]; st.ID != "example-hello" || st.State != plugin.StateRunning || st.PID != pid || pid == 0 {
 		t.Errorf("example after the crashes = %+v", st)
 	}
-	if ls := h.localStatus("x"); !ls.PluginsEnabled || len(ls.Plugins) != 2 {
+	if ls := h.localStatus(t.Context(), "x"); !ls.PluginsEnabled || len(ls.Plugins) != 2 {
 		t.Errorf("local status = %+v", ls)
 	}
 
