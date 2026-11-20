@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 
 	"github.com/CodexCircle/Regulus/internal/agent"
 	"github.com/CodexCircle/Regulus/internal/auth"
@@ -80,6 +79,14 @@ type Hub struct {
 	// ends (time.Time), zero while the listener is off.
 	listenerCertEnd atomic.Value
 	certLog         certLogState // the daily warning about certificates that end soon
+
+	// agentKeepalive is the policy of the agent listener: how often a client
+	// may ping (protocol.KeepaliveMinTime) and how soon the hub pings a silent
+	// one (protocol.HubKeepaliveTime). Tests shorten it.
+	agentKeepalive agentKeepalive
+	// agentServerTune, if set, registers more services on the agent listener
+	// before it serves (tests: a dummy unary call, #244).
+	agentServerTune func(*grpc.Server)
 }
 
 // tuneStorage, if set, changes the database settings before New opens the
@@ -169,17 +176,18 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	}
 
 	h := &Hub{
-		cfg:       cfg,
-		auth:      authn,
-		fleet:     fleet.New(db, ca, authn).ReadFrom(store.Read),
-		log:       log,
-		db:        db,
-		store:     store,
-		unlockDir: unlockDir,
-		ui:        ui,
-		agents:    newAgentServer(log),
-		transport: inproc.New(),
-		startedAt: time.Now(),
+		cfg:            cfg,
+		auth:           authn,
+		fleet:          fleet.New(db, ca, authn).ReadFrom(store.Read),
+		log:            log,
+		db:             db,
+		store:          store,
+		unlockDir:      unlockDir,
+		ui:             ui,
+		agents:         newAgentServer(log),
+		transport:      inproc.New(),
+		startedAt:      time.Now(),
+		agentKeepalive: defaultAgentKeepalive(),
 	}
 	// Presence is written by a goroutine of its own, never on the agent's
 	// handshake (see seen.go).
@@ -408,15 +416,12 @@ func (h *Hub) serveAgents(addr string) (stop func(), err error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent listener: %w", err)
 	}
-	srv := grpc.NewServer(
-		grpc.Creds(credentials.NewTLS(tlsConfig)),
-		grpc.StreamInterceptor(h.requireAgent),
-		grpc.MaxRecvMsgSize(maxAgentMessageBytes),
-		grpc.MaxConcurrentStreams(maxAgentStreams),
-		grpc.ConnectionTimeout(20*time.Second), // the TLS handshake of a client that never finishes it
-	)
+	srv := grpc.NewServer(h.agentServerOptions(tlsConfig)...)
 	agentv1.RegisterAgentServiceServer(srv, h.agents)
 	agentv1.RegisterEnrollmentServiceServer(srv, enrollServer{hub: h})
+	if h.agentServerTune != nil {
+		h.agentServerTune(srv)
+	}
 	go func() { _ = srv.Serve(ln) }()
 	h.agentAddr.Store(ln.Addr().String())
 	h.log.Info("agent listener ready", "addr", ln.Addr().String(), "ca", h.fleet.CA().Fingerprint())

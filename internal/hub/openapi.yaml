@@ -822,10 +822,20 @@ paths:
         of that agent changed state, restart count or last error, or appeared. It
         carries no state; read `GET /api/plugins` again (also after a `snapshot`
         and when an agent connects or disconnects).
+
+        A user has at most 16 streams open at a time; one more is refused with
+        429 until another one closes.
       responses:
         "101":
           description: Switching protocols.
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "429":
+          description: The user already has the most streams allowed open; see `Retry-After`.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /api/layout:
     get:
       tags: [dashboard]

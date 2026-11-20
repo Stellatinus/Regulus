@@ -7,10 +7,13 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"runtime"
+	"strconv"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/CodexCircle/Regulus/internal/config"
@@ -232,6 +235,104 @@ func TestConfiguredMetricsIntervalReachesAgents(t *testing.T) {
 	if got := h.agents.metricsInterval; got != 7*time.Second {
 		t.Fatalf("metrics interval = %v, want 7s", got)
 	}
+}
+
+// typicalReport has a few disks and interfaces, like a small server.
+func typicalReport(uptime uint64) *agentv1.MetricsReport {
+	r := report(uptime)
+	r.Cpu = &agentv1.CpuMetrics{UsagePercent: 12.5, Load_1: 0.3}
+	r.Memory = &agentv1.MemoryMetrics{TotalBytes: 8 << 30, UsedBytes: 3 << 30}
+	for i := range 4 {
+		r.Disks = append(r.Disks, &agentv1.DiskMetrics{MountPoint: "/srv/data" + strconv.Itoa(i), Filesystem: "ext4", TotalBytes: 1 << 40, UsedBytes: 1 << 39})
+		r.Networks = append(r.Networks, &agentv1.NetworkMetrics{Interface: "eth" + strconv.Itoa(i), RxBytes: 1 << 30, TxBytes: 1 << 29})
+	}
+	return r
+}
+
+// TestMetricsStoreKeepsAGlobalBudget is #244: with many agents the store stays
+// within its budget, and what goes is the oldest samples, whichever agent
+// they belong to.
+func TestMetricsStoreKeepsAGlobalBudget(t *testing.T) {
+	now := time.Now()
+	store := newMetricsStore(time.Hour)
+	store.now = func() time.Time { return now }
+	per := sampleCost(typicalReport(1000)) // uptimes 1000 to 2999 have the same size
+	store.budget = 300 * per               // room for 300 samples
+	const agents, rounds = 100, 20
+
+	for r := range rounds {
+		for a := range agents {
+			now = now.Add(time.Millisecond) // every sample has its own time
+			store.add("agent-"+strconv.Itoa(a), typicalReport(uint64(1000+r*agents+a)))
+			if used := store.size(); used > store.budget {
+				t.Fatalf("round %d, agent %d: the store uses %d, over its budget of %d", r, a, used, store.budget)
+			}
+		}
+	}
+
+	// Exactly the newest 300 samples are left: the last three rounds.
+	var kept []uint64
+	for a := range agents {
+		for _, s := range store.history("agent-" + strconv.Itoa(a)) {
+			kept = append(kept, s.Report.GetUptimeSeconds())
+		}
+	}
+	if len(kept) != 300 {
+		t.Fatalf("kept %d samples, want 300", len(kept))
+	}
+	first := uint64(1000 + (rounds-3)*agents)
+	for _, u := range kept {
+		if u < first {
+			t.Fatalf("sample %d was kept, but everything before %d is older than what was dropped", u, first)
+		}
+	}
+}
+
+// TestMetricsStoreKeepsTheNewestSampleOfEachAgent: a budget too small even for
+// one sample per agent still leaves every agent its current state.
+func TestMetricsStoreKeepsTheNewestSampleOfEachAgent(t *testing.T) {
+	store := newMetricsStore(time.Hour)
+	store.budget = 1
+	for i := range 3 {
+		for _, id := range []string{"a", "b"} {
+			store.add(id, report(uint64(i)))
+		}
+	}
+	for _, id := range []string{"a", "b"} {
+		if got := store.history(id); len(got) != 1 || got[0].Report.GetUptimeSeconds() != 2 {
+			t.Fatalf("history(%s) = %v, want only the newest sample", id, got)
+		}
+	}
+}
+
+// TestMetricsStoreBudgetMatchesTheHeap checks the estimate of sampleCost
+// against the memory the Go runtime really holds for the store.
+func TestMetricsStoreBudgetMatchesTheHeap(t *testing.T) {
+	store := newMetricsStore(time.Hour)
+	store.budget = 8 << 20
+	wire, err := proto.Marshal(typicalReport(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := range 15000 {
+		// Reports arrive as the hub decodes them: fresh messages.
+		r := &agentv1.MetricsReport{}
+		if err := proto.Unmarshal(wire, r); err != nil {
+			t.Fatal(err)
+		}
+		store.add("agent-"+strconv.Itoa(i%500), r)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	held := int64(after.HeapAlloc) - int64(before.HeapAlloc)
+	t.Logf("budget %d, estimate %d, heap held %d", store.budget, store.size(), held)
+	if held > store.budget*5/4 {
+		t.Errorf("the store holds %d bytes of heap, more than its budget of %d by over 25%%", held, store.budget)
+	}
+	runtime.KeepAlive(store)
 }
 
 func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
