@@ -15,8 +15,14 @@ import (
 
 func startHubWithConfig(t *testing.T, cfg config.Config, opts ...Option) *Hub {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
 	cfg.DataDir = t.TempDir()
+	return startHubIn(t, cfg, opts...)
+}
+
+// startHubIn is startHubWithConfig in the data directory cfg names.
+func startHubIn(t *testing.T, cfg config.Config, opts ...Option) *Hub {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
 	useTestDatabase(t, &cfg)
 	cfg.Updates.Check = false // tests never reach for the network
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))

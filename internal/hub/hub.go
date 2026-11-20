@@ -192,6 +192,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		GOARCH:   runtime.GOARCH,
 		Enabled:  cfg.Updates.Check,
 	})
+	if err := h.loadRollout(ctx); err != nil {
+		h.log.Warn("reading the state of the last update of the servers", "err", err)
+	}
 	return h, nil
 }
 
@@ -283,7 +286,8 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	// are stopped (SIGTERM, then SIGKILL) before Serve returns.
 	defer h.startPlugins(ctx)()
 
-	defer h.serveLocal(ln.Addr().String())()
+	stopLocal, socketProblem := h.serveLocal(ln.Addr().String())
+	defer stopLocal()
 	h.watchDatabase(ctx)
 	h.watchCertificates(ctx)
 
@@ -319,6 +323,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
+	h.writeRunning(socketProblem)
 	h.log.Info("hub listening", "addr", ln.Addr().String())
 
 	select {

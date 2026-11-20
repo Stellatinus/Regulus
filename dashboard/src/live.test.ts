@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Agent, MetricsPoint } from "./api";
-import { agentKey, isStale, LiveStore, MAX_POINTS, parseStreamMessage, pickAgent, PointRing, ROSTER, STATUS, WATCH } from "./live";
+import { agentKey, isStale, LiveStore, MAX_POINTS, parseStreamMessage, pickAgent, PLUGINS, PointRing, ROSTER, STATUS, WATCH } from "./live";
 
 function agent(id: string, over: Partial<Agent> = {}): Agent {
   return {
@@ -263,5 +263,26 @@ describe("pickAgent", () => {
     expect(pickAgent(agents, 42)?.id).toBe("local");
     expect(pickAgent([agent("a"), agent("z")], undefined)?.id).toBe("a");
     expect(pickAgent([], "a")).toBeUndefined();
+  });
+});
+
+describe("plugin changes on the stream (#319)", () => {
+  it("parses plugins.changed", () => {
+    expect(parseStreamMessage(JSON.stringify({ type: "plugins.changed", source: "agent", id: "a1" }))).toEqual({ type: "plugins" });
+  });
+
+  it("grows the plugins version on a change, a snapshot and an agent that comes or goes", () => {
+    const store = new LiveStore();
+    let woken = 0;
+    store.subscribe(PLUGINS, () => woken++);
+    const a1 = { id: "a1", version: "1", status: "connected", connected_at: "2026-01-01T00:00:00Z", last_heartbeat: null, metrics_at: null, uptime_seconds: null } as Agent;
+    store.dispatch({ type: "agents", agents: [] });
+    store.dispatch({ type: "plugins" });
+    store.dispatch({ type: "connected", agent: a1 });
+    store.dispatch({ type: "disconnected", id: "a1" });
+    store.dispatch({ type: "disconnected", id: "a1" }); // already gone: nothing
+    store.dispatch({ type: "heartbeat", id: "a1", at: "2026-01-01T00:00:01Z" });
+    expect(store.pluginsVersion).toBe(4);
+    expect(woken).toBe(4);
   });
 });

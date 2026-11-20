@@ -13,6 +13,7 @@ make build        # builds the dashboard, then bin/regulus
 make test         # go vet, go test -race, dashboard typecheck and tests
 make lint         # golangci-lint and ESLint
 make smoke        # starts bin/regulus and checks it end to end
+make e2e          # hub and remote agent binaries end to end over mTLS
 ```
 
 See [docs/development.md](docs/development.md) and [docs/configuration.md](docs/configuration.md) for development and configuration, [docs/architecture.md](docs/architecture.md) for the project layout, and [docs/decisions.md](docs/decisions.md) for the reasons behind the main choices and the open questions. AI coding agents: see [AGENTS.md](AGENTS.md).

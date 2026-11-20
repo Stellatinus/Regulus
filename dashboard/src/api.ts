@@ -728,7 +728,8 @@ export type RolloutAgentStatus =
   | "installing"
   | "updated"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "unknown";
 
 export interface RolloutAgent {
   id: string;
@@ -765,14 +766,17 @@ export const stopRollout = () =>
 
 // Plugins: what the hub and each agent run (GET /api/plugins, servers.read).
 // See docs/plugins/runtime.md for the states. An agent of a newer release may
-// report a state this dashboard does not know: show it as it is.
+// report a state this dashboard does not know: show it as it is. "invalid" is
+// a directory that is not a usable plugin: its id is the directory name, its
+// version is empty and last_error says why.
 export type PluginState =
   | "starting"
   | "running"
   | "restarting"
   | "failed"
   | "incompatible"
-  | "stopped";
+  | "stopped"
+  | "invalid";
 
 export interface PluginStatus {
   id: string;

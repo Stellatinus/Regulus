@@ -464,6 +464,7 @@ const AGENT_STATUS: Record<RolloutAgent["status"], MessageKey> = {
   updated: "updates.agent.updated",
   failed: "updates.agent.failed",
   skipped: "updates.agent.skipped",
+  unknown: "updates.agent.unknown",
 };
 
 // Servers shows the managed servers that run an older version than the hub and
@@ -683,7 +684,7 @@ function AgentRows({
       {agents.map((a) => (
         <li key={a.id}>
           {t(
-            a.message && a.status === "failed"
+            a.message && (a.status === "failed" || a.status === "unknown")
               ? "updates.agent.rowMessage"
               : "updates.agent.row",
             {
