@@ -446,7 +446,7 @@ func (s *agentServer) FetchUpdate(req *agentv1.FetchUpdateRequest, stream grpc.S
 		return status.Errorf(codes.NotFound, "this hub serves only version %s", s.hubVersion)
 	}
 	s.mu.Lock()
-	sess := s.sessions[who.AgentID]
+	sess := s.sessions[who.ID]
 	s.mu.Unlock()
 	if sess == nil {
 		return status.Error(codes.FailedPrecondition, "the agent is not connected")
@@ -471,7 +471,7 @@ func (s *agentServer) FetchUpdate(req *agentv1.FetchUpdateRequest, stream grpc.S
 	}
 	f, _, err := s.files.Open(req.GetVersion(), name)
 	if err != nil {
-		s.log.Warn("cannot serve an update file", "agent", who.AgentID, "file", name, "err", err)
+		s.log.Warn("cannot serve an update file", "agent", who.ID, "file", name, "err", err)
 		return status.Error(codes.NotFound, "the hub does not have this file")
 	}
 	defer func() { _ = f.Close() }()
@@ -484,7 +484,7 @@ func (s *agentServer) FetchUpdate(req *agentv1.FetchUpdateRequest, stream grpc.S
 			}
 		}
 		if errors.Is(err, io.EOF) {
-			s.log.Info("served an update file", "agent", who.AgentID, "file", strings.ToLower(name))
+			s.log.Info("served an update file", "agent", who.ID, "file", strings.ToLower(name))
 			return nil
 		}
 		if err != nil {

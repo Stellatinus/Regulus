@@ -69,17 +69,19 @@ func identityFrom(ctx context.Context) (pki.Identity, bool) {
 	return id, ok
 }
 
-// peerIdentity returns the verified client certificate of the caller.
-func peerIdentity(ctx context.Context) (pki.Identity, bool) {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return pki.Identity{}, false
+// peerIdentity returns the verified agent certificate of the caller. ok is
+// false when there is none; err is pki.ErrNotAgent when the caller presented a
+// certificate of the hub CA that is not an agent certificate (#316).
+func peerIdentity(ctx context.Context) (id pki.Identity, ok bool, err error) {
+	p, found := peer.FromContext(ctx)
+	if !found {
+		return pki.Identity{}, false, nil
 	}
-	info, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return pki.Identity{}, false
+	info, found := p.AuthInfo.(credentials.TLSInfo)
+	if !found {
+		return pki.Identity{}, false, nil
 	}
-	return pki.ClientIdentity(info.State)
+	return pki.AgentIdentity(info.State)
 }
 
 func peerHost(ctx context.Context) string {
@@ -104,26 +106,31 @@ func (w wrappedStream) Context() context.Context { return w.ctx }
 
 // authorizeAgent checks that the caller presents the certificate of an agent
 // that was enrolled and not revoked, and returns the context with its
-// identity.
+// identity. A certificate of another kind from the same CA is refused before
+// its id is looked at (#316).
 func (h *Hub) authorizeAgent(ctx context.Context) (context.Context, error) {
-	id, ok := peerIdentity(ctx)
+	id, ok, err := peerIdentity(ctx)
+	if err != nil {
+		h.log.Warn("refusing a certificate that is not an agent's", "from", peerHost(ctx), "err", err)
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "a client certificate is required")
 	}
-	if err := h.fleet.Authorize(ctx, id.AgentID, id.Serial); err != nil {
+	if err := h.fleet.Authorize(ctx, id.ID, id.Serial); err != nil {
 		switch {
 		case errors.Is(err, fleet.ErrNotFound), errors.Is(err, fleet.ErrRevoked):
-			h.log.Warn("refusing agent", "agent", id.AgentID, "err", err)
+			h.log.Warn("refusing agent", "agent", id.ID, "err", err)
 			return nil, status.Error(codes.PermissionDenied, "this agent is not enrolled or was revoked")
 		default:
-			h.log.Error("checking agent", "agent", id.AgentID, "err", err)
+			h.log.Error("checking agent", "agent", id.ID, "err", err)
 			return nil, status.Error(codes.Internal, "cannot check the agent")
 		}
 	}
 	// Agents enrolled before the hub kept the end of their certificate get it
 	// filled in here (#245); a failure only leaves the date unknown.
-	if err := h.fleet.CertificateSeen(ctx, id.AgentID, id.Serial, id.NotAfter); err != nil {
-		h.log.Warn("recording the end of an agent certificate", "agent", id.AgentID, "err", err)
+	if err := h.fleet.CertificateSeen(ctx, id.ID, id.Serial, id.NotAfter); err != nil {
+		h.log.Warn("recording the end of an agent certificate", "agent", id.ID, "err", err)
 	}
 	return context.WithValue(ctx, identityKey{}, id), nil
 }

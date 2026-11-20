@@ -70,7 +70,7 @@ The set is not final; it is what the issues mention today.
 
 **One binary, one kind of machine.** Every node runs the same `regulus` binary, so in principle a node can be anything; a type is a **preset**: which capabilities are on and which permissions it has. Two lists are needed, one for *what a node does* (capabilities, [#169](https://github.com/Stellatinus/Regulus/issues/169)) and one for *what it may reach or use* (node permissions, [#170](https://github.com/Stellatinus/Regulus/issues/170); not the user permissions of `internal/auth`). Defaults can be overridden **per node**. Anything sensitive is **denied by default**. These tables are a starting point to argue about, not a decision.
 
-Capabilities on by default (✓ on, – off, `opt-in` = off until the administrator turns it on and the node agrees):
+Capabilities on by default (✓ on, – off; `consent` = assigned by the type, but effective only once the node agrees in its `allow` list, empty by default; `opt-in` = off until the administrator turns it on **and** the node agrees). Without the node's agreement a `consent` or `opt-in` item is "assigned, not allowed by the node" and is not on: the draft code (`capability.Resolve`) lists it as withheld, and `Has`/`Allows` report it off (#317).
 
 | Capability | Compute | Backup | Access gateway | Development |
 |---|---|---|---|---|
@@ -81,7 +81,7 @@ Capabilities on by default (✓ on, – off, `opt-in` = off until the administra
 | `privileged-actions` (#60) | ✓ | – | – | – |
 | `plugin-runtime` (#19) | ✓ | – | – | – |
 | `backup-storage` | – | ✓ | – | – |
-| `relay` | – | – | opt-in | – |
+| `relay` | – | – | consent | – |
 | `notifications`, `authentication` | – | – | opt-in | – |
 
 Node permissions by default (all denied unless shown):
@@ -92,7 +92,7 @@ Node permissions by default (all denied unless shown):
 | `reach-peers` (direct links, #113; none exist today) | – | – | – | – (a grant, never a default) |
 | `shared-resources` (none exist yet) | – | – | – | – (a **delayed grant**) |
 | `egress-network` (what the node may reach outside) | unrestricted | hub only | hub, plus inbound | restricted (open in #168) |
-| `inbound-listener` | – | – | opt-in | – |
+| `inbound-listener` | – | – | consent (only while `relay`, `notifications` or `authentication` is on) | – |
 | `receive-backups` | – | ✓ | – | – |
 | `privileged-actions` | ✓ | – | – | – |
 
