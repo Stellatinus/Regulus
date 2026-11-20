@@ -86,11 +86,11 @@ func TestHubCountsAgentsOnALegacyCertificate(t *testing.T) {
 	}
 
 	stopOld()
-	<-doneOld
+	t.Logf("agent-old stream ended: %v", <-doneOld)
 	c, _ = h.Certificates(context.Background())
 	if c.LegacyAgents != 0 {
 		t.Errorf("legacy agents after it left = %d, want 0", c.LegacyAgents)
 	}
 	stopNew()
-	<-doneNew
+	t.Logf("agent-new stream ended: %v", <-doneNew)
 }
