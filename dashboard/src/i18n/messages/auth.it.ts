@@ -45,4 +45,12 @@ export const authIt: Record<keyof typeof auth, string> = {
   "auth.reset.doneTitle": "Password cambiata",
   "auth.reset.done": "La password è stata cambiata e tutte le tue sessioni sono state chiuse.",
   "auth.reset.signIn": "Accedi",
+
+  "auth.stepUp.title": "Conferma la tua identità",
+  "auth.stepUp.intro": "Questa azione cambia chi può raggiungere o controllare l'hub. Inserisci la password per continuare; per i prossimi 5 minuti non ti verrà chiesta di nuovo.",
+  "auth.stepUp.password": "Password",
+  "auth.stepUp.code": "Codice di autenticazione",
+  "auth.stepUp.codeHint": "Il codice di 6 cifre dell'app di autenticazione, oppure un codice di recupero.",
+  "auth.stepUp.confirm": "Conferma",
+  "auth.stepUp.cancel": "Annulla",
 };

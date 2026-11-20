@@ -97,37 +97,55 @@ func (s store) userByName(ctx context.Context, username string) (User, string, e
 func (s store) createSession(ctx context.Context, tokenHash string, userID int64, now, expires time.Time, c Client) error {
 	at := now.UTC().Format(timeLayout)
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sessions (token_hash, user_id, created_at, expires_at, remote_addr, user_agent, last_used_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		tokenHash, userID, at, expires.UTC().Format(timeLayout), c.Remote, c.UserAgent, at)
+		`INSERT INTO sessions (token_hash, user_id, created_at, expires_at, remote_addr, user_agent, last_used_at, reauth_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		tokenHash, userID, at, expires.UTC().Format(timeLayout), c.Remote, c.UserAgent, at, at)
 	if err != nil {
 		return fmt.Errorf("create session: %w", err)
 	}
 	return nil
 }
 
-// sessionUser returns the user of a session that has not expired.
-func (s store) sessionUser(ctx context.Context, tokenHash string, now time.Time) (User, error) {
+// sessionUser returns the user of a session that has not expired, and when
+// that session last proved the password (zero for never; see markReauth).
+func (s store) sessionUser(ctx context.Context, tokenHash string, now time.Time) (User, time.Time, error) {
 	var (
 		u                User
 		created, expires string
+		reauth           sql.NullString
 	)
 	err := s.db.QueryRowContext(ctx,
-		`SELECT users.id, users.username, users.role, users.created_at, s.expires_at, `+hasTwoFactor+`
+		`SELECT users.id, users.username, users.role, users.created_at, s.expires_at, s.reauth_at, `+hasTwoFactor+`
 		 FROM sessions s JOIN users ON users.id = s.user_id WHERE s.token_hash = ? AND users.disabled = 0`, tokenHash).
-		Scan(&u.ID, &u.Username, &u.Role, &created, &expires, &u.TwoFactor)
+		Scan(&u.ID, &u.Username, &u.Role, &created, &expires, &reauth, &u.TwoFactor)
 	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrUnauthenticated
+		return User{}, time.Time{}, ErrUnauthenticated
 	}
 	if err != nil {
-		return User{}, err
+		return User{}, time.Time{}, err
 	}
 	exp, err := time.Parse(timeLayout, expires)
 	if err != nil || !now.Before(exp) {
-		return User{}, ErrUnauthenticated
+		return User{}, time.Time{}, ErrUnauthenticated
 	}
 	u.CreatedAt, _ = time.Parse(timeLayout, created)
-	return u, nil
+	var reauthAt time.Time
+	if reauth.Valid {
+		reauthAt, _ = time.Parse(timeLayout, reauth.String)
+	}
+	return u, reauthAt, nil
+}
+
+// markReauth records that the user of the session proved the password again.
+func (s store) markReauth(ctx context.Context, tokenHash string, now time.Time) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET reauth_at = ? WHERE token_hash = ?`, now.UTC().Format(timeLayout), tokenHash)
+	if err != nil {
+		return fmt.Errorf("record re-authentication: %w", err)
+	}
+	if n, err := res.RowsAffected(); err == nil && n == 0 {
+		return ErrUnauthenticated
+	}
+	return nil
 }
 
 func (s store) deleteSession(ctx context.Context, tokenHash string) error {

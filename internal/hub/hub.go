@@ -491,6 +491,16 @@ func apiRoutes(d Deps) []route {
 		}
 		return auth.RequirePermission(permission, next)
 	}
+	// stepUp marks the actions that need a recent proof of the password
+	// (auth.RequireStepUp, #279): they give a lasting way in (the agent
+	// listener, an enrollment token), take a server away (revoke), or install
+	// software as root (updates). Listed in docs/authentication.md.
+	stepUp := func(next http.Handler) http.Handler {
+		if d.Auth == nil {
+			return next
+		}
+		return d.Auth.RequireStepUp(next)
+	}
 	routes := []route{
 		{pattern: "GET /api/agents", handler: need(auth.PermServersRead, agentsHandler(d.Agents))},
 		{pattern: "GET /api/agents/{id}", handler: need(auth.PermServersRead, agentGetHandler(d.Agents))},
@@ -500,20 +510,20 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
-		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(l.put))), needsAuth: true},
+		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(l.put)))), needsAuth: true},
 		{pattern: "GET /api/enrollment-tokens", handler: need(auth.PermServersManage, http.HandlerFunc(f.listTokens)), needsAuth: true},
 		{pattern: "DELETE /api/enrollment-tokens/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.revokeToken))), needsAuth: true},
-		{pattern: "POST /api/enrollment-tokens", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.createToken))), needsAuth: true},
+		{pattern: "POST /api/enrollment-tokens", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(f.createToken)))), needsAuth: true},
 		{pattern: "PATCH /api/agents/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.rename))), needsAuth: true},
-		{pattern: "DELETE /api/agents/{id}", handler: need(auth.PermServersManage, auth.RequireJSON(http.HandlerFunc(f.revoke))), needsAuth: true},
+		{pattern: "DELETE /api/agents/{id}", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(f.revoke)))), needsAuth: true},
 		{pattern: "GET /api/updates", handler: need(auth.PermCoreUpdate, http.HandlerFunc(u.status)), needsAuth: true},
-		{pattern: "PUT /api/updates/settings", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(u.settings))), needsAuth: true},
+		{pattern: "PUT /api/updates/settings", handler: need(auth.PermCoreUpdate, stepUp(auth.RequireJSON(http.HandlerFunc(u.settings)))), needsAuth: true},
 		{pattern: "POST /api/updates/check", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(u.check))), needsAuth: true},
 		{pattern: "POST /api/updates/download", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(u.download))), needsAuth: true},
 		{pattern: "GET /api/updates/rollout", handler: need(auth.PermCoreUpdate, http.HandlerFunc(r.status)), needsAuth: true},
-		{pattern: "POST /api/updates/rollout", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(r.start))), needsAuth: true},
+		{pattern: "POST /api/updates/rollout", handler: need(auth.PermCoreUpdate, stepUp(auth.RequireJSON(http.HandlerFunc(r.start)))), needsAuth: true},
 		{pattern: "POST /api/updates/rollout/stop", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(r.stop))), needsAuth: true},
-		{pattern: "POST /api/updates/apply", handler: need(auth.PermCoreUpdate, auth.RequireJSON(http.HandlerFunc(u.apply))), needsAuth: true},
+		{pattern: "POST /api/updates/apply", handler: need(auth.PermCoreUpdate, stepUp(auth.RequireJSON(http.HandlerFunc(u.apply)))), needsAuth: true},
 		{pattern: "GET /api/certificates", handler: need(auth.PermServersManage, certificatesHandler(d.Certificates)), needsAuth: true},
 		{pattern: "GET /api/openapi.yaml", handler: http.HandlerFunc(serveOpenAPI)},
 	}

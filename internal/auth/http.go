@@ -59,7 +59,7 @@ var Routes = []string{
 // otherwise it answers 401. The user is available with UserFrom.
 func (s *Service) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, err := s.userOf(r)
+		user, sess, err := s.sessionOf(r)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, ErrUnauthenticated.Error())
 			return
@@ -72,6 +72,7 @@ func (s *Service) Require(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(s.withRequestClient(r), ctxKey{}, user)
+		ctx = context.WithValue(ctx, sessionKey{}, sess)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -82,11 +83,17 @@ func (s *Service) withRequestClient(r *http.Request) context.Context {
 }
 
 func (s *Service) userOf(r *http.Request) (User, error) {
+	u, _, err := s.sessionOf(r)
+	return u, err
+}
+
+// sessionOf returns the user and the session of the request's cookie.
+func (s *Service) sessionOf(r *http.Request) (User, session, error) {
 	c, err := r.Cookie(CookieName)
 	if err != nil {
-		return User{}, ErrUnauthenticated
+		return User{}, session{}, ErrUnauthenticated
 	}
-	return s.Authenticate(r.Context(), c.Value)
+	return s.authenticate(r.Context(), c.Value)
 }
 
 type credentials struct {

@@ -42,4 +42,12 @@ export const auth = {
   "auth.reset.doneTitle": "Password changed",
   "auth.reset.done": "Your password was changed and all your sessions were signed out.",
   "auth.reset.signIn": "Sign in",
+
+  "auth.stepUp.title": "Confirm it is you",
+  "auth.stepUp.intro": "This action changes who can reach or control the hub. Enter your password to continue; you will not be asked again for the next 5 minutes.",
+  "auth.stepUp.password": "Password",
+  "auth.stepUp.code": "Authentication code",
+  "auth.stepUp.codeHint": "The 6-digit code from your authenticator app, or a recovery code.",
+  "auth.stepUp.confirm": "Confirm",
+  "auth.stepUp.cancel": "Cancel",
 } as const;

@@ -21,7 +21,9 @@ const twoFactorPath = "/api/account/two-factor"
 //	PUT    /api/settings/security                  change that
 func twoFactorRoutes(s *Service) []Route {
 	admin := func(h http.HandlerFunc) http.Handler { return RequirePermission(PermUsersManage, h) }
-	adminJSON := func(h http.HandlerFunc) http.Handler { return RequirePermission(PermUsersManage, RequireJSON(h)) }
+	adminJSON := func(h http.HandlerFunc) http.Handler {
+		return RequirePermission(PermUsersManage, s.RequireStepUp(RequireJSON(h)))
+	}
 	return []Route{
 		{"GET " + twoFactorPath, http.HandlerFunc(s.handleTwoFactorStatus)},
 		{"POST " + twoFactorPath + "/setup", RequireJSON(http.HandlerFunc(s.handleTwoFactorSetup))},
