@@ -20,6 +20,7 @@ import {
   type User,
 } from "./api";
 import { formatAgo } from "./format";
+import { eventText } from "./hubTexts";
 import { RolesPanel } from "./RolesPanel";
 import { useT } from "./i18n";
 import { useSession } from "./session";
@@ -324,7 +325,7 @@ function Audit() {
   const needle = filter.trim().toLowerCase();
   const shown =
     entries.kind === "ready"
-      ? entries.items.filter((a) => !needle || [a.actor, a.event, a.target].some((v) => (v ?? "").toLowerCase().includes(needle)))
+      ? entries.items.filter((a) => !needle || [a.actor, a.event, eventText(t, a.event), a.target].some((v) => (v ?? "").toLowerCase().includes(needle)))
       : [];
   return (
     <section aria-labelledby="audit-heading" className="panel">
@@ -363,7 +364,7 @@ function Audit() {
               <tr key={a.id}>
                 <td data-label={t("users.audit.when")}>{formatAgo(a.at, undefined, t)}</td>
                 <td data-label={t("users.audit.who")}>{a.actor || "–"}</td>
-                <td data-label={t("users.audit.event")}>{a.event.replace(/_/g, " ")}</td>
+                <td data-label={t("users.audit.event")}>{eventText(t, a.event)}</td>
                 <td data-label={t("users.audit.target")}>{a.target || "–"}</td>
                 <td data-label={t("users.audit.from")} className="mono">{a.remote || "–"}</td>
                 <td data-label={t("users.audit.detail")} className="wrap">{a.detail || "–"}</td>
