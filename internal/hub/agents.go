@@ -99,7 +99,9 @@ type agentServer struct {
 	// files, if set, serves the cached release to the agents (FetchUpdate).
 	files updateFiles
 
-	// seen, if set, is told when an agent connects and when it goes away.
+	// seen, if set, is told when an agent connects and when it goes away. It
+	// must not wait: it runs on the handshake (the hub queues the write, see
+	// seen.go).
 	seen func(info AgentInfo, at time.Time)
 
 	mu       sync.Mutex

@@ -91,7 +91,10 @@ func (h *Hub) serveLocal(addr string) (stop func(), problem string) {
 	if len(path) > maxSocketPath {
 		return without(fmt.Sprintf("the path of the socket is %d bytes, longer than the %d a Unix socket allows (move data_dir to a shorter path)", len(path), maxSocketPath))
 	}
-	_ = os.Remove(path) // left behind by a hub that was killed
+	// A socket here was left behind by a hub that was killed: a live hub
+	// holds the lock of the data directory, so this hub would not have
+	// started (see lockDataDir).
+	_ = os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {
 		return without("cannot open the socket: " + err.Error())

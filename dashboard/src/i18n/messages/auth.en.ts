@@ -22,6 +22,17 @@ export const auth = {
   "auth.code.verify": "Verify",
   "auth.code.back": "Back",
 
+  "auth.error.credentials": "Wrong username or password.",
+  "auth.error.code": "The code is not valid. Check it and try again.",
+  "auth.error.expired": "This sign-in expired. Go back and sign in again.",
+  "auth.error.tooMany": "Too many failed attempts. Try again in {minutes} minutes.",
+  "auth.error.tooManyOne": "Too many failed attempts. Try again in a minute.",
+  "auth.error.tooManyLater": "Too many failed attempts. Try again later.",
+  "auth.error.busy": "The hub is busy checking passwords. Trying again in {seconds} seconds…",
+  "auth.error.busyGaveUp": "The hub is still busy checking passwords. Try again in a moment.",
+  "auth.error.setupToken": "The setup token is not valid. Copy it again from the hub log.",
+  "auth.error.setupDone": "The admin account was already created. Reload the page to sign in.",
+
   "auth.recovery.one": "You signed in with a recovery code; {count} is left. If this was not you, change your password. Make new codes on the Account page.",
   "auth.recovery.many": "You signed in with a recovery code; {count} are left. If this was not you, change your password. Make new codes on the Account page.",
   "auth.recovery.dismiss": "Dismiss",

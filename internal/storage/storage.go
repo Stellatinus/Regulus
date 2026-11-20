@@ -3,13 +3,17 @@
 // pure Go driver, and PostgreSQL through pgx; the choice is made by the
 // configuration. This is the one package that knows the differences between
 // the two: the other packages receive a *sql.DB, write their queries with ?
-// placeholders and own their own tables. It does not move data from one
-// backend to the other (#124).
+// placeholders and own their own tables. For the hub it also makes sure one
+// hub runs on a PostgreSQL database (OpenHub), and for tools beside the hub
+// it opens a database without migrating it (OpenExisting). It does not move
+// data from one backend to the other (#124), and it does not lock the data
+// directory (the hub does).
 package storage
 
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -28,33 +32,92 @@ const FileName = "regulus.db"
 const connectWait = 60 * time.Second
 
 // Open opens the database named by cfg and applies all pending migrations. For
-// SQLite the file is created if needed.
+// SQLite the file is created if needed. The hub itself uses OpenHub.
 func Open(ctx context.Context, cfg Config) (*sql.DB, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
+	db, _, err := open(ctx, cfg, false)
+	return db, err
+}
+
+// HubDB is the database as the running hub holds it.
+type HubDB struct {
+	// Write is the pool for everything that changes the database, and for
+	// reads that must see the caller's own transaction.
+	Write *sql.DB
+	// Read is the pool for reads that need not see a transaction of the
+	// caller's own. On SQLite it is a separate pool of read-only connections
+	// (WAL lets them read while the one writer writes), so a request that
+	// only checks a session does not queue behind a write or a slow read; on
+	// PostgreSQL, whose pool already has several connections, it is Write.
+	Read *sql.DB
+
+	unlock func()
+}
+
+// Close releases the lock of the active hub and closes the pools.
+func (d *HubDB) Close() error {
+	d.unlock()
+	var err error
+	if d.Read != d.Write {
+		err = d.Read.Close()
 	}
-	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
-		return nil, fmt.Errorf("create data directory: %w", err)
-	}
-	db, err := openPool(cfg)
+	return errors.Join(err, d.Write.Close())
+}
+
+// OpenHub opens the database for the hub: like Open, and on PostgreSQL it
+// first makes this process the one active hub on the database (an advisory
+// lock, see lockActiveHub), before any migration, so that a second hub, maybe
+// a newer one, does not migrate the schema under the first. On SQLite that
+// guarantee comes from the lock the hub holds on the data directory.
+func OpenHub(ctx context.Context, cfg Config) (*HubDB, error) {
+	db, unlock, err := open(ctx, cfg, true)
 	if err != nil {
 		return nil, err
 	}
-	if err := waitFor(ctx, db, cfg); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-	if cfg.IsPostgres() {
-		if _, err := verifySchema(ctx, db, cfg); err != nil {
+	read := db
+	if !cfg.IsPostgres() && cfg.ReadConns >= 0 {
+		if read, err = openSQLiteReader(cfg); err != nil {
+			unlock()
 			_ = db.Close()
 			return nil, err
 		}
 	}
-	if err := Migrate(ctx, db, cfg.Type); err != nil {
-		_ = db.Close()
-		return nil, err
+	return &HubDB{Write: db, Read: read, unlock: unlock}, nil
+}
+
+func open(ctx context.Context, cfg Config, active bool) (*sql.DB, func(), error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, nil, err
 	}
-	return db, nil
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return nil, nil, fmt.Errorf("create data directory: %w", err)
+	}
+	db, err := openPool(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := waitFor(ctx, db, cfg); err != nil {
+		_ = db.Close()
+		return nil, nil, err
+	}
+	if cfg.IsPostgres() {
+		if _, err := verifySchema(ctx, db, cfg); err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+	}
+	unlock := func() {}
+	if active {
+		if unlock, err = lockActiveHub(ctx, db, cfg); err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+	}
+	if err := Migrate(ctx, db, cfg.Type); err != nil {
+		unlock()
+		_ = db.Close()
+		return nil, nil, err
+	}
+	return db, unlock, nil
 }
 
 // OpenSQLite opens the SQLite database in dataDir. It is shorthand for the
@@ -71,9 +134,41 @@ func openPool(cfg Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	// A single connection avoids SQLITE_BUSY between concurrent writers. The
-	// hub is not write-heavy; revisit if that changes.
+	// One connection writes, which avoids SQLITE_BUSY between writers; its
+	// transactions start with BEGIN IMMEDIATE (_txlock), so one never has to
+	// upgrade a read lock to a write lock half way. Reads that need not see a
+	// transaction of their own go to the read pool of OpenHub, which WAL lets
+	// run beside the writer.
 	db.SetMaxOpenConns(1)
+	return db, nil
+}
+
+// DefaultReadConns is the size of the SQLite read pool of OpenHub.
+const DefaultReadConns = 4
+
+// openSQLiteReader opens the read pool of a SQLite database that Open has
+// already created and migrated. Its connections are query_only: a write sent
+// to them by mistake fails instead of competing with the writer.
+func openSQLiteReader(cfg Config) (*sql.DB, error) {
+	path := filepath.Join(cfg.DataDir, FileName)
+	q := url.Values{}
+	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", "query_only(1)")
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String())
+	if err != nil {
+		return nil, fmt.Errorf("open database for reading: %w", err)
+	}
+	n := cfg.ReadConns
+	if n == 0 {
+		n = DefaultReadConns
+	}
+	db.SetMaxOpenConns(n)
+	db.SetMaxIdleConns(n)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open database for reading: %w", err)
+	}
 	return db, nil
 }
 
@@ -106,6 +201,7 @@ func dsn(path string) string {
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(5000)")
+	q.Set("_txlock", "immediate")
 	return (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String()
 }
 

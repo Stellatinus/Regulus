@@ -27,6 +27,9 @@ const (
 	minPasswordLen = 10
 	maxPasswordLen = 128
 
+	// sessionTouchEvery is how often the last use of a session is recorded.
+	sessionTouchEvery = time.Minute
+
 	maxFailures   = 10
 	failureWindow = 15 * time.Minute
 )
@@ -75,6 +78,12 @@ func WithSecret(secret []byte) Option {
 	}
 }
 
+// WithReadDB gives the service a pool for plain reads (the session check, the
+// lists), next to the one it writes with; see storage.HubDB.
+func WithReadDB(rd *sql.DB) Option {
+	return func(s *Service) { s.store.rd = rd }
+}
+
 // WithTrustedProxies sets the reverse proxies whose X-Forwarded-For and
 // X-Forwarded-Proto headers the service believes. From any other peer the
 // headers are ignored, so a client cannot choose the address the login limit,
@@ -87,7 +96,7 @@ func WithTrustedProxies(p []netip.Prefix) Option {
 // generates a one-time setup token and logs it: whoever can read the hub log
 // can create the first admin, and nobody else.
 func New(ctx context.Context, db *sql.DB, log *slog.Logger, opts ...Option) (*Service, error) {
-	s := &Service{store: store{db}, log: log, now: time.Now, failures: map[string]*failure{}, rolePerms: map[string]cachedPerms{}}
+	s := &Service{store: store{db: db}, log: log, now: time.Now, failures: map[string]*failure{}, rolePerms: map[string]cachedPerms{}}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -218,9 +227,14 @@ func (s *Service) Authenticate(ctx context.Context, token string) (User, error) 
 	}
 	hash := hashToken(token)
 	now := s.now()
-	user, err := s.store.sessionUser(ctx, hash, now)
+	user, lastUsed, err := s.store.sessionUser(ctx, hash, now)
 	if err == nil {
-		s.store.touchSession(ctx, hash, now)
+		// A write, so only when it changes something (once a minute per
+		// session): checking a session otherwise only reads, and does not
+		// queue behind the writer.
+		if now.Sub(lastUsed) >= sessionTouchEvery {
+			s.store.touchSession(ctx, hash, now)
+		}
 		user.Permissions = s.permsOfUser(ctx, user).list()
 	}
 	return user, err
@@ -242,7 +256,7 @@ func (s *Service) SessionCheck(r *http.Request, permission string) func(context.
 		if token == "" {
 			return false
 		}
-		u, err := s.store.sessionUser(ctx, hashToken(token), s.now())
+		u, _, err := s.store.sessionUser(ctx, hashToken(token), s.now())
 		if errors.Is(err, ErrUnauthenticated) {
 			return false
 		}

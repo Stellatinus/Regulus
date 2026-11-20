@@ -16,6 +16,8 @@
 //     the in-process connection of the built-in agent, refusal of agents
 //     whose version is not accepted, and the agent listener's checks (a
 //     certificate on every call but Enroll, the keepalive policy).
+//   - seen.go: the presence writer, which records when agents were seen off
+//     the handshake path, every minute for connected agents and at Close.
 //   - fleet_api.go: enrollment tokens and the list of enrolled agents, on top of
 //     package fleet.
 //   - metrics.go, events.go, stream.go: samples kept in memory (bounded per

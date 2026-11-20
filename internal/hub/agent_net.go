@@ -104,6 +104,10 @@ type wrappedStream struct {
 
 func (w wrappedStream) Context() context.Context { return w.ctx }
 
+// authorizeTimeout bounds the check of an agent's certificate against the
+// database when it connects.
+const authorizeTimeout = 10 * time.Second
+
 // authorizeAgent checks that the caller presents the certificate of an agent
 // that was enrolled and not revoked, and returns the context with its
 // identity. A certificate of another kind from the same CA is refused before
@@ -117,7 +121,12 @@ func (h *Hub) authorizeAgent(ctx context.Context) (context.Context, error) {
 	if !ok {
 		return nil, status.Error(codes.Unauthenticated, "a client certificate is required")
 	}
-	if err := h.fleet.Authorize(ctx, id.ID, id.Serial); err != nil {
+	// The one database read of a handshake; bounded, so a database that does
+	// not answer refuses the agent (it retries) instead of holding it.
+	actx, cancel := context.WithTimeout(ctx, authorizeTimeout)
+	err = h.fleet.Authorize(actx, id.ID, id.Serial)
+	cancel()
+	if err != nil {
 		switch {
 		case errors.Is(err, fleet.ErrNotFound), errors.Is(err, fleet.ErrRevoked):
 			h.log.Warn("refusing agent", "agent", id.ID, "err", err)
@@ -128,10 +137,11 @@ func (h *Hub) authorizeAgent(ctx context.Context) (context.Context, error) {
 		}
 	}
 	// Agents enrolled before the hub kept the end of their certificate get it
-	// filled in here (#245); a failure only leaves the date unknown.
-	if err := h.fleet.CertificateSeen(ctx, id.ID, id.Serial, id.NotAfter); err != nil {
-		h.log.Warn("recording the end of an agent certificate", "agent", id.ID, "err", err)
-	}
+	// filled in (#245), by the presence writer, not here: a failure only
+	// leaves the date unknown, and must not hold the connection.
+	h.seen.put("cert/"+id.ID, func(ctx context.Context) error {
+		return h.fleet.CertificateSeen(ctx, id.ID, id.Serial, id.NotAfter)
+	})
 	return context.WithValue(ctx, identityKey{}, id), nil
 }
 

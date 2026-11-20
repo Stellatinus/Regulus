@@ -99,6 +99,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/Busy" }
   /api/auth/login:
     post:
       tags: [auth]
@@ -141,6 +142,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+        "503": { $ref: "#/components/responses/Busy" }
   /api/auth/login/two-factor:
     post:
       tags: [auth]
@@ -176,7 +178,9 @@ paths:
                       recovery_codes_left: { type: integer }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401":
-          description: Wrong code, or the pending login expired or ran out of tries.
+          description: >-
+            Wrong code (`code: invalid_code`), or the pending login expired or
+            ran out of tries (`code: login_expired`: sign in again).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -742,10 +746,22 @@ paths:
           in: query
           description: Return only points received after this time.
           schema: { type: string, format: date-time }
+        - name: step
+          in: query
+          description: >-
+            Average the reports into buckets of this length, a Go duration from
+            `1s` to `1h` (such as `30s` or `1m`), aligned to multiples of it
+            since the Unix epoch. Each bucket is one point: `at` is its newest
+            report's time (so `since` works as without step); CPU, load, used
+            and available memory and used swap are means; totals, uptime, disks
+            and network counters are the newest report's; each rate is the mean
+            of the bucket's non-null rates. The newest bucket may still be
+            filling. Applied after `since` and before `limit`.
+          schema: { type: string, example: 30s }
         - name: limit
           in: query
           description: >-
-            Return only the newest this many points (after since, when both are
+            Return only the newest this many points (after since and step, when
             given). Rates are computed before the cut, so the first returned
             point keeps its rate.
           schema: { type: integer, minimum: 1 }
@@ -1469,6 +1485,15 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    Busy:
+      description: >-
+        Too many passwords are being checked at once; try again after
+        `Retry-After` seconds (5).
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
   schemas:
     AgentListener:
       type: object
@@ -1597,7 +1622,14 @@ components:
       type: object
       required: [error]
       properties:
-        error: { type: string }
+        error: { type: string, description: "An explanation in English, for people; clients should not parse it." }
+        code:
+          type: string
+          description: >-
+            A machine-readable reason, on the answers that need one:
+            `two_factor_setup_required` (403 from any endpoint),
+            `invalid_code` and `login_expired` (401 from
+            `/api/auth/login/two-factor`).
     User:
       type: object
       required: [username, role, created_at, disabled]

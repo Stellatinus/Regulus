@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -45,7 +46,13 @@ const shutdownTimeout = 10 * time.Second
 type Hub struct {
 	cfg config.Config
 	log *slog.Logger
-	db  *sql.DB
+	db  *sql.DB // store.Write
+	// store holds the database pools; unlockDir releases the lock of the
+	// data directory (see lockDataDir). Close does both.
+	store     *storage.HubDB
+	unlockDir func()
+	closeOnce sync.Once
+	closeErr  error
 
 	dbState dbHealth
 	ui      fs.FS
@@ -61,6 +68,7 @@ type Hub struct {
 	agentAddr atomic.Value    // string: where the agent listener is bound, once it is
 	listener  listenerState   // the agent listener, started by Serve or from the dashboard
 	agents    *agentServer
+	seen      *seenRecorder     // writes agent presence off the handshake path
 	transport *inproc.Transport // lets the built-in agent reach the hub without a network port
 	plugins   atomic.Value      // *pluginRunner while plugins_dir is set and Serve runs
 	// pluginTune, if set, changes the plugin supervisor before it starts
@@ -80,6 +88,10 @@ type Hub struct {
 	// before it serves (tests: a dummy unary call, #244).
 	agentServerTune func(*grpc.Server)
 }
+
+// tuneStorage, if set, changes the database settings before New opens the
+// database (tests: REGULUS_TEST_ONE_CONNECTION, see dbtest_test.go).
+var tuneStorage func(*storage.Config)
 
 // Option customizes a Hub.
 type Option func(*Hub)
@@ -102,6 +114,12 @@ func WithUpdateVerifier(v update.Verifier) Option {
 	return func(h *Hub) { h.updateVer = v }
 }
 
+// withSeenFlush sets how often the connected agents are recorded as seen
+// (tests).
+func withSeenFlush(every time.Duration) Option {
+	return func(h *Hub) { h.seen.every = every }
+}
+
 // WithAgentIntervals sets the heartbeat and metrics intervals the hub asks
 // agents to use. Mostly useful in tests.
 func WithAgentIntervals(heartbeat, metrics time.Duration) Option {
@@ -111,61 +129,82 @@ func WithAgentIntervals(heartbeat, metrics time.Duration) Option {
 	}
 }
 
-// New opens the database (applying migrations) and returns a Hub that serves
-// the dashboard from ui. Call Close when done.
+// New locks the data directory (a second hub on it fails at once with
+// ErrAlreadyRunning), opens the database (applying migrations) and returns a
+// Hub that serves the dashboard from ui. Call Close when done.
 func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opts ...Option) (*Hub, error) {
-	db, err := storage.Open(ctx, cfg.Storage())
+	// One data directory, one hub: the lock comes before anything in the
+	// directory is touched (the database, its migrations, the secret, the
+	// local socket).
+	unlockDir, err := lockDataDir(cfg.DataDir)
 	if err != nil {
+		return nil, err
+	}
+	sc := cfg.Storage()
+	if tuneStorage != nil {
+		tuneStorage(&sc)
+	}
+	store, err := storage.OpenHub(ctx, sc)
+	if err != nil {
+		unlockDir()
 		return nil, fmt.Errorf("storage: %w", err)
 	}
+	fail := func(err error) (*Hub, error) {
+		_ = store.Close()
+		unlockDir()
+		return nil, err
+	}
+	db := store.Write
 	log.Info("database ready", "backend", cfg.Storage().Describe())
 
 	secret, err := auth.LoadOrCreateSecret(cfg.DataDir)
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("hub secret: %w", err)
+		return fail(fmt.Errorf("hub secret: %w", err))
 	}
 	proxies, err := config.ParseTrustedProxies(cfg.TrustedProxies)
 	if err != nil {
-		_ = db.Close()
-		return nil, err
+		return fail(err)
 	}
-	authn, err := auth.New(ctx, db, log, auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
+	authn, err := auth.New(ctx, db, log, auth.WithReadDB(store.Read), auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
 	if err != nil {
-		_ = db.Close()
-		return nil, err
+		return fail(err)
 	}
 
 	ca, err := pki.LoadOrCreate(filepath.Join(cfg.DataDir, "pki"), time.Now())
 	if err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("certificate authority: %w", err)
+		return fail(fmt.Errorf("certificate authority: %w", err))
 	}
 
 	h := &Hub{
 		cfg:            cfg,
 		auth:           authn,
-		fleet:          fleet.New(db, ca, authn),
+		fleet:          fleet.New(db, ca, authn).ReadFrom(store.Read),
 		log:            log,
 		db:             db,
+		store:          store,
+		unlockDir:      unlockDir,
 		ui:             ui,
 		agents:         newAgentServer(log),
 		transport:      inproc.New(),
 		startedAt:      time.Now(),
 		agentKeepalive: defaultAgentKeepalive(),
 	}
-	h.agents.seen = func(info AgentInfo, at time.Time) {
-		sys := info.System
-		if err := h.fleet.Seen(context.Background(), info.ID, info.Version, sys.GetHostname(), sys.GetOsVersion(), at); err != nil {
-			log.Warn("recording when an agent was seen", "agent", info.ID, "err", err)
+	// Presence is written by a goroutine of its own, never on the agent's
+	// handshake (see seen.go).
+	h.seen = newSeenRecorder(log, h.agents.agents, func(info AgentInfo, at time.Time) seenWrite {
+		return func(ctx context.Context) error {
+			sys := info.System
+			return h.fleet.Seen(ctx, info.ID, info.Version, sys.GetHostname(), sys.GetOsVersion(), at)
 		}
-	}
+	})
+	h.agents.seen = h.seen.seen
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
+	h.seen.start()
 	h.agents.hubVersion = h.version
 	ver := h.updateVer
 	if ver == nil {
@@ -239,11 +278,18 @@ func (h *Hub) AgentConn() (*grpc.ClientConn, error) {
 	return h.transport.Dial()
 }
 
-// Close releases the hub resources.
+// Close releases the hub resources. Only the first call does anything: a
+// second one must not release the data directory or the database lock again,
+// which by then may belong to the next hub.
 func (h *Hub) Close() error {
-	h.rollout.stop()
-	h.updates.Close()
-	return h.db.Close()
+	h.closeOnce.Do(func() {
+		h.rollout.stop()
+		h.updates.Close()
+		h.seen.close() // records the connected agents a last time, before the database closes
+		h.closeErr = h.store.Close()
+		h.unlockDir()
+	})
+	return h.closeErr
 }
 
 // Serve serves HTTP on ln until ctx is cancelled, then shuts down gracefully.

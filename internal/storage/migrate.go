@@ -112,32 +112,12 @@ func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) e
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
-	applied := map[int]bool{}
-	rows, err := db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	applied, err := appliedVersions(ctx, db)
 	if err != nil {
-		return fmt.Errorf("read schema_migrations: %w", err)
+		return err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var v int
-		if err := rows.Scan(&v); err != nil {
-			return fmt.Errorf("read schema_migrations: %w", err)
-		}
-		applied[v] = true
-	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("read schema_migrations: %w", err)
-	}
-	_ = rows.Close()
-
-	known := map[int]bool{}
-	for _, m := range migrations {
-		known[m.version] = true
-	}
-	for v := range applied {
-		if !known[v] {
-			return fmt.Errorf("database has migration %d that this version of Regulus does not know: it was created by a newer version", v)
-		}
+	if err := refuseUnknown(applied, migrations); err != nil {
+		return err
 	}
 
 	for _, m := range migrations {
@@ -146,6 +126,42 @@ func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) e
 		}
 		if err := applyOne(ctx, db, d, m); err != nil {
 			return fmt.Errorf("migration %04d_%s: %w", m.version, m.name, err)
+		}
+	}
+	return nil
+}
+
+// appliedVersions reads the versions recorded in schema_migrations.
+func appliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) {
+	applied := map[int]bool{}
+	rows, err := db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("read schema_migrations: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var v int
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("read schema_migrations: %w", err)
+		}
+		applied[v] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read schema_migrations: %w", err)
+	}
+	return applied, nil
+}
+
+// refuseUnknown fails when the database has a migration this binary does not
+// know: it was written by a newer version of Regulus.
+func refuseUnknown(applied map[int]bool, migrations []migration) error {
+	known := map[int]bool{}
+	for _, m := range migrations {
+		known[m.version] = true
+	}
+	for v := range applied {
+		if !known[v] {
+			return fmt.Errorf("database has migration %d that this version of Regulus does not know: %w", v, ErrSchemaNewer)
 		}
 	}
 	return nil

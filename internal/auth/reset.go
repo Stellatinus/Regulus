@@ -142,7 +142,7 @@ type Recovery struct {
 // account and ends its sessions. The password is chosen later, in the
 // dashboard, so it never shows up in a terminal or in the shell history.
 func RecoverAdmin(ctx context.Context, db *sql.DB, username string, log *slog.Logger) (Recovery, error) {
-	s := &Service{store: store{db}, log: log, now: time.Now, failures: map[string]*failure{}}
+	s := &Service{store: store{db: db}, log: log, now: time.Now, failures: map[string]*failure{}}
 	admins, total, err := s.store.listAdmins(ctx)
 	if err != nil {
 		return Recovery{}, err

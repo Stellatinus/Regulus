@@ -213,7 +213,7 @@ describe("Signing in with two-factor authentication", () => {
 
     await user.type(screen.getByLabelText("Authentication code"), "000000");
     await user.click(screen.getByRole("button", { name: "Verify" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("the code is not valid");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The code is not valid. Check it and try again.");
 
     await user.clear(screen.getByLabelText("Authentication code"));
     await user.type(screen.getByLabelText("Authentication code"), "123456");
