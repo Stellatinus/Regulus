@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -17,6 +18,15 @@ const dbWatchInterval = 15 * time.Second
 type dbHealth struct {
 	mu      sync.Mutex
 	problem string
+	// lost is set when another hub took over the database (#344); it does not
+	// go away until this hub is restarted, whatever the pings say.
+	lost string
+}
+
+func (d *dbHealth) setLost(p string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lost = p
 }
 
 func (d *dbHealth) set(p string) (changed bool) {
@@ -30,6 +40,9 @@ func (d *dbHealth) set(p string) (changed bool) {
 func (d *dbHealth) get() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.lost != "" {
+		return d.lost
+	}
 	return d.problem
 }
 
@@ -43,6 +56,9 @@ func (h *Hub) checkDatabase(ctx context.Context) {
 	if err := h.db.PingContext(pctx); err != nil {
 		problem = storage.Explain(err)
 	}
+	if problem == "" {
+		h.checkActiveLock(pctx)
+	}
 	if !h.dbState.set(problem) {
 		return
 	}
@@ -51,6 +67,43 @@ func (h *Hub) checkDatabase(ctx context.Context) {
 	} else {
 		h.log.Info("database answers again", "backend", h.cfg.Storage().Describe())
 	}
+}
+
+// checkActiveLock makes sure this hub still holds the "active hub" lock of the
+// PostgreSQL database (#344). The lock lives as long as one database session;
+// when PostgreSQL ends that session the hub takes the lock again. If another
+// hub already holds it, two hubs are running on one database: this one logs
+// loudly and stops the timers that must run in one place only (update checks,
+// automatic rollouts) until it is restarted.
+func (h *Hub) checkActiveLock(ctx context.Context) {
+	retaken, err := h.store.EnsureActive(ctx)
+	switch {
+	case err == nil && retaken:
+		h.log.Warn("the database session that holds the active-hub lock was lost; the lock was taken again", "backend", h.cfg.Storage().Describe())
+	case errors.Is(err, storage.ErrHubActive):
+		if h.demote() {
+			h.log.Error("another hub holds the active-hub lock of this database; this hub stopped its update and rollout timers. Stop one of the two hubs and restart this one", "backend", h.cfg.Storage().Describe())
+		}
+	case err != nil && ctx.Err() == nil:
+		h.log.Warn("checking the active-hub lock", "err", storage.Explain(err))
+	}
+}
+
+// demote stops the timers of a hub that no longer holds the active-hub lock
+// and records the problem, which regulus status and the console show. It
+// reports whether this call did it, so the log says it once.
+func (h *Hub) demote() bool {
+	if h.demoted.Swap(true) {
+		return false
+	}
+	h.dbState.setLost("another hub took over this database: this hub stopped its update and rollout timers; restart it after stopping the other hub")
+	h.timersMu.Lock()
+	stop := h.stopTimers
+	h.timersMu.Unlock()
+	if stop != nil {
+		stop()
+	}
+	return true
 }
 
 // watchDatabase checks the database until ctx ends, once at the start and

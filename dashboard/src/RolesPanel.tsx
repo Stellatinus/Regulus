@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { createRole, deleteRole, updateRole, type PermissionInfo, type RoleInfo } from "./api";
+import { permissionText, roleText } from "./hubTexts";
 import { useT } from "./i18n";
 import { ConfirmButton, RowActions } from "./ui";
 import { errorMessage } from "./useApiList";
@@ -50,7 +51,7 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
                 <div>
                   <strong>{r.name}</strong>
                   {r.builtin && t("users.roles.builtIn")}
-                  {r.description && <div className="hint">{r.description}</div>}
+                  {r.description && <div className="hint">{roleText(t, r.name, r.builtin, r.description)}</div>}
                 </div>
               </td>
               <td data-label={t("users.roles.colCan")} className="chips-cell">
@@ -169,7 +170,7 @@ function RoleForm({
           <label key={p.id} className="check">
             <input type="checkbox" checked={granted.has(p.id)} onChange={() => toggle(p.id)} />
             <span>
-              {p.id} <span className="hint">{p.description}</span>
+              {p.id} <span className="hint">{permissionText(t, p.id, p.description)}</span>
             </span>
           </label>
         ))}

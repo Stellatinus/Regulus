@@ -15,7 +15,8 @@ const (
 //
 //   - at is the time of its newest report, so a client can poll with since
 //     set to the last point it has, as without step;
-//   - CPU, load, used and available memory and used swap are the mean;
+//   - CPU, load, used and available memory and used swap are the mean (CPU
+//     over the reports that have a value, null when none has);
 //   - totals, uptime, disks and network counters are those of the newest
 //     report (they grow or stay put; a mean says nothing more);
 //   - each interface's rates are the mean of the rates the bucket has for it,
@@ -56,13 +57,17 @@ func mergeBucket(bucket []pointJSON) pointJSON {
 	}
 	n := float64(len(bucket))
 	var cpu, l1, l5, l15, memUsed, memAvail, swapUsed float64
+	cpuN := 0 // reports of the bucket that have a CPU value (#340)
 	type rateSum struct {
 		rx, tx   float64
 		nrx, ntx int
 	}
 	rates := map[string]*rateSum{}
 	for _, p := range bucket {
-		cpu += p.CPUPercent
+		if p.CPUPercent != nil {
+			cpu += *p.CPUPercent
+			cpuN++
+		}
 		l1 += p.Load1
 		l5 += p.Load5
 		l15 += p.Load15
@@ -86,7 +91,11 @@ func mergeBucket(bucket []pointJSON) pointJSON {
 		}
 	}
 	out := last
-	out.CPUPercent = cpu / n
+	out.CPUPercent = nil
+	if cpuN > 0 {
+		v := cpu / float64(cpuN)
+		out.CPUPercent = &v
+	}
 	out.Load1, out.Load5, out.Load15 = l1/n, l5/n, l15/n
 	out.MemoryUsedBytes = uint64(memUsed / n)
 	out.MemoryAvailableBytes = uint64(memAvail / n)

@@ -193,3 +193,54 @@ func benchHub(b *testing.B) *Hub {
 	b.Cleanup(func() { _ = h.Close() })
 	return h
 }
+
+// TestRemainingPlainReadsDoNotWaitForTheWriter is #345: the update settings,
+// the two-factor state, the security policy and the saved listener are plain
+// reads of committed rows, so they use the read pool and do not queue behind
+// a write transaction.
+func TestRemainingPlainReadsDoNotWaitForTheWriter(t *testing.T) {
+	skipUnlessReadPool(t)
+	h := startRemoteHub(t)
+	admin := newAPI(t, h, auth.RoleAdmin)
+	admin.do("GET", "/api/agents", nil) // records the session's use now, so the reads below need no write
+
+	tx, err := h.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`INSERT INTO audit_log (at, actor, event, target, remote, detail) VALUES ('2026-01-01T00:00:00.000000000Z', 'x', 'slow_write', '', '', '')`); err != nil {
+		t.Fatal(err)
+	}
+
+	within := func(name string, f func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() { f(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s waited for the writer", name)
+		}
+	}
+	within("the update settings", func() {
+		if _, err := h.updates.Settings(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	within("the saved listener", func() {
+		if _, err := h.savedAgentListen(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
+	for _, path := range []string{"/api/account/two-factor", "/api/settings/security", "/api/updates"} {
+		within("GET "+path, func() {
+			if code := admin.do("GET", path, nil).Code; code != http.StatusOK {
+				t.Errorf("GET %s = %d", path, code)
+			}
+		})
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}

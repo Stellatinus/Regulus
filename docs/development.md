@@ -33,6 +33,13 @@ The /proc parsers of the agent and the network rates of the hub have fuzz target
 7. **Cloned identity:** a copy of the agent's data directory takes the connection over; the original logs that the identity is in use and backs off (at most 3 connections in about 5 seconds).
 8. **Revocation:** `DELETE /api/agents/{id}` closes the live stream and the agent exits with status 3; after a hub restart the revoked agent is refused at once and listed as `revoked`.
 
+A second test, `TestAgentOfAnOlderRelease` (#341), downloads the agent of the newest published release (any channel) from the project's releases, checks it against that release's `checksums.txt` (not its Sigstore signature: it only decides what the test runs), and connects it to a hub built from this source with a release version made up for the purpose:
+
+9. **One minor ahead of the old agent:** the agent connects as a normal agent, its metrics appear, and the API says its release is `behind`.
+10. **Two minors ahead:** the real old binary is admitted to an update-only session (#212): the API says `too_old` and `update_only`, and no metrics are kept.
+
+It skips, saying why, when there is no release to download (no network, GitHub's rate limit, a repository without releases); CI passes `GITHUB_TOKEN` to avoid the limit and accepts this one skip as a warning. `REGULUS_E2E_OLD_BIN` and `REGULUS_E2E_OLD_VERSION` (for example `0.2.0-alpha.1`) run it with a binary you have, offline.
+
 Every process log is printed when the test fails, and a `DATA RACE` in any of them fails it. Breaking the pinning (`verifyPinned` accepting anything), the revocation of the live stream (`agentServer.disconnect`) or the revocation check at connection (`requireAgent` without `fleet.Authorize`) makes it fail; this was checked by hand when the test was written.
 
-**Not covered:** an update sent over the stream (`ApplyUpdate` needs a signed release), a real agent binary of an older release (the protocol refusal is tested with a hand-made Hello), a hub CA that has expired, PostgreSQL as the hub database, and anything that needs systemd (the restart policy on status 3 is only asserted as the exit status). Nothing here replaces a run on a real machine (#81).
+**Not covered:** an update sent over the stream (`ApplyUpdate` needs a hub that trusts a signed release, and a hub binary trusts only the project's Sigstore identity, so a test cannot make one; #341 stays open for it), a hub CA that has expired, PostgreSQL as the hub database, and anything that needs systemd (the restart policy on status 3 is only asserted as the exit status). Nothing here replaces a run on a real machine (#81).

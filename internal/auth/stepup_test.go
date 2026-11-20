@@ -71,7 +71,7 @@ func TestStepUpIsAskedForOnceTheLoginIsOld(t *testing.T) {
 		t.Errorf("own sessions: status = %d", rec.Code)
 	}
 
-	if rec := c.do("POST", "/api/account/reauth", map[string]string{"password": "wrong password!"}); rec.Code != http.StatusForbidden || codeOf(t, rec) != "" {
+	if rec := c.do("POST", "/api/account/reauth", map[string]string{"password": "wrong password!"}); rec.Code != http.StatusForbidden || codeOf(t, rec) != "wrong_password" {
 		t.Errorf("wrong password: status = %d, body = %s", rec.Code, rec.Body)
 	}
 	rec := c.do("POST", "/api/account/reauth", map[string]string{"password": goodPassword})

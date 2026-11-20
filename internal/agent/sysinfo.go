@@ -19,7 +19,7 @@ import (
 // (for example on a system without /proc) are left empty.
 func systemInfo() *agentv1.SystemInfo {
 	hostname, _ := os.Hostname()
-	return &agentv1.SystemInfo{
+	info := &agentv1.SystemInfo{
 		Hostname:         hostname,
 		Os:               runtime.GOOS,
 		OsVersion:        parseOSRelease(readFile("/etc/os-release")),
@@ -29,6 +29,19 @@ func systemInfo() *agentv1.SystemInfo {
 		MemoryTotalBytes: parseMemTotal(readFile("/proc/meminfo")),
 		Container:        detectContainer("/"),
 	}
+	if info.Container != "" {
+		applyContainerLimits(info, readCgroupLimits("/proc", cgroupRoot))
+	}
+	return info
+}
+
+// applyContainerLimits makes the memory and the CPU count of a container's
+// system information follow its cgroup limits instead of the host's (#325).
+func applyContainerLimits(info *agentv1.SystemInfo, lim cgroupLimits) {
+	if lim.MemoryLimit > 0 && (info.MemoryTotalBytes == 0 || lim.MemoryLimit < info.MemoryTotalBytes) {
+		info.MemoryTotalBytes = lim.MemoryLimit
+	}
+	info.CpuCount = uint32(lim.cpuCount(int(info.CpuCount)))
 }
 
 // detectContainer names the container the agent runs in, or returns "" when

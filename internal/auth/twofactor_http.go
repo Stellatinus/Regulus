@@ -154,11 +154,11 @@ func (s *Service) handlePutSecurity(w http.ResponseWriter, r *http.Request) {
 func (s *Service) failTwoFactor(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, ErrInvalidCode):
-		writeError(w, http.StatusForbidden, err.Error())
+		writeFail(w, http.StatusForbidden, err)
 	case errors.Is(err, ErrTwoFactorOn), errors.Is(err, ErrTwoFactorOff), errors.Is(err, ErrTwoFactorNotStarted), errors.Is(err, ErrTwoFactorMandatory):
-		writeError(w, http.StatusConflict, err.Error())
+		writeFail(w, http.StatusConflict, err)
 	case errors.Is(err, ErrTwoFactorUnavailable):
-		writeError(w, http.StatusServiceUnavailable, err.Error())
+		writeFail(w, http.StatusServiceUnavailable, err)
 	default:
 		return false
 	}

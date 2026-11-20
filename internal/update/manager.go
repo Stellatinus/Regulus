@@ -164,6 +164,11 @@ type Status struct {
 	ApplyStalled   bool `json:"apply_stalled,omitempty"`
 	// LastApply is the outcome of the last installation.
 	LastApply *ApplyResult `json:"last_apply"`
+
+	// StatusSocket is why this hub has no local status socket, empty while it
+	// has one (#338). Without it `regulus status` shows no live data, and an
+	// update from a version older than the #312 fix rolls back on this hub.
+	StatusSocket string `json:"status_socket,omitempty"`
 }
 
 // Auditor records events; *auth.Service implements it.
@@ -215,7 +220,10 @@ const (
 
 // Options configure a Manager.
 type Options struct {
-	DB     *sql.DB
+	DB *sql.DB
+	// ReadDB, if set, is the pool for the plain reads of the settings (the
+	// read pool of storage.HubDB, #345); DB is used when it is nil.
+	ReadDB *sql.DB
 	Log    *slog.Logger
 	Source Source
 	Stager *Stager
@@ -268,6 +276,16 @@ type Manager struct {
 	staging   bool
 	stageErr  string
 	lastCheck time.Time
+
+	statusSocket string // why the hub has no local status socket (#338)
+}
+
+// SetStatusSocket records why the hub runs without its local status socket
+// ("" when it has one), so that Status can say so (#338).
+func (m *Manager) SetStatusSocket(problem string) {
+	m.mu.Lock()
+	m.statusSocket = problem
+	m.mu.Unlock()
 }
 
 // New returns a Manager. Call Run to start the periodic checks.
@@ -487,6 +505,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		Checking:       m.checking,
 		Downloading:    m.staging,
 		DownloadError:  m.stageErr,
+		StatusSocket:   m.statusSocket,
 	}
 	if !m.state.CheckedAt.IsZero() {
 		t := m.state.CheckedAt
@@ -730,7 +749,11 @@ func (m *Manager) audit(ctx context.Context, actor, event, target, detail string
 
 func (m *Manager) get(ctx context.Context, key string) (string, bool, error) {
 	var v string
-	err := m.opts.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	rd := m.opts.ReadDB
+	if rd == nil {
+		rd = m.opts.DB
+	}
+	err := rd.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}

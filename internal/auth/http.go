@@ -274,6 +274,56 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// errorCodes gives the errors of this package a code a client can translate
+// without reading the English text (#330). The text stays in the answer for
+// scripts and for clients that do not know the code; a new error that people
+// meet in the dashboard gets a line here and a text in the catalogs
+// (dashboard/src/i18n/messages/core.*.ts, "hub.error.<code>").
+var errorCodes = []struct {
+	err  error
+	code string
+}{
+	{ErrUserNotFound, "user_not_found"},
+	{ErrSessionNotFound, "session_not_found"},
+	{ErrRoleNotFound, "role_not_found"},
+	{ErrUserExists, "user_exists"},
+	{ErrLastAdmin, "last_admin"},
+	{ErrRoleExists, "role_exists"},
+	{ErrBuiltinRole, "builtin_role"},
+	{ErrRoleInUse, "role_in_use"},
+	{ErrWrongPassword, "wrong_password"},
+	{ErrForbidden, "forbidden"},
+	{ErrUnauthenticated, "unauthenticated"},
+	{ErrRateLimited, "rate_limited"},
+	{ErrBusy, "busy"},
+	{ErrInvalidReset, "invalid_reset"},
+	{ErrInvalidCode, "invalid_code"},
+	{ErrTwoFactorOn, "two_factor_on"},
+	{ErrTwoFactorOff, "two_factor_off"},
+	{ErrTwoFactorNotStarted, "two_factor_not_started"},
+	{ErrTwoFactorMandatory, "two_factor_mandatory"},
+	{ErrTwoFactorUnavailable, "two_factor_unavailable"},
+}
+
+// errorCodeOf is the code of err, or "" for an error without one.
+func errorCodeOf(err error) string {
+	for _, c := range errorCodes {
+		if errors.Is(err, c.err) {
+			return c.code
+		}
+	}
+	return ""
+}
+
+// writeFail answers with err's text and, when it has one, its code.
+func writeFail(w http.ResponseWriter, status int, err error) {
+	if code := errorCodeOf(err); code != "" {
+		writeErrorCode(w, status, err.Error(), code)
+		return
+	}
+	writeError(w, status, err.Error())
+}
+
 // writeErrorCode is writeError with a machine-readable code, for answers a
 // client must tell apart without reading the English text.
 func writeErrorCode(w http.ResponseWriter, status int, msg, code string) {

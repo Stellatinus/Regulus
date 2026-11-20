@@ -17,6 +17,7 @@ Regulus v0.3.0  Hub ● running
    database.schema        (empty)                    default
    builtin_agent          true                       file
    metrics_interval       10s                        file
+   metrics_budget         256MiB                     default
    plugins_dir            (empty)                    default
    log.level              info                       file
    log.format             text                       file
@@ -24,7 +25,6 @@ Regulus v0.3.0  Hub ● running
    updates.apply          false                      default
    console.tui            true                       default
 
- agent_listen  default: (empty)
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ section  ↑/↓ move  enter edit  r restart  q quit

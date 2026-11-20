@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Agent, MetricsPoint } from "../api";
@@ -58,13 +58,16 @@ interface Hub {
   agents: Agent[];
   history: Record<string, MetricsPoint[]>;
   agentsStatus: number;
+  // Every request path the dashboard made, query included.
+  paths: string[];
 }
 
 function mockHub(init: Partial<Hub> = {}): Hub {
-  const hub: Hub = { agents: [agent("local")], history: { local: [point(-10), point(0)] }, agentsStatus: 200, ...init };
+  const hub: Hub = { agents: [agent("local")], history: { local: [point(-10), point(0)] }, agentsStatus: 200, paths: [], ...init };
   vi.stubGlobal(
     "fetch",
     vi.fn((path: string) => {
+      hub.paths.push(path);
       const reply = (status: number, data?: unknown) =>
         Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(data) });
       if (path === "/api/agents") return hub.agentsStatus >= 400 ? reply(hub.agentsStatus, { error: "no" }) : reply(200, hub.agents);
@@ -107,6 +110,18 @@ describe("built-in widgets", () => {
     expect(screen.getByText("16.0 GiB")).toBeInTheDocument();
     expect(screen.getByText("0.50 · 0.40 · 0.30")).toBeInTheDocument();
     expect(screen.getByText("1d 1h")).toBeInTheDocument();
+  });
+
+  // #340: the hub sends null for a CPU share the agent could not read; it is
+  // not shown as 0%, in the number or in the chart.
+  it("a null CPU share says it is not available instead of 0%", async () => {
+    mockHub({
+      agents: [agent("local")],
+      history: { local: [point(-10, { cpu_percent: null }), point(0, { cpu_percent: null })] },
+    });
+    await show(<CpuWidget {...props()} />);
+    expect(screen.getByText("Not available on this server: the agent cannot read the CPU usage here.")).toBeInTheDocument();
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
   });
 
   // An agent that cannot read part of its server says so (#230): the widgets
@@ -247,10 +262,40 @@ describe("choosing the server", () => {
     expect(screen.getByText("77%")).toBeInTheDocument();
   });
 
-  it("has no selector with a single agent", async () => {
+  it("has no server selector with a single agent", async () => {
     mockHub();
     await show(<CpuWidget {...props()} />);
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Server" })).not.toBeInTheDocument();
+  });
+
+  // #330: a chart longer than 10 minutes asks the hub for averaged buckets
+  // (about 450 of them) instead of drawing every report, and does not mix
+  // the live reports into them.
+  it("a one-hour chart asks for buckets with ?step= and the 10-minute one does not", async () => {
+    const hub = mockHub({ history: { local: [point(-3000), point(-1500), point(-10), point(0)] } });
+    await show(<CpuWidget {...props()} />);
+    const metrics = () => hub.paths.filter((p) => p.includes("/metrics"));
+    expect(metrics().every((p) => !p.includes("step="))).toBe(true);
+    expect(screen.getByText("last 10 min")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole("combobox", { name: "Time range" }), { target: { value: "60" } });
+    });
+    const bucketed = metrics().filter((p) => p.includes("step="));
+    expect(bucketed).toHaveLength(1);
+    expect(bucketed[0]).toMatch(/step=8s/); // 60 minutes in about 450 buckets
+    expect(screen.getByText("last 60 min")).toBeInTheDocument();
+
+    // A live report changes the numbers, not the bucketed series: no new request, no mixing.
+    act(() => FakeSocket.last.send({ type: "agent.metrics", id: "local", point: point(5, { cpu_percent: 99 }) }));
+    expect(metrics().filter((p) => p.includes("step="))).toHaveLength(1);
+    expect(screen.getByText("last 60 min")).toBeInTheDocument();
+
+    // Back to 10 minutes: the live window again.
+    await act(async () => {
+      fireEvent.change(screen.getByRole("combobox", { name: "Time range" }), { target: { value: "10" } });
+    });
+    expect(screen.getByText("last 10 min")).toBeInTheDocument();
   });
 });
 

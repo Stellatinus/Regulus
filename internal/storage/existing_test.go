@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/CodexCircle/Regulus/internal/storage"
 	"github.com/CodexCircle/Regulus/internal/storage/storagetest"
@@ -92,4 +93,97 @@ func TestOpenHubOnPostgresAdmitsOneHub(t *testing.T) {
 		t.Fatalf("after the first hub closed: %v", err)
 	}
 	_ = again.Close()
+}
+
+// terminateActiveHubSession ends the PostgreSQL session that holds the
+// active-hub lock of cfg's schema, as pg_terminate_backend or a server restart
+// would, and returns once the lock is free.
+func terminateActiveHubSession(t *testing.T, db *storage.HubDB) {
+	t.Helper()
+	ctx := context.Background()
+	var n int
+	if err := db.Write.QueryRowContext(ctx, `SELECT count(pg_terminate_backend(pid)) FROM pg_locks
+		WHERE locktype = 'advisory' AND objsubid = 1 AND granted AND pid <> pg_backend_pid()
+		AND ((classid::bigint << 32) | objid::bigint) = hashtext('regulus-active-hub:' || current_schema())::bigint`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("ending the session of the lock: %d sessions, err %v", n, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var held bool
+		if err := db.Write.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND objsubid = 1
+			AND ((classid::bigint << 32) | objid::bigint) = hashtext('regulus-active-hub:' || current_schema())::bigint)`).Scan(&held); err != nil {
+			t.Fatal(err)
+		}
+		if !held {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the lock was not released after its session ended")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestActiveHubLockIsTakenAgainAfterTheSessionIsLost is #344: PostgreSQL ends
+// the session that holds the lock; the hub notices, takes the lock again, and
+// a second hub is still refused.
+func TestActiveHubLockIsTakenAgainAfterTheSessionIsLost(t *testing.T) {
+	if !storagetest.Postgres() {
+		t.Skip("PostgreSQL only: the active-hub lock does not exist on SQLite")
+	}
+	ctx := context.Background()
+	cfg := storagetest.Config(t, t.TempDir())
+	hub, err := storage.OpenHub(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hub.Close() }()
+
+	if retaken, err := hub.EnsureActive(ctx); err != nil || retaken {
+		t.Fatalf("healthy: retaken = %v, err = %v; want nothing to do", retaken, err)
+	}
+
+	terminateActiveHubSession(t, hub)
+	// Without the check, a second hub could now start.
+	if retaken, err := hub.EnsureActive(ctx); err != nil || !retaken {
+		t.Fatalf("after the session ended: retaken = %v, err = %v; want the lock taken again", retaken, err)
+	}
+	if second, err := storage.OpenHub(ctx, cfg); !errors.Is(err, storage.ErrHubActive) {
+		if second != nil {
+			_ = second.Close()
+		}
+		t.Fatalf("second hub after the lock was retaken: error = %v, want ErrHubActive", err)
+	}
+	if retaken, err := hub.EnsureActive(ctx); err != nil || retaken {
+		t.Fatalf("again: retaken = %v, err = %v; want nothing to do", retaken, err)
+	}
+}
+
+// If another hub took the lock in the gap, this one must learn it and not
+// pretend to be the active one.
+func TestActiveHubLockTakenByAnotherHubIsReported(t *testing.T) {
+	if !storagetest.Postgres() {
+		t.Skip("PostgreSQL only: the active-hub lock does not exist on SQLite")
+	}
+	ctx := context.Background()
+	cfg := storagetest.Config(t, t.TempDir())
+	first, err := storage.OpenHub(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first.Close() }()
+
+	terminateActiveHubSession(t, first)
+	second, err := storage.OpenHub(ctx, cfg)
+	if err != nil {
+		t.Fatalf("the second hub should start once the lock is free: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+
+	if _, err := first.EnsureActive(ctx); !errors.Is(err, storage.ErrHubActive) {
+		t.Fatalf("first hub: error = %v, want ErrHubActive", err)
+	}
+	if retaken, err := second.EnsureActive(ctx); err != nil || retaken {
+		t.Fatalf("second hub: retaken = %v, err = %v; it holds the lock and has nothing to do", retaken, err)
+	}
 }

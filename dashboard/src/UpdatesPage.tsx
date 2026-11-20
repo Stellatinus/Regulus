@@ -256,6 +256,11 @@ function Version({
           {t("updates.applying.rest")}
         </p>
       )}
+      {status.status_socket && (
+        <p role="status" className="muted">
+          {t("updates.noStatusSocket")} {status.status_socket}
+        </p>
+      )}
       {status.apply_stalled && (
         <p role="alert">
           {t("updates.stalled")}{" "}

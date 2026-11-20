@@ -21,6 +21,7 @@ const (
 	ErrPasswordInFile  ErrorCode = "password_in_file" // none
 	ErrBool            ErrorCode = "bool"             // none
 	ErrDuration        ErrorCode = "duration"         // none
+	ErrSize            ErrorCode = "size"             // none
 	ErrTooShort        ErrorCode = "too_short"        // the minimum
 	ErrChoice          ErrorCode = "choice"           // the choices, joined with ", "
 	ErrReadFile        ErrorCode = "read_file"        // the reason
@@ -45,6 +46,7 @@ var englishErrors = map[ErrorCode]string{
 	ErrPasswordInFile:  "the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
 	ErrBool:            "use true or false",
 	ErrDuration:        "use a duration such as 10s or 1m",
+	ErrSize:            "use a size such as 256MiB or 1GiB",
 	ErrTooShort:        "too short (minimum %s)",
 	ErrChoice:          "use one of: %s",
 	ErrReadFile:        "read config file: %s",

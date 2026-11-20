@@ -61,6 +61,10 @@ type Config struct {
 	BuiltinAgent bool `yaml:"builtin_agent"`
 	// MetricsInterval is how often agents report their metrics to the hub.
 	MetricsInterval time.Duration `yaml:"metrics_interval"`
+	// MetricsBudget bounds the memory of the hub's metrics history, for all
+	// agents together (#333). A size such as 256MiB. When the estimate goes
+	// over it, the oldest samples of any agent are dropped first.
+	MetricsBudget ByteSize `yaml:"metrics_budget"`
 	// PluginsDir, when set, is the directory of the plugins the hub runs, each
 	// as its own process with the role hub (docs/plugins/runtime.md). Empty:
 	// no plugin is run.
@@ -149,6 +153,7 @@ func Default() Config {
 		DataDir:         "data",
 		BuiltinAgent:    true,
 		MetricsInterval: 10 * time.Second,
+		MetricsBudget:   DefaultMetricsBudget,
 		Database:        Database{Type: storage.TypeSQLite, Port: 5432, Name: "regulus", User: "regulus", SSLMode: "prefer"},
 		Log:             Log{Level: "info", Format: "text"},
 		Console:         Console{TUI: true},
@@ -209,6 +214,9 @@ func (c Config) Validate() error {
 	}
 	if c.MetricsInterval < MinMetricsInterval {
 		return fmt.Errorf("metrics_interval %v is too short (minimum %v)", c.MetricsInterval, MinMetricsInterval)
+	}
+	if c.MetricsBudget < MinMetricsBudget {
+		return fmt.Errorf("metrics_budget %v is too small (minimum %v)", c.MetricsBudget, MinMetricsBudget)
 	}
 	if err := c.Storage().Validate(); err != nil {
 		return err
@@ -296,6 +304,13 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 			return Config{}, fmt.Errorf("invalid configuration: REGULUS_METRICS_INTERVAL %q is not a duration (for example 10s)", v)
 		}
 		cfg.MetricsInterval = d
+	}
+	if v := getenv("REGULUS_METRICS_BUDGET"); v != "" {
+		n, err := ParseSize(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid configuration: REGULUS_METRICS_BUDGET %q is not a size (for example 256MiB)", v)
+		}
+		cfg.MetricsBudget = n
 	}
 	if v := getenv("REGULUS_UPDATES_CHECK"); v != "" {
 		b, err := strconv.ParseBool(v)

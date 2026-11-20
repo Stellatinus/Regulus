@@ -5,7 +5,8 @@
 // and runs `regulus agent` against them: enrollment with a token, pinning of
 // the hub's CA, metrics in the API, refusals (another protocol version, a
 // certificate from another CA or expired), a hub restart, a cloned identity
-// and revocation.
+// and revocation. A second test runs the agent of the newest published release
+// against the hub of this source (#341).
 //
 // It has no code outside its test: it is not imported by anything. It runs
 // only when REGULUS_E2E=1 (`make e2e`, and the end-to-end job of CI), so that

@@ -594,6 +594,22 @@ describe("UpdatesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // #338: a hub without its local status socket says why, and what it means for an update.
+  it("tells the administrator when the hub has no local status socket", async () => {
+    mockHub({
+      "GET /api/updates": [{ data: { ...base, status_socket: "the path of the socket is 120 bytes, longer than the 107 a Unix socket allows" } }],
+    });
+    renderPage();
+    expect(await screen.findByText(/This hub has no local status socket/)).toHaveTextContent(/longer than the 107/);
+  });
+
+  it("says nothing about the status socket when the hub has one", async () => {
+    mockHub({ "GET /api/updates": [{ data: base }] });
+    renderPage();
+    await screen.findByText(/0\.1\.0/);
+    expect(screen.queryByText(/no local status socket/)).not.toBeInTheDocument();
+  });
+
   it("saves the automatic mode with its maintenance window", async () => {
     const calls = mockHub({
       "GET /api/updates": [{ data: { ...base, apply_enabled: true } }],

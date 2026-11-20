@@ -1614,6 +1614,14 @@ components:
         apply_available: { type: boolean, description: A verified release is waiting and nothing is being installed. }
         applying: { type: boolean, description: An installation was requested or is running. }
         apply_stalled: { type: boolean, description: The request was not picked up for minutes; the helper unit is probably not enabled. }
+        status_socket:
+          type: string
+          description: >-
+            Why the hub has no local status socket (for example a data directory path
+            too long for a Unix socket); absent while it has one. Without it
+            `regulus status` shows no live data, the hub is updated through
+            `<data_dir>/running.json`, and an update from a version older than the
+            #312 fix rolls back on this hub.
         last_apply:
           oneOf:
             - { $ref: "#/components/schemas/UpdateApplyResult" }
@@ -1666,7 +1674,15 @@ components:
             `reauth_required` (403: confirm the password with
             `POST /api/account/reauth`, then retry),
             `invalid_code` and `login_expired` (401 from
-            `/api/auth/login/two-factor`).
+            `/api/auth/login/two-factor`). The refusals of the user, role, account
+            and two-factor endpoints carry a code the dashboard translates:
+            `user_not_found`, `session_not_found`, `role_not_found`, `user_exists`,
+            `last_admin`, `role_exists`, `builtin_role`, `role_in_use`,
+            `wrong_password`, `forbidden`, `unauthenticated`, `rate_limited`,
+            `busy`, `invalid_reset`, `two_factor_on`, `two_factor_off`,
+            `two_factor_not_started`, `two_factor_mandatory` and
+            `two_factor_unavailable`. New codes may be added; a client shows the
+            English `error` for one it does not know.
     User:
       type: object
       required: [username, role, created_at, disabled]
@@ -1882,7 +1898,8 @@ components:
             The container the agent says it runs in (`docker`, `podman`, `lxc`,
             `systemd-nspawn` or another name systemd gives). Absent on a machine
             of its own, when the agent cannot tell, and for an older agent. In a
-            container, CPU and memory may be the host's figures
+            container, the memory and the CPU count follow the container's cgroup
+            limits when it has them; CPU usage and load may be the host's
             (docs/remote-agents.md, "Supported platforms").
         collector:
           type: string
@@ -1910,7 +1927,7 @@ components:
         days_left: { type: integer, description: Whole days until it ends; negative once it has ended. }
     Certificates:
       type: object
-      required: [ca, listener, soonest, agents_unknown, warn_days, warnings]
+      required: [ca, listener, soonest, agents_unknown, legacy_agents, warn_days, warnings]
       properties:
         ca: { $ref: "#/components/schemas/Certificate" }
         listener:
@@ -1927,6 +1944,12 @@ components:
         agents_unknown:
           type: integer
           description: Enrolled agents (not revoked) whose end date the hub does not know yet; it learns it when they connect.
+        legacy_agents:
+          type: integer
+          description: |
+            Connected agents whose certificate has no kind (issued by a hub
+            before #316). They keep working; this tells when the last one is
+            gone (#322). Agents that are not connected are not counted.
         warn_days: { type: integer, example: 90, description: How many days before its end a certificate is in `warnings`. }
         warnings:
           type: array
@@ -1954,7 +1977,14 @@ components:
         - networks
       properties:
         at: { type: string, format: date-time, description: When the hub received the report. }
-        cpu_percent: { type: number, minimum: 0, maximum: 100 }
+        cpu_percent:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+          description: >-
+            CPU use over the last interval. Null when the agent could not read
+            the CPU times (the report then lists "cpu" in unavailable); it is
+            not 0.
         load_1: { type: number }
         load_5: { type: number }
         load_15: { type: number }

@@ -43,7 +43,6 @@ function toNetwork(v: unknown): NetworkUsage | null {
 }
 
 const POINT_NUMBERS = [
-  "cpu_percent",
   "load_1",
   "load_5",
   "load_15",
@@ -61,6 +60,8 @@ const POINT_NUMBERS = [
 export function toMetricsPoint(v: unknown): MetricsPoint | null {
   if (!isObj(v) || typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
   if (!POINT_NUMBERS.every((k) => isNum(v[k]))) return null;
+  // The CPU share is a number or an explicit null (the agent could not read it).
+  if (v.cpu_percent !== null && !isNum(v.cpu_percent)) return null;
   return {
     ...(v as unknown as MetricsPoint),
     disks: list(v.disks, toDisk),

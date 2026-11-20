@@ -159,8 +159,11 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.part.network": "il traffico di rete",
   "servers.part.uptime": "l'uptime",
   "servers.widget.notAvailable": "Non disponibile su questo server: l'agente non riesce a leggere {part}.",
-  "servers.widget.containerNote": "Questo server è un container ({name}): CPU e memoria possono essere quelle dell'host.",
+  "servers.widget.containerNote": "Questo server è un container ({name}): memoria e numero di CPU seguono i suoi limiti, se ne ha; uso della CPU e carico sono quelli dell'host, a meno che il container non mostri i propri.",
 
+  "servers.chart.range": "Intervallo di tempo",
+  "servers.chart.range10": "10 minuti",
+  "servers.chart.range60": "1 ora",
   "servers.chart.collecting": "Raccolta dei dati…",
   "servers.chart.lastMinutes": "ultimi {minutes} min",
 

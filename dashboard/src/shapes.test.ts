@@ -22,6 +22,13 @@ describe("toMetricsPoint", () => {
     expect(toMetricsPoint(point)).toEqual(point);
   });
 
+  it("keeps a null CPU share (the agent could not read it, #340) but refuses anything else that is not a number", () => {
+    expect(toMetricsPoint({ ...point, cpu_percent: null })?.cpu_percent).toBeNull();
+    for (const bad of [undefined, "99", NaN]) {
+      expect(toMetricsPoint({ ...point, cpu_percent: bad })).toBeNull();
+    }
+  });
+
   it("refuses a report without a valid time or with a missing number", () => {
     for (const bad of [null, 1, "x", [], { ...point, at: "soon" }, { ...point, at: undefined }, { ...point, load_5: "1" }, { ...point, uptime_seconds: NaN }]) {
       expect(toMetricsPoint(bad)).toBeNull();

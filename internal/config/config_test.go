@@ -402,3 +402,46 @@ func TestTLSSettings(t *testing.T) {
 		t.Errorf("environment and flags: %+v", cfg)
 	}
 }
+
+func TestMetricsBudget(t *testing.T) {
+	file := writeFile(t, "metrics_budget: 64MiB\n")
+
+	cfg, err := Load(nil, env(nil), io.Discard)
+	if err != nil || cfg.MetricsBudget != DefaultMetricsBudget {
+		t.Fatalf("default: budget = %v, err = %v; want %v", cfg.MetricsBudget, err, DefaultMetricsBudget)
+	}
+	cfg, err = Load([]string{"-config", file}, env(nil), io.Discard)
+	if err != nil || cfg.MetricsBudget != 64<<20 {
+		t.Fatalf("file: budget = %v, err = %v; want 64MiB", cfg.MetricsBudget, err)
+	}
+	cfg, err = Load([]string{"-config", file}, env(map[string]string{"REGULUS_METRICS_BUDGET": "1GiB"}), io.Discard)
+	if err != nil || cfg.MetricsBudget != 1<<30 {
+		t.Fatalf("env: budget = %v, err = %v; want 1GiB", cfg.MetricsBudget, err)
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_METRICS_BUDGET": "lots"}), io.Discard); err == nil {
+		t.Fatal("expected an error for a budget that is not a size")
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_METRICS_BUDGET": "1MiB"}), io.Discard); err == nil {
+		t.Fatal("expected an error for a budget under the minimum")
+	}
+	if _, err := Load([]string{"-config", writeFile(t, "metrics_budget: lots\n")}, env(nil), io.Discard); err == nil {
+		t.Fatal("expected an error for a bad size in the file")
+	}
+}
+
+func TestParseSizeRoundTrip(t *testing.T) {
+	for in, want := range map[string]ByteSize{"256MiB": 256 << 20, "2gib": 2 << 30, "512k": 512 << 10, "100": 100, "4 MB": 4 << 20} {
+		got, err := ParseSize(in)
+		if err != nil || got != want {
+			t.Errorf("ParseSize(%q) = %v, %v; want %v", in, got, err, want)
+		}
+		if back, err := ParseSize(got.String()); err != nil || back != got {
+			t.Errorf("%v does not round trip: %v, %v", got, back, err)
+		}
+	}
+	for _, bad := range []string{"", "MiB", "0", "-1MiB", "1.5GiB", "9999999999999GiB"} {
+		if _, err := ParseSize(bad); err == nil {
+			t.Errorf("ParseSize(%q) succeeded, want an error", bad)
+		}
+	}
+}
