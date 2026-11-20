@@ -64,6 +64,7 @@ func startRolloutHub(t *testing.T, mutate ...func(*config.Config)) (*Hub, releas
 	})
 	waitFor(t, "the agent listener", func() bool { return h.AgentAddr() != "" })
 	h.rollout.returnTimeout = 5 * time.Second
+	h.rollout.settle = 300 * time.Millisecond
 	return h, rs
 }
 
@@ -252,8 +253,12 @@ func TestRolloutStopsAtTheFirstFailure(t *testing.T) {
 	}
 }
 
+// An agent that comes back with the old version and never with the new one
+// is judged when returnTimeout ends: until then it could be a network blip
+// before the installer ran (#211).
 func TestRolloutNoticesAnAgentThatCameBackRolledBack(t *testing.T) {
 	h, _ := startRolloutHub(t)
+	h.rollout.returnTimeout = time.Second
 	admin := newAPI(t, h, auth.RoleAdmin)
 	creds := enrollNew(t, h, "web1")
 	dir := t.TempDir()
@@ -417,5 +422,212 @@ func TestAutomaticModeUpdatesTheServersInsideTheWindowOnly(t *testing.T) {
 	h.autoRollout(t.Context())
 	if st, _ := h.RolloutStatus(t.Context()); st.State != RolloutFailed || len(st.Agents) != 1 {
 		t.Errorf("the failed rollout was started again: %+v", st)
+	}
+}
+
+// awaitRequest waits until one of dirs holds a request for the installer and
+// returns its index.
+func awaitRequest(t *testing.T, dirs ...string) int {
+	t.Helper()
+	found := -1
+	waitFor(t, "a request for the installer", func() bool {
+		for i, d := range dirs {
+			if _, ok := update.ReadRequest(update.ApplyDir(d)); ok {
+				found = i
+				return true
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// The installer on the server watches the new agent for a while after it
+// connects and can still roll it back (#211). An agent that connects with the
+// new version and is then rolled back is not counted as updated, and the
+// rollout stops there.
+func TestRolloutDoesNotCountAnAgentRolledBackAfterConnecting(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	h.rollout.settle = 3 * time.Second
+	admin := newAPI(t, h, auth.RoleAdmin)
+	names := []string{"a", "b"}
+	creds := make([]*agent.Credentials, 2)
+	dirs := make([]string, 2)
+	stops := make([]func(), 2)
+	for i, name := range names {
+		creds[i], dirs[i] = enrollNew(t, h, name), t.TempDir()
+		stops[i] = runAgentUpdating(t, h, creds[i], "9.8.1", dirs[i])
+	}
+	waitFor(t, "the agents", func() bool { return len(h.Agents()) == 2 })
+
+	if rec := admin.do("POST", "/api/updates/rollout", map[string]any{"wave_size": 1}); rec.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %s", rec.Code, rec.Body)
+	}
+	i := awaitRequest(t, dirs...)
+	first := creds[i].AgentID
+	waitFor(t, "the first server to be installing", func() bool {
+		st, _ := h.RolloutStatus(t.Context())
+		for _, a := range st.Agents {
+			if a.ID == first {
+				return a.Status == AgentInstalling
+			}
+		}
+		return false
+	})
+	_ = os.Remove(filepath.Join(update.ApplyDir(dirs[i]), "request.json"))
+	stops[i]()
+	stops[i] = runAgentUpdating(t, h, creds[i], "9.9.9", dirs[i])
+	waitFor(t, "the new version to connect", func() bool {
+		a, ok := h.agentInfo(first)
+		return ok && a.Version == "9.9.9"
+	})
+	if st, _ := h.RolloutStatus(t.Context()); st.State != RolloutRunning {
+		t.Fatalf("judged before the installer finished watching: %+v", st)
+	}
+	// The installer did not like it and put the old version back.
+	stops[i]()
+	runAgentUpdating(t, h, creds[i], "9.8.1", dirs[i])
+
+	var st RolloutStatus
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		st, _ = h.RolloutStatus(t.Context())
+		if st.State == RolloutFailed {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the rollout did not fail: %+v; agents %+v", st, h.Agents())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for _, a := range st.Agents {
+		switch {
+		case a.ID == first && (a.Status != AgentFailed || !strings.Contains(a.Message, "rolled the update back")):
+			t.Errorf("first server = %+v", a)
+		case a.ID != first && a.Status != AgentSkipped:
+			t.Errorf("the second server was not held back: %+v", a)
+		}
+	}
+	entries, _ := h.auth.Audit(t.Context(), 50)
+	for _, e := range entries {
+		if e.Event == EventAgentUpdated {
+			t.Errorf("audit says updated: %+v", e)
+		}
+	}
+}
+
+// A network blip that reconnects the old agent before the installer ran is
+// not a failure: the agent that then comes back with the new version is
+// updated (#211).
+func TestRolloutWaitsOutAReconnectWithTheOldVersion(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	admin := newAPI(t, h, auth.RoleAdmin)
+	creds := enrollNew(t, h, "web1")
+	dir := t.TempDir()
+	stop := runAgentUpdating(t, h, creds, "9.8.1", dir)
+	waitFor(t, "the agent", func() bool { return len(h.Agents()) == 1 })
+
+	admin.do("POST", "/api/updates/rollout", map[string]any{})
+	awaitRequest(t, dir)
+	waitInstalling(t, admin)
+	before, _ := h.agentInfo(creds.AgentID)
+
+	// The connection drops and the old agent connects again.
+	stop()
+	stop = runAgentUpdating(t, h, creds, "9.8.1", dir)
+	waitFor(t, "the old agent to reconnect", func() bool {
+		a, ok := h.agentInfo(creds.AgentID)
+		return ok && !a.ConnectedAt.Equal(before.ConnectedAt)
+	})
+	time.Sleep(500 * time.Millisecond)
+	if st := decodeRollout(t, admin.do("GET", "/api/updates/rollout", nil)); st.State != RolloutRunning || st.Agents[0].Status != AgentInstalling {
+		t.Fatalf("a reconnect with the old version was judged: %+v", st)
+	}
+
+	// Then the installer runs and the new version comes up.
+	_ = os.Remove(filepath.Join(update.ApplyDir(dir), "request.json"))
+	stop()
+	runAgentUpdating(t, h, creds, "9.9.9", dir)
+	st := waitRollout(t, admin, RolloutDone)
+	if st.Agents[0].Status != AgentUpdated {
+		t.Errorf("after: %+v", st)
+	}
+}
+
+// A restart of the hub forgets neither the version for which a rollout
+// failed (the automatic mode must not try it again) nor the last rollout; a
+// rollout that was running is shown as stopped, and the servers it waited for
+// as unknown (#211).
+func TestRolloutStateSurvivesARestart(t *testing.T) {
+	h, rs := startRolloutHub(t)
+	admin := newAPI(t, h, auth.RoleAdmin)
+	runAgentVersion(t, h, enrollNew(t, h, "web1"), "9.8.1") // cannot update itself
+	waitFor(t, "the agent", func() bool { return len(h.Agents()) == 1 })
+	admin.do("POST", "/api/updates/rollout", map[string]any{})
+	waitRollout(t, admin, RolloutFailed)
+
+	reopen := func() *Hub {
+		t.Helper()
+		h2, err := New(t.Context(), h.cfg, quiet(), fstest.MapFS{}, WithVersion("9.9.9"),
+			WithUpdateSource(rs.Source), WithUpdateVerifier(acceptAll{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = h2.Close() })
+		return h2
+	}
+	h2 := reopen()
+	if h2.rollout.failedTarget != "9.9.9" {
+		t.Errorf("failed target after a restart = %q", h2.rollout.failedTarget)
+	}
+	st, _ := h2.RolloutStatus(t.Context())
+	if st.State != RolloutFailed || len(st.Agents) != 1 || st.Agents[0].Status != AgentFailed || st.StartedBy != "admin" {
+		t.Errorf("last rollout after a restart = %+v", st)
+	}
+
+	// A rollout that was running when the hub stopped.
+	h2.rollout.mu.Lock()
+	run := h2.rollout.run
+	run.status.State = RolloutRunning
+	run.status.FinishedAt = nil
+	run.status.Agents = []RolloutAgent{{ID: "x", Status: AgentInstalling}, {ID: "y", Status: AgentPending}}
+	h2.rollout.mu.Unlock()
+	h2.persistRollout(run)
+	h3 := reopen()
+	st, _ = h3.RolloutStatus(t.Context())
+	if st.State != RolloutStopped || st.FinishedAt == nil || st.Agents[0].Status != AgentUnknown || st.Agents[0].Message != msgHubRestarted || st.Agents[1].Status != AgentSkipped {
+		t.Errorf("an interrupted rollout after a restart = %+v", st)
+	}
+
+	// A hub of another version does not show a rollout to the old one.
+	h4, err := New(t.Context(), h.cfg, quiet(), fstest.MapFS{}, WithVersion("9.9.10"),
+		WithUpdateSource(rs.Source), WithUpdateVerifier(acceptAll{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = h4.Close() }()
+	if st, _ := h4.RolloutStatus(t.Context()); st.State != RolloutIdle || st.Target != "9.9.10" {
+		t.Errorf("a rollout to the previous version is shown: %+v", st)
+	}
+}
+
+// A successful rollout clears the memory of a failure.
+func TestRolloutSuccessClearsTheFailedTarget(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	h.setFailedTarget("9.9.9")
+	admin := newAPI(t, h, auth.RoleAdmin)
+	creds := enrollNew(t, h, "web1")
+	dir := t.TempDir()
+	stop := runAgentUpdating(t, h, creds, "9.8.1", dir)
+	waitFor(t, "the agent", func() bool { return len(h.Agents()) == 1 })
+	admin.do("POST", "/api/updates/rollout", map[string]any{})
+	awaitRequest(t, dir)
+	waitInstalling(t, admin)
+	_ = os.Remove(filepath.Join(update.ApplyDir(dir), "request.json"))
+	stop()
+	runAgentUpdating(t, h, creds, "9.9.9", dir)
+	waitRollout(t, admin, RolloutDone)
+	if v, _, _ := h.loadSetting(t.Context(), settingRolloutFailed); v != "" || h.rollout.failedTarget != "" {
+		t.Errorf("failed target after a success = %q / %q", v, h.rollout.failedTarget)
 	}
 }

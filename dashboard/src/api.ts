@@ -646,7 +646,8 @@ export type RolloutAgentStatus =
   | "installing"
   | "updated"
   | "failed"
-  | "skipped";
+  | "skipped"
+  | "unknown";
 
 export interface RolloutAgent {
   id: string;

@@ -131,6 +131,7 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.agent.updated": "aggiornato",
   "updates.agent.failed": "non riuscito",
   "updates.agent.skipped": "non provato",
+  "updates.agent.unknown": "esito sconosciuto",
   "updates.agent.row": "{name} ({from}): {status}",
   "updates.agent.rowMessage": "{name} ({from}): {status} — {message}",
 };

@@ -552,7 +552,8 @@ paths:
         `candidates` are the connected servers that run an older release than the
         hub and would be updated by a new rollout (the hub is updated first;
         servers are updated to the version the hub runs). `agents` is what the
-        last rollout did, server by server.
+        last rollout did, server by server. The last rollout is kept across a
+        restart of the hub; one that was running then is `stopped`.
       responses:
         "200":
           description: The state of the rollout.
@@ -1547,7 +1548,7 @@ components:
         id: { type: string }
         hostname: { type: string }
         from: { type: string, description: The version the server ran. }
-        status: { type: string, enum: [pending, offered, installing, updated, failed, skipped] }
+        status: { type: string, enum: [pending, offered, installing, updated, failed, skipped, unknown], description: "`installing` lasts until the server has stayed connected with the new version for 30 seconds (its installer can still roll it back until then). `unknown`: the rollout was stopped, or the hub restarted, while it waited for this server." }
         message: { type: string }
     RolloutStatus:
       type: object

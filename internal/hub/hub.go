@@ -192,6 +192,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		GOARCH:   runtime.GOARCH,
 		Enabled:  cfg.Updates.Check,
 	})
+	if err := h.loadRollout(ctx); err != nil {
+		h.log.Warn("reading the state of the last update of the servers", "err", err)
+	}
 	return h, nil
 }
 
