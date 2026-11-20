@@ -33,7 +33,7 @@ What runs where (#230; the table is in [Remote agents](remote-agents.md#supporte
 
 - **Releases are Linux amd64 and arm64 only, on systemd.** Updates from the dashboard need systemd: the root helper is started by path units. Linux without systemd runs the agent from the `tar.gz` but gets no updates; another OS is not built.
 - **An agent that cannot read something says so** instead of sending zeros: every `MetricsReport` names its collector (`linux` or `basic`, fields 9 and 10 with `unavailable`) and the parts it could not read. Added to protocol 1 without raising `protocol.Version`: an older hub ignores the fields, an older agent sends none and looks as before. The hub keeps them in the stored report (an empty list costs nothing), so a metrics point says what its zeros mean. The basic collector is still chosen once at start, by reading `/proc/stat`; the Linux collector reports per report what it could not read.
-- **No cgroup limits.** CPU, load and memory come from `/proc`, so in a container they are the host's unless LXCFS virtualizes `/proc`; the CPU count follows `cpuset` (`runtime.NumCPU`) but not a quota. Instead of reading cgroup v1/v2 files (two formats, and limits that do not say what is used on the host), the agent reports the container it detects (`SystemInfo.container`, field 8) and the dashboard says the figures may be the host's. Reading cgroup limits is left for a follow-up.
+- **No cgroup limits (at first; #325 added them).** CPU, load and memory come from `/proc`, so in a container they are the host's unless LXCFS virtualizes `/proc`. The agent reports the container it detects (`SystemInfo.container`, field 8) and the dashboard says which figures may be the host's. Reading the cgroup limits of memory and the CPU quota was left for a follow-up, which is the section "Containers: the agent reads its cgroup limits (#325)" below.
 - **Network filesystems and overlay are not disks.** nfs, cifs and the like belong to the server that exports them (which reports them with its own agent) and are the mounts most likely to hang; overlay is a container's view of the host's disk. A container therefore shows "No disks reported", which is not the same as "not available".
 
 ## Roadmap: phases and milestones
@@ -262,6 +262,15 @@ What was left over from the limits of #199:
 - **Nightly, not per pull request.** `.github/workflows/fuzz.yml` runs each target for 30 seconds every night (and by hand); `make fuzz` does the same locally. Fuzzing on every pull request would add minutes without finding much more.
 - **What the fuzzers found, now fixed:** a `/proc/stat` line whose counters overflow 64 bits gave busy time larger than the total (now an error); a `/proc/meminfo` value in kB that does not fit in bytes wrapped to a small number (now skipped, and the old-kernel fallback sum saturates); `/proc/net/dev` lines without a name, or a name twice, were reported (now skipped: the hub pairs counters by name). None of these come from a real kernel. `unescapeMount` was suspected of mishandling an escape at the very end (`a\040`); it does not, and a test keeps it so.
 - **Not done:** memory inside a container (cgroup v2, LXC) is still the host's. Both are left for separate issues.
+
+## Containers: the agent reads its cgroup limits (#325)
+
+In a container the agent reported the host's memory and CPU count. It now reads the limits of its own cgroup, but only when it detects a container (`internal/agent/cgroup.go`):
+
+- **Only in a container.** On a real server the agent's cgroup is its systemd service, and a `MemoryMax` on the service is not the server's memory. The detection is the one that already fills `container` (`/run/systemd/container`, `/.dockerenv`, `/run/.containerenv`), which a container the agent cannot recognise escapes: it keeps the host's figures, as before.
+- **Both versions of cgroup.** v2 (`memory.max`, `memory.current`, `memory.stat`, `cpu.max`) and v1 (`memory.limit_in_bytes`, `memory.usage_in_bytes`, `cpu.cfs_quota_us`). v1's "unlimited" is a huge number, not a missing file, and is read as no limit. A container with its own cgroup namespace sees its group as the root of the mount; otherwise the group is found from `/proc/self/cgroup`, and the groups above it are read too, the lowest limit winning.
+- **Memory used is `current` minus `inactive_file`**, as `docker stats` does, so the page cache that can be given back does not look like pressure. Total and available follow from the limit. A limit above the host's memory is not a limit.
+- **Not done:** CPU usage and load stay the host's (a quota-based usage from `cpu.stat` is possible later), and so does swap. The reading was checked against fixtures for v2 and v1 and on this build's own cgroup v1 container; a Docker with a `--memory` limit on a real host has not been tried, which is the `[Test]` issue for #325.
 
 ## CPU unknown is null, not 0 (#340)
 

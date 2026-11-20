@@ -172,7 +172,7 @@ export const servers = {
   "servers.part.network": "the network traffic",
   "servers.part.uptime": "the uptime",
   "servers.widget.notAvailable": "Not available on this server: the agent cannot read {part} here.",
-  "servers.widget.containerNote": "This server is a container ({name}): CPU and memory may be the host's figures.",
+  "servers.widget.containerNote": "This server is a container ({name}): memory and the CPU count follow its limits when it has them; CPU usage and load are the host's unless the container shows its own.",
 
   // Charts.
   "servers.chart.range": "Time range",

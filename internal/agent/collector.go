@@ -42,6 +42,9 @@ type statfsFunc func(path string) (total, used uint64, err error)
 type LinuxCollector struct {
 	proc   string
 	statfs statfsFunc
+	// cgroup, if set, reads the limits of the control group; it is set only
+	// when the agent runs in a container (#325), where /proc shows the host.
+	cgroup func() cgroupLimits
 
 	mu      sync.Mutex
 	prevCPU cpuTimes
@@ -69,7 +72,11 @@ const defaultStatTimeout = 2 * time.Second
 
 // NewLinuxCollector returns a collector that reads /proc.
 func NewLinuxCollector() *LinuxCollector {
-	return newLinuxCollector("/proc", diskUsage)
+	c := newLinuxCollector("/proc", diskUsage)
+	if detectContainer("/") != "" {
+		c.cgroup = func() cgroupLimits { return readCgroupLimits("/proc", cgroupRoot) }
+	}
+	return c
 }
 
 func newLinuxCollector(proc string, statfs statfsFunc) *LinuxCollector {
@@ -108,6 +115,10 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 		return nil, fmt.Errorf("cannot read /proc: %w", errors.Join(err, memErr))
 	}
 
+	if c.cgroup != nil && memErr == nil {
+		applyMemoryLimit(mem, c.cgroup())
+	}
+
 	report := &agentv1.MetricsReport{
 		CollectedAt: timestamppb.New(time.Now()),
 		Collector:   collectorLinux,
@@ -141,6 +152,20 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 		report.Unavailable = append(report.Unavailable, partUptime)
 	}
 	return report, nil
+}
+
+// applyMemoryLimit replaces the host's memory figures with the container's
+// when its cgroup has a memory limit lower than the host's memory. Swap stays
+// as /proc shows it. Without a limit, or without a reading of the use, the
+// figures stay the host's.
+func applyMemoryLimit(mem *agentv1.MemoryMetrics, lim cgroupLimits) {
+	if mem == nil || lim.MemoryLimit == 0 || lim.MemoryLimit >= mem.TotalBytes || !lim.HaveMemoryUsed {
+		return
+	}
+	used := min(lim.MemoryUsed, lim.MemoryLimit)
+	mem.TotalBytes = lim.MemoryLimit
+	mem.UsedBytes = used
+	mem.AvailableBytes = lim.MemoryLimit - used
 }
 
 func (c *LinuxCollector) readOK(name string) (string, bool) {

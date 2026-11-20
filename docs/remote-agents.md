@@ -51,13 +51,14 @@ None of these needs root or a capability; the hardened units (`PrivateDevices`, 
 - **network filesystems** (nfs, nfs4, cifs, smb3, ...): their space belongs to the server that exports them, which reports it with its own agent; and a share whose server is gone could only show up as a mount that does not answer. An NFS server shows its exported disks; its clients do not;
 - **overlay, tmpfs and other pseudo filesystems**: a Docker or Podman container, whose root is overlay, therefore shows "No disks reported". Run the agent on the host to see its disks.
 
-**Containers.** The agent reads `/proc` as it finds it, and Regulus does not read cgroup limits (decided in #230; a follow-up may add them):
+**Containers.** The agent reads `/proc` as it finds it, which in a container is the host's. When it detects a container, it also reads the limits of its own control group (#325):
 
-- **CPU count** is the CPUs the agent may run on (`runtime.NumCPU`, which follows `cpuset`), not a CPU quota (`cpu.max`);
-- **memory, load and CPU usage** are the **host's**, unless the container virtualizes `/proc` (LXC and LXD with LXCFS show the container's own memory, CPU usage and uptime);
+- **memory:** `memory.max` and `memory.current` of cgroup v2, `memory.limit_in_bytes` and `memory.usage_in_bytes` of cgroup v1. When the limit is lower than the host's memory, the Memory widget and the server's memory total show the container's limit and use (the page cache that can be given back, `inactive_file`, is not counted as used, as `docker stats` does). The limit of a group above the container's counts too: the lowest wins. Swap stays as `/proc` shows it;
+- **CPU count:** the quota (`cpu.max` of v2, `cpu.cfs_quota_us` over `cpu.cfs_period_us` of v1) rounded up, when it is lower than the CPUs the agent may run on (`runtime.NumCPU`, which follows `cpuset`). A quota of 1.5 CPUs is reported as 2;
+- **CPU usage and load average** are still the **host's** (`/proc/stat`, `/proc/loadavg`), unless the container virtualizes `/proc` (LXC and LXD with LXCFS show the container's own memory, CPU usage and uptime);
 - **network** is the container's own interfaces.
 
-The agent reports the container it detects (`container` in `GET /api/agents`: the name systemd writes to `/run/systemd/container`, else `docker` for `/.dockerenv`, `podman` for `/run/.containerenv`), and the System widget shows it with a note that CPU and memory may be the host's. For figures that are the server's own, run the agent on the host or in a virtual machine.
+Without a limit, nothing changes: the figures are the host's. The limits are read only in a container, because the cgroup of an agent on a real server is the one of its systemd service, not of the server. The agent reports the container it detects (`container` in `GET /api/agents`: the name systemd writes to `/run/systemd/container`, else `docker` for `/.dockerenv`, `podman` for `/run/.containerenv`), and the System widget shows it with a note on which figures follow the container. For the server's own figures, run the agent on the host or in a virtual machine. *Not verified on a real Docker or LXC host yet; see the `[Test]` issue for #325.*
 
 ## Limits on what an agent can send
 

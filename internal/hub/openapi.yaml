@@ -1898,7 +1898,8 @@ components:
             The container the agent says it runs in (`docker`, `podman`, `lxc`,
             `systemd-nspawn` or another name systemd gives). Absent on a machine
             of its own, when the agent cannot tell, and for an older agent. In a
-            container, CPU and memory may be the host's figures
+            container, the memory and the CPU count follow the container's cgroup
+            limits when it has them; CPU usage and load may be the host's
             (docs/remote-agents.md, "Supported platforms").
         collector:
           type: string
