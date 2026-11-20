@@ -156,6 +156,24 @@ export const servers = {
   "servers.widget.interface": "Interface",
   "servers.widget.since": "since {date}",
 
+  // What an agent cannot read on its server (#230; src/limits.ts). A part
+  // name has its article, as it is used inside a sentence.
+  "servers.fact.metrics": "Metrics",
+  "servers.fact.container": "Container",
+  "servers.metrics.limited": "limited metrics",
+  "servers.metrics.basic": "limited: this system has no /proc, so only the time and the uptime are reported",
+  "servers.metrics.missing": "limited: the agent cannot read {parts}",
+  "servers.metrics.complete": "complete",
+  "servers.metrics.notAvailable": "not available",
+  "servers.part.cpu": "the CPU usage",
+  "servers.part.load": "the load average",
+  "servers.part.memory": "the memory",
+  "servers.part.disks": "the disks",
+  "servers.part.network": "the network traffic",
+  "servers.part.uptime": "the uptime",
+  "servers.widget.notAvailable": "Not available on this server: the agent cannot read {part} here.",
+  "servers.widget.containerNote": "This server is a container ({name}): CPU and memory may be the host's figures.",
+
   // Charts.
   "servers.chart.collecting": "Collecting data…",
   "servers.chart.lastMinutes": "last {minutes} min",

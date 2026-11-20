@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { formatAgo } from "../format";
 import { useT } from "../i18n";
+import { partName, type Part } from "../limits";
 import { lastSeen } from "../live";
 import { useLiveAgent, type LiveAgent } from "../LiveProvider";
 import type { WidgetProps } from "./registry";
@@ -54,4 +55,11 @@ export function AgentView({ config, setConfig, children }: Props) {
 export function Waiting() {
   const t = useT();
   return <p>{t("servers.widget.waiting")}</p>;
+}
+
+// NotAvailable is shown by a widget whose part of the report the agent cannot
+// read on its server (#230), instead of zeros or an empty chart.
+export function NotAvailable({ part }: { part: Part }) {
+  const t = useT();
+  return <p className="note">{t("servers.widget.notAvailable", { part: partName(part, t) })}</p>;
 }

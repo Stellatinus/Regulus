@@ -19,6 +19,46 @@ How it is protected: the hub creates its own certificate authority at the first 
 
 What this does not cover: an agent so old that it cannot verify the signature of today's releases (for example a build from before the repository moved, see [Updates](updates.md)). It is admitted and offered the update, but refuses the files; that server needs `install.sh` once. An agent installed before the update feature existed has no helper and needs the same.
 
+## Supported platforms
+
+Releases are built for **Linux on amd64 and arm64** only (`.deb`, `.rpm` and `tar.gz`; see [Design decisions](decisions.md#platforms) for the order of the distributions). The installer refuses other architectures. What a server needs, and what it gets:
+
+| Case | Status | What works |
+|---|---|---|
+| Linux amd64 or arm64 with systemd, on its own machine or a virtual machine | **supported** (Ubuntu LTS first, then Debian, then RHEL-like) | everything |
+| Linux without systemd (Alpine with OpenRC, a plain container) | runs, not supported | metrics, from the `tar.gz`; no service file, and **no updates from the dashboard**: the update helper is started by systemd path units |
+| Linux container: LXC/LXD, systemd-nspawn, Docker, Podman | runs, limited | see below |
+| Another Unix (BSD, macOS) or Windows | not built | built by hand, the agent connects but uses the **basic collector**: time and uptime only |
+
+**What each part of a report needs.** The agent reads files, it runs no command:
+
+| Part | Read from | Without it |
+|---|---|---|
+| CPU usage | `/proc/stat` | "not available" |
+| Load average | `/proc/loadavg` | "not available" |
+| Memory and swap | `/proc/meminfo` | "not available" |
+| Disks | `/proc/mounts`, then `statfs` on each mount | "not available"; a mount that does not answer is left out ([below](#when-a-disk-or-the-collector-does-not-answer)) |
+| Network | `/proc/net/dev` | "not available" |
+| Uptime | `/proc/uptime` | "not available" |
+| System facts (Hello) | `/etc/os-release`, `/proc/sys/kernel/osrelease`, `/proc/meminfo`, the Go runtime (CPU count, OS, architecture) | the field is left empty |
+
+None of these needs root or a capability; the hardened units (`PrivateDevices`, read-only system) do not hide them.
+
+**The agent says what it cannot read.** When `/proc/stat` cannot be read at start, the agent uses the **basic collector**, which sends only the time and the uptime. Every report names its collector (`linux` or `basic`) and lists the parts it could not read (`MetricsReport.unavailable`). The hub passes both on (`collector`, `unavailable` in `GET /api/agents` and in each metrics point), the **Servers** list and the server page mark the server "limited metrics", and each widget says "not available on this server" instead of showing zeros or an empty chart. "Nothing there" is not "not available": a container with no real filesystem reports no disks, which the Disk widget shows as such. An agent older than these fields sends neither, and looks as before.
+
+**Which disks are shown.** Only local filesystems are reported: ext2/3/4, xfs, btrfs, zfs, f2fs, jfs, reiserfs, vfat, exfat, ntfs, ntfs3 and fuseblk, one entry per device (`realFilesystems` in `internal/agent/collector.go`). Left out on purpose:
+
+- **network filesystems** (nfs, nfs4, cifs, smb3, ...): their space belongs to the server that exports them, which reports it with its own agent; and a share whose server is gone could only show up as a mount that does not answer. An NFS server shows its exported disks; its clients do not;
+- **overlay, tmpfs and other pseudo filesystems**: a Docker or Podman container, whose root is overlay, therefore shows "No disks reported". Run the agent on the host to see its disks.
+
+**Containers.** The agent reads `/proc` as it finds it, and Regulus does not read cgroup limits (decided in #230; a follow-up may add them):
+
+- **CPU count** is the CPUs the agent may run on (`runtime.NumCPU`, which follows `cpuset`), not a CPU quota (`cpu.max`);
+- **memory, load and CPU usage** are the **host's**, unless the container virtualizes `/proc` (LXC and LXD with LXCFS show the container's own memory, CPU usage and uptime);
+- **network** is the container's own interfaces.
+
+The agent reports the container it detects (`container` in `GET /api/agents`: the name systemd writes to `/run/systemd/container`, else `docker` for `/.dockerenv`, `podman` for `/run/.containerenv`), and the System widget shows it with a note that CPU and memory may be the host's. For figures that are the server's own, run the agent on the host or in a virtual machine.
+
 ## Limits on what an agent can send
 
 An agent is a remote machine, and one that is compromised or buggy must not be able to exhaust the hub. The hub (`internal/hub/limits.go`) enforces:
