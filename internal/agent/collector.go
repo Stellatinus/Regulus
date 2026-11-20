@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -21,7 +20,12 @@ import (
 )
 
 // realFilesystems are the filesystem types reported as disks. Pseudo
-// filesystems (proc, tmpfs, overlay, cgroup, ...) are left out on purpose.
+// filesystems (proc, tmpfs, overlay, cgroup, ...) are left out on purpose, and
+// so are network filesystems (nfs, nfs4, cifs, smb3, ...): their space belongs
+// to the server that exports them, which reports it with its own agent, and a
+// share whose server is gone would only show as a mount that does not answer.
+// A container whose root is overlay therefore reports no disk; see
+// docs/remote-agents.md, "Supported platforms".
 var realFilesystems = []string{
 	"ext2", "ext3", "ext4", "xfs", "btrfs", "zfs", "f2fs", "jfs", "reiserfs",
 	"vfat", "exfat", "ntfs", "ntfs3", "fuseblk",
@@ -77,16 +81,14 @@ func newLinuxCollector(proc string, statfs statfsFunc) *LinuxCollector {
 }
 
 func (c *LinuxCollector) read(name string) string {
-	data, err := os.ReadFile(filepath.Join(c.proc, name))
-	if err != nil {
-		return ""
-	}
-	return string(data)
+	data, _ := readFileOK(filepath.Join(c.proc, name))
+	return data
 }
 
 // Collect gathers a report. A source that cannot be read leaves its part of the
-// report empty; it fails only when neither the CPU nor the memory can be read
-// (for example on a system without /proc).
+// report empty and is named in the report's unavailable list, so that the hub
+// can tell "cannot read" from "nothing there"; it fails only when neither the
+// CPU nor the memory can be read (for example on a system without /proc).
 func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error) {
 	now, err := parseCPUTimes(c.read("stat"))
 	var usage float64
@@ -107,19 +109,46 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 	}
 
 	report := &agentv1.MetricsReport{
-		CollectedAt:   timestamppb.New(time.Now()),
-		Cpu:           &agentv1.CpuMetrics{UsagePercent: usage},
-		Memory:        mem,
-		Disks:         c.disks(),
-		Networks:      parseNetDev(c.read("net/dev")),
-		UptimeSeconds: parseUptime(c.read("uptime")),
+		CollectedAt: timestamppb.New(time.Now()),
+		Collector:   collectorLinux,
+		Cpu:         &agentv1.CpuMetrics{UsagePercent: usage},
+		Memory:      mem,
 	}
-	report.Cpu.Load_1, report.Cpu.Load_5, report.Cpu.Load_15 = parseLoadAvg(c.read("loadavg"))
+	if err != nil {
+		report.Unavailable = append(report.Unavailable, partCPU)
+	}
+	if loadavg, ok := c.readOK("loadavg"); ok {
+		report.Cpu.Load_1, report.Cpu.Load_5, report.Cpu.Load_15 = parseLoadAvg(loadavg)
+	} else {
+		report.Unavailable = append(report.Unavailable, partLoad)
+	}
+	if memErr != nil {
+		report.Unavailable = append(report.Unavailable, partMemory)
+	}
+	if mounts, ok := c.readOK("mounts"); ok {
+		report.Disks = c.disks(mounts)
+	} else {
+		report.Unavailable = append(report.Unavailable, partDisks)
+	}
+	if netDev, ok := c.readOK("net/dev"); ok {
+		report.Networks = parseNetDev(netDev)
+	} else {
+		report.Unavailable = append(report.Unavailable, partNetwork)
+	}
+	if uptime, ok := c.readOK("uptime"); ok {
+		report.UptimeSeconds = parseUptime(uptime)
+	} else {
+		report.Unavailable = append(report.Unavailable, partUptime)
+	}
 	return report, nil
 }
 
-func (c *LinuxCollector) disks() []*agentv1.DiskMetrics {
-	mounts := parseMounts(c.read("mounts"))
+func (c *LinuxCollector) readOK(name string) (string, bool) {
+	return readFileOK(filepath.Join(c.proc, name))
+}
+
+func (c *LinuxCollector) disks(mountsFile string) []*agentv1.DiskMetrics {
+	mounts := parseMounts(mountsFile)
 	// Ask every mount at the same time and wait for all of them, once, up to
 	// statTimeout: the report takes as long as the slowest answer, or that
 	// limit, not the sum of them.

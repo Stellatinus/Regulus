@@ -61,6 +61,7 @@ func sanitizeHello(h *agentv1.Hello) {
 		sys.OsVersion = cleanText(sys.GetOsVersion())
 		sys.Kernel = cleanText(sys.GetKernel())
 		sys.Arch = cleanText(sys.GetArch())
+		sys.Container = cleanText(sys.GetContainer())
 	}
 }
 
@@ -75,6 +76,13 @@ func sanitizeReport(r *agentv1.MetricsReport) (cut bool) {
 	}
 	if len(r.Plugins) > maxListEntries {
 		r.Plugins, cut = r.Plugins[:maxListEntries], true
+	}
+	if len(r.Unavailable) > maxListEntries {
+		r.Unavailable, cut = r.Unavailable[:maxListEntries], true
+	}
+	r.Collector = cleanText(r.GetCollector())
+	for i, u := range r.Unavailable {
+		r.Unavailable[i] = cleanText(u)
 	}
 	for _, p := range r.Plugins {
 		p.Id, p.Version, p.State, p.LastError = cleanText(p.GetId()), cleanText(p.GetVersion()), cleanText(p.GetState()), cleanText(p.GetLastError())

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -26,15 +27,41 @@ func systemInfo() *agentv1.SystemInfo {
 		Arch:             runtime.GOARCH,
 		CpuCount:         uint32(runtime.NumCPU()),
 		MemoryTotalBytes: parseMemTotal(readFile("/proc/meminfo")),
+		Container:        detectContainer("/"),
 	}
 }
 
+// detectContainer names the container the agent runs in, or returns "" when
+// it finds none. It looks where the container managers leave a mark: systemd
+// writes the name to /run/systemd/container (for LXC, nspawn, Docker and
+// Podman with systemd inside), Docker creates /.dockerenv and Podman
+// /run/.containerenv. root is "/" except in tests. It does not read
+// /proc/1/environ, which an agent that is not root cannot open.
+func detectContainer(root string) string {
+	if name := strings.TrimSpace(readFile(filepath.Join(root, "run/systemd/container"))); name != "" {
+		return name
+	}
+	if _, err := os.Stat(filepath.Join(root, ".dockerenv")); err == nil {
+		return "docker"
+	}
+	if _, err := os.Stat(filepath.Join(root, "run/.containerenv")); err == nil {
+		return "podman"
+	}
+	return ""
+}
+
 func readFile(path string) string {
+	data, _ := readFileOK(path)
+	return data
+}
+
+// readFileOK is readFile that also tells whether the file could be read.
+func readFileOK(path string) (string, bool) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return "", false
 	}
-	return string(data)
+	return string(data), true
 }
 
 // parseOSRelease returns PRETTY_NAME from the content of /etc/os-release.
@@ -88,15 +115,38 @@ type Collector interface {
 	Collect(ctx context.Context) (*agentv1.MetricsReport, error)
 }
 
+// Names of the collectors and of the parts of a report, as sent in
+// MetricsReport.collector and MetricsReport.unavailable.
+const (
+	collectorLinux = "linux"
+	collectorBasic = "basic"
+
+	partCPU     = "cpu"
+	partLoad    = "load"
+	partMemory  = "memory"
+	partDisks   = "disks"
+	partNetwork = "network"
+	partUptime  = "uptime"
+)
+
 // basicCollector reports only the time and the uptime. It is the fallback on
-// systems where /proc cannot be read.
+// systems where /proc cannot be read, and says in every report that the rest
+// is unavailable, so that the dashboard shows "not available" rather than
+// zeros.
 type basicCollector struct{}
 
 func (basicCollector) Collect(context.Context) (*agentv1.MetricsReport, error) {
-	return &agentv1.MetricsReport{
-		CollectedAt:   timestamppb.New(time.Now()),
-		UptimeSeconds: parseUptime(readFile("/proc/uptime")),
-	}, nil
+	r := &agentv1.MetricsReport{
+		CollectedAt: timestamppb.New(time.Now()),
+		Collector:   collectorBasic,
+		Unavailable: []string{partCPU, partLoad, partMemory, partDisks, partNetwork},
+	}
+	if uptime, ok := readFileOK("/proc/uptime"); ok {
+		r.UptimeSeconds = parseUptime(uptime)
+	} else {
+		r.Unavailable = append(r.Unavailable, partUptime)
+	}
+	return r, nil
 }
 
 // defaultCollector is the Linux collector when /proc is available, and the

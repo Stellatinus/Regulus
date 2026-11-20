@@ -113,6 +113,13 @@ describe("ServersPage", () => {
     expect(await screen.findByText("too old for this hub: connected only to be updated (Updates page)")).toBeInTheDocument();
   });
 
+  it("marks a server whose agent cannot read everything", async () => {
+    const limited: Agent = { ...online, collector: "basic", unavailable: ["cpu", "memory"] };
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [limited] }) });
+    renderAs(viewer, <ServersPage />);
+    expect(await screen.findByText("limited metrics")).toBeInTheDocument();
+  });
+
   it("says when there is no server", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [] }) });
     renderAs(viewer, <ServersPage />);
@@ -293,6 +300,14 @@ describe("ServerPage", () => {
     // A viewer cannot manage the server.
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke this server" })).not.toBeInTheDocument();
+  });
+
+  it("says what the agent of a server cannot read, and its container", async () => {
+    const limited: Agent = { ...online, collector: "linux", unavailable: ["memory", "disks"], container: "docker" };
+    mockHub({ "GET /api/agents/web1": () => ({ data: limited }) });
+    renderAs(viewer, <ServerPage id="web1" />);
+    expect(await screen.findByText("limited: the agent cannot read the memory, the disks")).toBeInTheDocument();
+    expect(screen.getByText("docker")).toBeInTheDocument();
   });
 
   it("explains an offline server instead of showing widgets", async () => {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -221,6 +222,9 @@ func TestLinuxCollectorFromFixtures(t *testing.T) {
 	if len(r.GetNetworks()) != 2 {
 		t.Errorf("networks: %+v", r.GetNetworks())
 	}
+	if r.GetCollector() != collectorLinux || len(r.GetUnavailable()) != 0 {
+		t.Errorf("collector %q, unavailable %v: want linux and nothing missing", r.GetCollector(), r.GetUnavailable())
+	}
 
 	// The next report covers only the time since the previous one.
 	writeProc(t, proc, map[string]string{"stat": "cpu  300 10 50 1100 40 5 5 0 0 0\n"})
@@ -230,6 +234,81 @@ func TestLinuxCollectorFromFixtures(t *testing.T) {
 	}
 	if got := r.GetCpu().GetUsagePercent(); got != 0 {
 		t.Errorf("cpu usage after an idle interval = %v, want 0", got)
+	}
+}
+
+// A source that cannot be read is named in the report, so that the dashboard
+// says "not available" instead of showing zeros or no disks (#230). A source
+// that is read and lists nothing (no real filesystem) is not "unavailable".
+func TestLinuxCollectorNamesWhatItCannotRead(t *testing.T) {
+	proc := t.TempDir()
+	writeProc(t, proc, map[string]string{
+		"stat":   statSample,
+		"mounts": "overlay / overlay rw 0 0\n",
+	})
+	c := newLinuxCollector(proc, func(string) (uint64, uint64, error) { return 0, 0, errors.New("no") })
+	r, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{partLoad, partMemory, partNetwork, partUptime}
+	if !slices.Equal(r.GetUnavailable(), want) {
+		t.Errorf("unavailable = %v, want %v", r.GetUnavailable(), want)
+	}
+	if len(r.GetDisks()) != 0 {
+		t.Errorf("disks = %v, want none (overlay is not reported)", r.GetDisks())
+	}
+
+	// Memory without CPU: the report still goes out, and says the CPU is missing.
+	proc = t.TempDir()
+	writeProc(t, proc, map[string]string{"meminfo": meminfoSample})
+	r, err = newLinuxCollector(proc, nil).Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(r.GetUnavailable(), partCPU) || !slices.Contains(r.GetUnavailable(), partDisks) || slices.Contains(r.GetUnavailable(), partMemory) {
+		t.Errorf("unavailable = %v, want cpu and disks but not memory", r.GetUnavailable())
+	}
+}
+
+func TestBasicCollectorSaysWhatIsMissing(t *testing.T) {
+	r, err := basicCollector{}.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.GetCollector() != collectorBasic {
+		t.Errorf("collector = %q, want basic", r.GetCollector())
+	}
+	for _, part := range []string{partCPU, partLoad, partMemory, partDisks, partNetwork} {
+		if !slices.Contains(r.GetUnavailable(), part) {
+			t.Errorf("unavailable = %v, missing %s", r.GetUnavailable(), part)
+		}
+	}
+	_, uptimeOK := readFileOK("/proc/uptime")
+	if slices.Contains(r.GetUnavailable(), partUptime) == uptimeOK {
+		t.Errorf("unavailable = %v, but /proc/uptime readable = %v", r.GetUnavailable(), uptimeOK)
+	}
+}
+
+func TestDetectContainer(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		want  string
+	}{
+		{"own machine", nil, ""},
+		{"systemd says lxc", map[string]string{"run/systemd/container": "lxc\n", ".dockerenv": ""}, "lxc"},
+		{"docker", map[string]string{".dockerenv": ""}, "docker"},
+		{"podman", map[string]string{"run/.containerenv": "engine=podman\n"}, "podman"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeProc(t, root, tc.files)
+			if got := detectContainer(root); got != tc.want {
+				t.Errorf("detectContainer = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

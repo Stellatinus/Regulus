@@ -145,6 +145,22 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.widget.interface": "Interfaccia",
   "servers.widget.since": "dal {date}",
 
+  "servers.fact.metrics": "Metriche",
+  "servers.fact.container": "Container",
+  "servers.metrics.limited": "metriche limitate",
+  "servers.metrics.basic": "limitate: questo sistema non ha /proc, quindi vengono riportati solo l'ora e l'uptime",
+  "servers.metrics.missing": "limitate: l'agente non riesce a leggere {parts}",
+  "servers.metrics.complete": "complete",
+  "servers.metrics.notAvailable": "non disponibile",
+  "servers.part.cpu": "l'uso della CPU",
+  "servers.part.load": "il carico medio",
+  "servers.part.memory": "la memoria",
+  "servers.part.disks": "i dischi",
+  "servers.part.network": "il traffico di rete",
+  "servers.part.uptime": "l'uptime",
+  "servers.widget.notAvailable": "Non disponibile su questo server: l'agente non riesce a leggere {part}.",
+  "servers.widget.containerNote": "Questo server è un container ({name}): CPU e memoria possono essere quelle dell'host.",
+
   "servers.chart.collecting": "Raccolta dei dati…",
   "servers.chart.lastMinutes": "ultimi {minutes} min",
 
