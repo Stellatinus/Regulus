@@ -62,7 +62,7 @@ The root helper of version N writes `pending.json`. After a power cut, the helpe
 - **The update contract stays at 1** and the update-only negotiation is tested (`internal/protocol`). The hub admits a too-old agent only for the update and takes it to its own version (`internal/hub`).
 - **An unknown command** sent to an agent is answered "unsupported command", not a crash (`internal/protocol/contract_test.go`).
 
-Not checked yet: a real old binary against a new hub, which is what a release-to-release end-to-end test would add (#233).
+The end-to-end test (`make e2e`, #233) runs the real hub and agent binaries of the same build over mTLS and checks that a Hello with a newer or older protocol version is refused with the reason. Not checked yet: a real binary of an older release against a new hub; it needs a published release to download in the test.
 
 ## When you change something
 
