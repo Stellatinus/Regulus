@@ -76,6 +76,9 @@ type Hub struct {
 	// may ping (protocol.KeepaliveMinTime) and how soon the hub pings a silent
 	// one (protocol.HubKeepaliveTime). Tests shorten it.
 	agentKeepalive agentKeepalive
+	// agentServerTune, if set, registers more services on the agent listener
+	// before it serves (tests: a dummy unary call, #244).
+	agentServerTune func(*grpc.Server)
 }
 
 // Option customizes a Hub.
@@ -365,6 +368,9 @@ func (h *Hub) serveAgents(addr string) (stop func(), err error) {
 	srv := grpc.NewServer(h.agentServerOptions(tlsConfig)...)
 	agentv1.RegisterAgentServiceServer(srv, h.agents)
 	agentv1.RegisterEnrollmentServiceServer(srv, enrollServer{hub: h})
+	if h.agentServerTune != nil {
+		h.agentServerTune(srv)
+	}
 	go func() { _ = srv.Serve(ln) }()
 	h.agentAddr.Store(ln.Addr().String())
 	h.log.Info("agent listener ready", "addr", ln.Addr().String(), "ca", h.fleet.CA().Fingerprint())

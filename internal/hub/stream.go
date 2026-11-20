@@ -4,15 +4,54 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/CodexCircle/Regulus/internal/auth"
 )
 
 const (
 	writeTimeout = 10 * time.Second
 	pingInterval = 30 * time.Second
 )
+
+// maxStreamsPerUser bounds the open streams of one user (#244). The
+// dashboard opens one per tab, so this leaves room for many tabs and
+// windows while a script that keeps opening streams cannot hold the hub's
+// memory and goroutines. A variable so that a test need not open many.
+var maxStreamsPerUser = 16
+
+// streamSlots counts the open streams of each user.
+type streamSlots struct {
+	mu   sync.Mutex
+	open map[int64]int
+}
+
+// take reserves a stream for the user, or reports false when the user already
+// has the most allowed. The new stream is refused rather than the oldest one
+// closed: two windows of one user over the cap would otherwise throw each
+// other out for ever, each reconnecting in turn.
+func (s *streamSlots) take(user int64) (release func(), ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.open[user] >= maxStreamsPerUser {
+		return nil, false
+	}
+	s.open[user]++
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.open[user]--; s.open[user] <= 0 {
+				delete(s.open, user)
+			}
+		})
+	}, true
+}
 
 // sessionRecheck is how often an open stream asks whether its session and
 // permission still stand (a variable so that a test need not wait).
@@ -25,12 +64,25 @@ var sessionRecheck = 30 * time.Second
 // session cookie is checked before the handler runs, and again every
 // sessionRecheck: a stream whose session ended (logout, disabled account, new
 // password) or whose user lost the permission is closed. still makes that
-// check for one request; nil means no login is needed.
+// check for one request; nil means no login is needed. A user has at most
+// maxStreamsPerUser streams open; one more is refused with 429.
 func streamHandler(src AgentSource, still func(*http.Request) func(context.Context) bool) http.HandlerFunc {
+	slots := &streamSlots{open: map[int64]int{}}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if src == nil {
 			writeJSONError(w, http.StatusNotFound, "stream is not available")
 			return
+		}
+		// Without a login (tests of the handler alone) there is no user to count.
+		if user, ok := auth.UserFrom(r.Context()); ok {
+			release, ok := slots.take(user.ID)
+			if !ok {
+				// A stream that died unnoticed is gone after one ping.
+				w.Header().Set("Retry-After", strconv.Itoa(int(pingInterval.Seconds())))
+				writeJSONError(w, http.StatusTooManyRequests, "too many open streams for this user: close another tab or window")
+				return
+			}
+			defer release()
 		}
 		// Subscribe before taking the snapshot so no event falls in between;
 		// an event already included in the snapshot is harmless to repeat.

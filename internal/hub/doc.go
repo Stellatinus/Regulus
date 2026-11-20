@@ -13,12 +13,14 @@
 //     OpenAPI description.
 //   - agents.go, agent_net.go, local.go: the server side of the agent-hub
 //     contract (proto/regulus/agent/v1): heartbeats, metrics, commands,
-//     the in-process connection of the built-in agent, and refusal of agents
-//     whose version is not accepted.
+//     the in-process connection of the built-in agent, refusal of agents
+//     whose version is not accepted, and the agent listener's checks (a
+//     certificate on every call but Enroll, the keepalive policy).
 //   - fleet_api.go: enrollment tokens and the list of enrolled agents, on top of
 //     package fleet.
-//   - metrics.go, events.go, stream.go: samples kept in memory and the live
-//     stream sent to the dashboard.
+//   - metrics.go, events.go, stream.go: samples kept in memory (bounded per
+//     agent and for all agents together) and the live stream sent to the
+//     dashboard (bounded per user).
 //   - rollout.go: the update of the agents in waves, driven by an administrator.
 //   - plugins.go: the hub's own plugins (plugins_dir, role hub), run beside its
 //     servers, and GET /api/plugins with the plugins the agents report.

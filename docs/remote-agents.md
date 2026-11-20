@@ -30,8 +30,11 @@ An agent is a remote machine, and one that is compromised or buggy must not be a
 | Texts (host name, versions, mount points, interface names…) | 256 bytes, no control characters | cut, cleaned |
 | Disks and network interfaces per report | 64 each | the rest is cut (logged once per stream) |
 | Reports | one per half of the metrics interval | the extra reports are dropped (logged once per stream) |
+| Metrics kept for all agents together | about 256 MiB (estimated from the size of the reports) | the oldest reports of any agent are dropped first; each agent keeps at least its newest report |
+| Keepalive pings from one connection | one per 15 seconds | the connection is closed (`too_many_pings`) |
+| Calls without a client certificate | only `Enroll` | any other call is refused (`Unauthenticated`), including calls added later |
 
-With one report per interval and one hour of history, a single agent keeps at most about 50 KB per report times the number of reports of that hour (for example about 36 MB at the 10 s default in the worst case, a normal host uses a few hundred bytes per report). The hub does not yet keep a global memory budget across agents; the dashboard port also has header and idle limits (`internal/hub/hub.go`).
+With one report per interval and one hour of history, a single agent keeps at most about 50 KB per report times the number of reports of that hour (for example about 36 MB at the 10 s default in the worst case, a normal host uses a few hundred bytes per report). The budget for all agents together keeps a full hour for about 500 agents with a few disks and interfaces each (a report of such a host costs about 1.3 KB in memory); with more, every agent's history gets shorter, oldest first. The dashboard port also has header and idle limits (`internal/hub/hub.go`), and one user can have at most 16 live streams (`/api/stream`) open.
 
 ## When a disk or the collector does not answer
 

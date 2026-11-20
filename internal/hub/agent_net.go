@@ -45,6 +45,7 @@ func (h *Hub) agentServerOptions(tlsConfig *tls.Config) []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.Creds(credentials.NewTLS(tlsConfig)),
 		grpc.StreamInterceptor(h.requireAgent),
+		grpc.UnaryInterceptor(h.requireAgentUnary),
 		grpc.MaxRecvMsgSize(maxAgentMessageBytes),
 		grpc.MaxConcurrentStreams(maxAgentStreams),
 		grpc.ConnectionTimeout(20 * time.Second), // the TLS handshake of a client that never finishes it
@@ -101,22 +102,22 @@ type wrappedStream struct {
 
 func (w wrappedStream) Context() context.Context { return w.ctx }
 
-// requireAgent is the stream interceptor of the network listener: a stream
-// needs the certificate of an agent that was enrolled and not revoked.
-func (h *Hub) requireAgent(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	ctx := ss.Context()
+// authorizeAgent checks that the caller presents the certificate of an agent
+// that was enrolled and not revoked, and returns the context with its
+// identity.
+func (h *Hub) authorizeAgent(ctx context.Context) (context.Context, error) {
 	id, ok := peerIdentity(ctx)
 	if !ok {
-		return status.Error(codes.Unauthenticated, "a client certificate is required")
+		return nil, status.Error(codes.Unauthenticated, "a client certificate is required")
 	}
 	if err := h.fleet.Authorize(ctx, id.AgentID, id.Serial); err != nil {
 		switch {
 		case errors.Is(err, fleet.ErrNotFound), errors.Is(err, fleet.ErrRevoked):
 			h.log.Warn("refusing agent", "agent", id.AgentID, "err", err)
-			return status.Error(codes.PermissionDenied, "this agent is not enrolled or was revoked")
+			return nil, status.Error(codes.PermissionDenied, "this agent is not enrolled or was revoked")
 		default:
 			h.log.Error("checking agent", "agent", id.AgentID, "err", err)
-			return status.Error(codes.Internal, "cannot check the agent")
+			return nil, status.Error(codes.Internal, "cannot check the agent")
 		}
 	}
 	// Agents enrolled before the hub kept the end of their certificate get it
@@ -124,7 +125,39 @@ func (h *Hub) requireAgent(srv any, ss grpc.ServerStream, _ *grpc.StreamServerIn
 	if err := h.fleet.CertificateSeen(ctx, id.AgentID, id.Serial, id.NotAfter); err != nil {
 		h.log.Warn("recording the end of an agent certificate", "agent", id.AgentID, "err", err)
 	}
-	return handler(srv, wrappedStream{ss, context.WithValue(ctx, identityKey{}, id)})
+	return context.WithValue(ctx, identityKey{}, id), nil
+}
+
+// requireAgent is the stream interceptor of the network listener: a stream
+// needs the certificate of an agent that was enrolled and not revoked.
+func (h *Hub) requireAgent(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	ctx, err := h.authorizeAgent(ss.Context())
+	if err != nil {
+		return err
+	}
+	return handler(srv, wrappedStream{ss, ctx})
+}
+
+// openUnaryMethods are the unary calls the network listener serves without a
+// client certificate. Everything else is denied by default (#244): a unary
+// call added to AgentService later needs an enrolled agent without anyone
+// having to remember it.
+var openUnaryMethods = map[string]bool{
+	agentv1.EnrollmentService_Enroll_FullMethodName: true,
+}
+
+// requireAgentUnary is the unary interceptor of the network listener: only
+// the calls in openUnaryMethods work without the certificate of an enrolled
+// agent.
+func (h *Hub) requireAgentUnary(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	if openUnaryMethods[info.FullMethod] {
+		return handler(ctx, req)
+	}
+	ctx, err := h.authorizeAgent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return handler(ctx, req)
 }
 
 // enrollServer implements the one call that works without a certificate.
