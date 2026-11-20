@@ -215,7 +215,10 @@ const (
 
 // Options configure a Manager.
 type Options struct {
-	DB     *sql.DB
+	DB *sql.DB
+	// ReadDB, if set, is the pool for the plain reads of the settings (the
+	// read pool of storage.HubDB, #345); DB is used when it is nil.
+	ReadDB *sql.DB
 	Log    *slog.Logger
 	Source Source
 	Stager *Stager
@@ -730,7 +733,11 @@ func (m *Manager) audit(ctx context.Context, actor, event, target, detail string
 
 func (m *Manager) get(ctx context.Context, key string) (string, bool, error) {
 	var v string
-	err := m.opts.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	rd := m.opts.ReadDB
+	if rd == nil {
+		rd = m.opts.DB
+	}
+	err := rd.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}

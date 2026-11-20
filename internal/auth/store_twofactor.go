@@ -20,7 +20,8 @@ func (s store) totpOf(ctx context.Context, userID int64) (totpRow, error) {
 		r         totpRow
 		confirmed sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx,
+	// A plain read of a committed row: it needs no transaction of its own (#345).
+	err := s.read().QueryRowContext(ctx,
 		`SELECT secret_enc, confirmed_at, last_step FROM user_totp WHERE user_id = ?`, userID).
 		Scan(&r.secretEnc, &confirmed, &r.lastStep)
 	r.confirmed = confirmed.Valid
@@ -122,7 +123,7 @@ func (s store) useRecoveryCode(ctx context.Context, userID int64, hash string, n
 
 func (s store) recoveryCodesLeft(ctx context.Context, userID int64) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n)
+	err := s.read().QueryRowContext(ctx, `SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL`, userID).Scan(&n)
 	return n, err
 }
 
@@ -173,7 +174,7 @@ func (s store) deleteExpiredPending(ctx context.Context, now time.Time) {
 
 func (s store) setting(ctx context.Context, key string) (string, bool, error) {
 	var v string
-	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	err := s.read().QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}

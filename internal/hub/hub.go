@@ -238,6 +238,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h.updates = update.New(update.Options{
 		ApplyDir: applyDir,
 		DB:       db,
+		ReadDB:   store.Read,
 		Log:      log.With("component", "updates"),
 		Source:   src,
 		Stager:   stager,

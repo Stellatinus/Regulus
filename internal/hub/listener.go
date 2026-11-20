@@ -163,7 +163,7 @@ func (h *Hub) EnableAgents(ctx context.Context, by string, port int) (AgentListe
 
 func (h *Hub) savedAgentListen(ctx context.Context) (string, error) {
 	var v string
-	err := h.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, settingAgentListen).Scan(&v)
+	err := h.store.Read.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, settingAgentListen).Scan(&v)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
