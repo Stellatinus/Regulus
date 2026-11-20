@@ -652,8 +652,11 @@ func TestHTTPTwoFactor(t *testing.T) {
 		t.Fatalf("the API is open after the password alone: %d", rec.Code)
 	}
 	now = now.Add(totpPeriod * time.Second)
-	if rec := c.do("POST", "/api/auth/login/two-factor", map[string]string{"pending_token": pending.Token, "code": "000000"}); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong code: %d", rec.Code)
+	if rec := c.do("POST", "/api/auth/login/two-factor", map[string]string{"pending_token": pending.Token, "code": "000000"}); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"invalid_code"`) {
+		t.Fatalf("wrong code: %d %s", rec.Code, rec.Body)
+	}
+	if rec := c.do("POST", "/api/auth/login/two-factor", map[string]string{"pending_token": "unknown", "code": "000000"}); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), `"code":"login_expired"`) {
+		t.Fatalf("unknown pending login: %d %s", rec.Code, rec.Body)
 	}
 	rec = c.do("POST", "/api/auth/login/two-factor", map[string]string{"pending_token": pending.Token, "code": totpCode(secret, totpStepOf(now.Unix()))})
 	if rec.Code != http.StatusOK || c.cookie == nil {

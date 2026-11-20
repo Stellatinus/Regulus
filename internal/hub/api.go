@@ -338,9 +338,11 @@ func toPoint(s MetricsSample, prev *MetricsSample) pointJSON {
 
 // metricsHandler serves the recent metrics of an agent, oldest first. The
 // optional query parameter since (RFC 3339) returns only points received after
-// it, which lets a client poll cheaply; limit (a positive integer) returns only
-// the newest that many, so a chart of the last minutes does not download the
-// whole hour.
+// it, which lets a client poll cheaply; step (a Go duration from 1s to 1h)
+// averages the reports into buckets of that length (see downsample), so a
+// chart of the whole hour does not download every report; limit (a positive
+// integer) returns only the newest that many points, so a chart of the last
+// minutes does not download the whole hour. They apply in that order.
 func metricsHandler(src AgentSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
@@ -352,6 +354,15 @@ func metricsHandler(src AgentSource) http.HandlerFunc {
 				return
 			}
 			since = t
+		}
+		var step time.Duration
+		if v := r.URL.Query().Get("step"); v != "" {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < minMetricsStep || d > maxMetricsStep {
+				http.Error(w, "step must be a duration from 1s to 1h, such as 30s or 1m", http.StatusBadRequest)
+				return
+			}
+			step = d
 		}
 		limit := 0
 		if v := r.URL.Query().Get("limit"); v != "" {
@@ -376,6 +387,7 @@ func metricsHandler(src AgentSource) http.HandlerFunc {
 		if !since.IsZero() {
 			points = slices.DeleteFunc(points, func(p pointJSON) bool { return !p.At.After(since) })
 		}
+		points = downsample(points, step)
 		if limit > 0 && len(points) > limit {
 			points = points[len(points)-limit:]
 		}
