@@ -1,4 +1,4 @@
-.PHONY: dashboard build lint test test-postgres smoke proto proto-check proto-breaking clean
+.PHONY: dashboard build lint test test-postgres test-one-connection smoke proto proto-check proto-breaking clean
 
 # Build the dashboard into internal/webui/dist so it is embedded in the binary.
 dashboard:
@@ -27,6 +27,12 @@ test:
 test-postgres:
 	@test -n "$(REGULUS_TEST_DATABASE_URL)" || { echo 'set REGULUS_TEST_DATABASE_URL (see the comment above this target)'; exit 2; }
 	REGULUS_TEST_DATABASE_URL='$(REGULUS_TEST_DATABASE_URL)' go test -race ./internal/storage/... ./internal/auth/... ./internal/fleet/... ./internal/hub/... ./internal/update/... ./cmd/...
+
+# Run the hub tests with one SQLite connection for reads and writes (no read
+# pool): a query made while the code holds a transaction or a result set of
+# its own then hangs instead of passing unnoticed (#219).
+test-one-connection:
+	REGULUS_TEST_ONE_CONNECTION=1 go test -race -timeout 10m ./internal/hub/...
 
 # Start the built binary and check it end to end (run make build first).
 smoke:

@@ -35,6 +35,13 @@ type Config struct {
 	SSLRootCert string
 	// Schema is where the tables live (search_path). Empty means "public".
 	Schema string
+
+	// ReadConns is the size of the SQLite read pool of OpenHub: 0 means
+	// DefaultReadConns, and a negative value means no read pool (reads share
+	// the one writer connection; tests use it to catch a query made while a
+	// transaction or a result set holds that connection). It is not a
+	// setting of the configuration file.
+	ReadConns int
 }
 
 // IsPostgres reports whether the configuration selects PostgreSQL.

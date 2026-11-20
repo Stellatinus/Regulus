@@ -26,7 +26,7 @@ type LayoutStore interface {
 // Layout implements LayoutStore.
 func (h *Hub) Layout(ctx context.Context, userID int64) (json.RawMessage, time.Time, bool, error) {
 	var layout, updated string
-	err := h.db.QueryRowContext(ctx,
+	err := h.store.Read.QueryRowContext(ctx,
 		`SELECT layout, updated_at FROM dashboard_layouts WHERE user_id = ?`, userID).Scan(&layout, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, false, nil

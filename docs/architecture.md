@@ -141,7 +141,7 @@ Agents do not use any of this: they authenticate with client certificates (secti
 
 ## 5. Data
 
-**Which databases.** **SQLite** (default; `modernc.org/sqlite`, pure Go) and **PostgreSQL** (`pgx`, pure Go, so the binary stays static), selected by `database.type` (#122). `internal/storage` is the one place that knows the dialect: it opens the right backend, wraps the PostgreSQL connection so the `?` placeholders used by every query become `$1, $2, ...` (`storage.Rebind`), keeps one migration directory per backend, and exposes `Check` (used by `regulus db check`) and `IsUniqueViolation`. The other packages receive a `*sql.DB` and do not care. The installer choice is #123 and moving data between backends is #124 (not done). Details, settings and prerequisites: [Database](database.md).
+**Which databases.** **SQLite** (default; `modernc.org/sqlite`, pure Go) and **PostgreSQL** (`pgx`, pure Go, so the binary stays static), selected by `database.type` (#122). `internal/storage` is the one place that knows the dialect: it opens the right backend, wraps the PostgreSQL connection so the `?` placeholders used by every query become `$1, $2, ...` (`storage.Rebind`), keeps one migration directory per backend, and exposes `Check` (used by `regulus db check`) and `IsUniqueViolation`. The other packages receive a `*sql.DB` and do not care. The hub opens it with `storage.OpenHub`, which on SQLite gives one connection that writes and a pool of 4 read-only connections for plain reads (the session check, the lists, `Authorize`), so reads do not queue behind a write (#219). The installer choice is #123 and moving data between backends is #124 (not done). Details, settings and prerequisites: [Database](database.md).
 
 ```mermaid
 flowchart LR

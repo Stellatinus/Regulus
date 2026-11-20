@@ -225,8 +225,8 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 	}
 
 	h.rollout.mu.Lock()
-	defer h.rollout.mu.Unlock()
 	if h.rolloutRunning() {
+		h.rollout.mu.Unlock()
 		return RolloutStatus{}, ErrRolloutRunning
 	}
 	now := time.Now().UTC()
@@ -236,15 +236,21 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 		run.status.Agents = append(run.status.Agents, rolloutAgent(a, AgentPending))
 	}
 	h.rollout.run = run
+	// Counted before the lock is released: a stop that comes in now waits for
+	// the run (and writes its event after it), so the events stay in order.
+	h.rollout.wg.Add(1)
+	snapshot := h.snapshotLocked()
+	h.rollout.mu.Unlock()
+
+	// The audit event is a database write: never under rollout.mu, or the
+	// status endpoint would wait for a slow database.
 	h.audit(ctx, by, EventRolloutStarted, h.version, fmt.Sprintf("%d servers, %d at a time", len(chosen), opts.WaveSize))
 	h.log.Info("updating the servers", "target", h.version, "servers", len(chosen), "wave", opts.WaveSize, "by", by)
-
-	h.rollout.wg.Add(1)
 	go func() {
 		defer h.rollout.wg.Done()
 		h.runRollout(runCtx, run, by)
 	}()
-	return h.snapshotLocked(), nil
+	return snapshot, nil
 }
 
 // StopRollout lets the servers already handed an update finish and offers it to
@@ -259,8 +265,10 @@ func (h *Hub) StopRollout(ctx context.Context, by string) (RolloutStatus, error)
 	run.status.State = RolloutStopped
 	h.rollout.mu.Unlock()
 	run.cancel()
-	h.audit(ctx, by, EventRolloutFinished, h.version, "stopped")
+	// After the run has ended, so "stopped" follows its "started" and the
+	// events of the servers it updated.
 	h.rollout.wg.Wait()
+	h.audit(ctx, by, EventRolloutFinished, h.version, "stopped")
 	return h.RolloutStatus(ctx)
 }
 

@@ -43,8 +43,11 @@ type HubDB struct {
 	// Write is the pool for everything that changes the database, and for
 	// reads that must see the caller's own transaction.
 	Write *sql.DB
-	// Read is the pool for reads. It is Write itself where the backend does
-	// not need a separate pool.
+	// Read is the pool for reads that need not see a transaction of the
+	// caller's own. On SQLite it is a separate pool of read-only connections
+	// (WAL lets them read while the one writer writes), so a request that
+	// only checks a session does not queue behind a write or a slow read; on
+	// PostgreSQL, whose pool already has several connections, it is Write.
 	Read *sql.DB
 
 	unlock func()
@@ -70,7 +73,15 @@ func OpenHub(ctx context.Context, cfg Config) (*HubDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &HubDB{Write: db, Read: db, unlock: unlock}, nil
+	read := db
+	if !cfg.IsPostgres() && cfg.ReadConns >= 0 {
+		if read, err = openSQLiteReader(cfg); err != nil {
+			unlock()
+			_ = db.Close()
+			return nil, err
+		}
+	}
+	return &HubDB{Write: db, Read: read, unlock: unlock}, nil
 }
 
 func open(ctx context.Context, cfg Config, active bool) (*sql.DB, func(), error) {
@@ -123,9 +134,41 @@ func openPool(cfg Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
-	// A single connection avoids SQLITE_BUSY between concurrent writers. The
-	// hub is not write-heavy; revisit if that changes.
+	// One connection writes, which avoids SQLITE_BUSY between writers; its
+	// transactions start with BEGIN IMMEDIATE (_txlock), so one never has to
+	// upgrade a read lock to a write lock half way. Reads that need not see a
+	// transaction of their own go to the read pool of OpenHub, which WAL lets
+	// run beside the writer.
 	db.SetMaxOpenConns(1)
+	return db, nil
+}
+
+// DefaultReadConns is the size of the SQLite read pool of OpenHub.
+const DefaultReadConns = 4
+
+// openSQLiteReader opens the read pool of a SQLite database that Open has
+// already created and migrated. Its connections are query_only: a write sent
+// to them by mistake fails instead of competing with the writer.
+func openSQLiteReader(cfg Config) (*sql.DB, error) {
+	path := filepath.Join(cfg.DataDir, FileName)
+	q := url.Values{}
+	q.Add("_pragma", "foreign_keys(1)")
+	q.Add("_pragma", "busy_timeout(5000)")
+	q.Add("_pragma", "query_only(1)")
+	db, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String())
+	if err != nil {
+		return nil, fmt.Errorf("open database for reading: %w", err)
+	}
+	n := cfg.ReadConns
+	if n == 0 {
+		n = DefaultReadConns
+	}
+	db.SetMaxOpenConns(n)
+	db.SetMaxIdleConns(n)
+	if err := db.Ping(); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open database for reading: %w", err)
+	}
 	return db, nil
 }
 
@@ -158,6 +201,7 @@ func dsn(path string) string {
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(5000)")
+	q.Set("_txlock", "immediate")
 	return (&url.URL{Scheme: "file", Opaque: filepath.ToSlash(path), RawQuery: q.Encode()}).String()
 }
 

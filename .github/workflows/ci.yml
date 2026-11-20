@@ -31,6 +31,8 @@ jobs:
         run: |
           set -o pipefail
           go test -race ./... 2>&1 | tee go-test.log
+      - name: Hub tests with one SQLite connection (catches nested database use, #219)
+        run: make test-one-connection
       - name: Report failing tests
         if: failure()
         run: grep -E '^(--- FAIL|FAIL|panic:)|_test\.go:[0-9]+:' go-test.log | head -40 | sed 's/^/::error::/' || true

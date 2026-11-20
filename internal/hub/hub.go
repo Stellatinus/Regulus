@@ -79,6 +79,10 @@ type Hub struct {
 	certLog         certLogState // the daily warning about certificates that end soon
 }
 
+// tuneStorage, if set, changes the database settings before New opens the
+// database (tests: REGULUS_TEST_ONE_CONNECTION, see dbtest_test.go).
+var tuneStorage func(*storage.Config)
+
 // Option customizes a Hub.
 type Option func(*Hub)
 
@@ -126,7 +130,11 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	if err != nil {
 		return nil, err
 	}
-	store, err := storage.OpenHub(ctx, cfg.Storage())
+	sc := cfg.Storage()
+	if tuneStorage != nil {
+		tuneStorage(&sc)
+	}
+	store, err := storage.OpenHub(ctx, sc)
 	if err != nil {
 		unlockDir()
 		return nil, fmt.Errorf("storage: %w", err)
@@ -147,7 +155,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	if err != nil {
 		return fail(err)
 	}
-	authn, err := auth.New(ctx, db, log, auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
+	authn, err := auth.New(ctx, db, log, auth.WithReadDB(store.Read), auth.WithSecret(secret), auth.WithTrustedProxies(proxies))
 	if err != nil {
 		return fail(err)
 	}
@@ -160,7 +168,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h := &Hub{
 		cfg:       cfg,
 		auth:      authn,
-		fleet:     fleet.New(db, ca, authn),
+		fleet:     fleet.New(db, ca, authn).ReadFrom(store.Read),
 		log:       log,
 		db:        db,
 		store:     store,
