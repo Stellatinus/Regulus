@@ -33,7 +33,7 @@ A separate, smaller agent package and turning an agent server into a hub are **d
 
 ```mermaid
 flowchart LR
-    B["Browser: dashboard"] -- "HTTP :8080, session cookie" --> H
+    B["Browser: dashboard"] -- "HTTP(S) 127.0.0.1:8080 by default, session cookie" --> H
     C["Console / regulus status"] -- "Unix socket regulus.sock" --> H
     subgraph HUBP ["Hub process: regulus hub"]
         H["HTTP server<br/>API, /api/stream, dashboard files"]
@@ -261,7 +261,7 @@ sequenceDiagram
 
 | Interface | Where | Notes |
 |---|---|---|
-| **Dashboard** | `dashboard/` (Vite + React + TypeScript), embedded by `internal/webui`; served by the hub on `listen` (default `:8080`, plain HTTP) | Widgets are registered in `dashboard/src/widgets/` with `registerWidget`. The layout is saved per user via `/api/layout`. |
+| **Dashboard** | `dashboard/` (Vite + React + TypeScript), embedded by `internal/webui`; served by the hub on `listen` (default `127.0.0.1:8080`, plain HTTP; HTTPS with `tls_cert` and `tls_key`) | Widgets are registered in `dashboard/src/widgets/` with `registerWidget`. The layout is saved per user via `/api/layout`. |
 | **HTTP API** | `internal/hub/api.go` and friends; described in `internal/hub/openapi.yaml`, served at `/api/openapi.yaml`; a test keeps the file in step with the routes | Needs a login except `/api/auth/*`, `/healthz`, `/api/database` and the dashboard files. |
 | **Live stream** | `GET /api/stream`, a WebSocket (`internal/hub/stream.go`, `events.go`) | Sends a `snapshot`, then `agent.connected`, `agent.disconnected`, `agent.heartbeat`, `agent.metrics`. Needs the session cookie, refuses other origins, disconnects slow readers. The session and the `servers.read` permission are checked again every 30 seconds: logging out, disabling the account, a new password or a role that loses the permission close the stream (policy violation, "session ended"). One user has at most 16 streams open; one more is refused with 429. |
 | **Agent listener** | `agent_listen` (for example `:8443`), gRPC over TLS | **Off by default.** Open the port only towards managed servers. |

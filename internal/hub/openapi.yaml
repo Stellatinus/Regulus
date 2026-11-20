@@ -1065,6 +1065,41 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /api/account/reauth:
+    post:
+      tags: [accounts]
+      summary: Confirm the password again (step-up re-authentication)
+      description: |
+        Proves the password, and a code (TOTP or recovery code) when the user has two-factor on, for the session of the request. For the next 5 minutes the session may do the actions that need a recent proof; without one they answer 403 with `code: reauth_required`. A login counts as a proof. The actions: creating, changing, deleting and resetting users (password link and two-factor), the two-factor policy (`PUT /api/settings/security`), creating, changing and deleting roles, turning the agent listener on, making an enrollment token, revoking an agent, changing the update settings, starting a rollout and applying an update. Wrong passwords and codes count toward the limit on failed attempts (429).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password: { type: string }
+                code: { type: string, description: Needed when two-factor is on. }
+      responses:
+        "200":
+          description: The proof is recorded on the session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reauth_until]
+                properties:
+                  reauth_until: { type: string, format: date-time }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: "The password or the code is wrong, or (`code: two_factor_code_required`) the user has two-factor on and sent no code."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
   /api/account/sessions:
     get:
       tags: [accounts]
@@ -1469,7 +1504,7 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
     Forbidden:
       description: |
-        The logged-in user lacks the permission the endpoint needs, or the action involves an account or a role with permissions the user does not have (nobody can touch or hand out more than they hold).
+        The logged-in user lacks the permission the endpoint needs, or the action involves an account or a role with permissions the user does not have (nobody can touch or hand out more than they hold). For the actions that need step-up re-authentication (see `POST /api/account/reauth`), a session that has not proved the password within 5 minutes gets `code: reauth_required`.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -1628,6 +1663,8 @@ components:
           description: >-
             A machine-readable reason, on the answers that need one:
             `two_factor_setup_required` (403 from any endpoint),
+            `reauth_required` (403: confirm the password with
+            `POST /api/account/reauth`, then retry),
             `invalid_code` and `login_expired` (401 from
             `/api/auth/login/two-factor`).
     User:
@@ -1715,7 +1752,7 @@ components:
         actor: { type: string }
         event:
           type: string
-          enum: [setup, login, login_failed, user_created, role_changed, user_disabled, user_enabled, user_deleted, password_changed, password_change_failed, session_revoked]
+          enum: [setup, login, login_failed, user_created, role_changed, user_disabled, user_enabled, user_deleted, password_changed, password_change_failed, session_revoked, reauthenticated]
         target: { type: string }
         remote: { type: string }
         detail: { type: string }

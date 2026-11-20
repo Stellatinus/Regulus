@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"time"
 
@@ -96,17 +95,5 @@ func recoverAdmin(ctx context.Context, cfg config.Config, user string) (auth.Rec
 	if err != nil {
 		return auth.Recovery{}, "", err
 	}
-	return rec, fmt.Sprintf("%s/#/reset/%s", dashboardURL(cfg.Listen), rec.Token), nil
-}
-
-// dashboardURL guesses where the dashboard is from the listen address.
-func dashboardURL(listen string) string {
-	host, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return "http://localhost:8080"
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "localhost"
-	}
-	return "http://" + net.JoinHostPort(host, port)
+	return rec, fmt.Sprintf("%s/#/reset/%s", cfg.DashboardURL(), rec.Token), nil
 }

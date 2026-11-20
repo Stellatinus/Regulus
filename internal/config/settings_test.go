@@ -106,7 +106,7 @@ func TestSetFileKeepsCommentsAndOtherLines(t *testing.T) {
 	}
 	after, _ := os.ReadFile(path)
 	want := strings.NewReplacer(
-		`listen: ":8080"`, `listen: ":9090"`,
+		`listen: "127.0.0.1:8080"`, `listen: ":9090"`,
 		`metrics_interval: 10s`, `metrics_interval: 30s`,
 		`level: info # debug, info, warn, error`, `level: debug # debug, info, warn, error`,
 		`format: text # text, json`, `format: json # text, json`,

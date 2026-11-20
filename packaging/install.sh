@@ -842,23 +842,65 @@ enable_self_update() {
 		warn "could not enable the recovery of an interrupted update at the start of the machine (regulus-update-recover.service, regulus-update-confirm.service)"
 }
 
-# listen_port prints the TCP port the hub listens on.
-listen_port() {
+# listen_address prints the address the dashboard listens on: the
+# environment, then the settings file of the service, then config.yaml, else
+# the built-in default (127.0.0.1:8080, this machine only).
+listen_address() {
 	listen=${REGULUS_LISTEN:-}
+	if [ -z "$listen" ] && [ -f "$CONFIG_DIR/regulus.env" ]; then
+		listen=$(${SUDO:-} sed -n 's/^REGULUS_LISTEN=//p' "$CONFIG_DIR/regulus.env" 2>/dev/null | tail -n 1)
+	fi
 	if [ -z "$listen" ] && [ -r "$CONFIG_DIR/config.yaml" ]; then
 		listen=$(sed -n 's/^listen: *"\{0,1\}\([^" #]*\).*/\1/p' "$CONFIG_DIR/config.yaml" | head -n 1)
 	fi
+	echo "${listen:-127.0.0.1:8080}"
+}
+
+# listen_port prints the TCP port the hub listens on.
+listen_port() {
+	listen=$(listen_address)
 	echo "${listen##*:}"
+}
+
+# listen_host prints the host part of the listen address, without brackets;
+# empty means every interface.
+listen_host() {
+	listen=$(listen_address)
+	host=${listen%:*}
+	host=${host#[}
+	echo "${host%]}"
+}
+
+# local_only says whether the dashboard answers on this machine only.
+local_only() {
+	case "$(listen_host)" in
+		127.* | localhost | ::1) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# dashboard_scheme prints https when tls_cert is set, else http.
+dashboard_scheme() {
+	cert=${REGULUS_TLS_CERT:-}
+	if [ -z "$cert" ] && [ -f "$CONFIG_DIR/regulus.env" ]; then
+		cert=$(${SUDO:-} sed -n 's/^REGULUS_TLS_CERT=//p' "$CONFIG_DIR/regulus.env" 2>/dev/null | tail -n 1)
+	fi
+	if [ -z "$cert" ] && [ -r "$CONFIG_DIR/config.yaml" ]; then
+		cert=$(sed -n 's/^tls_cert: *"\{0,1\}\([^" #]*\).*/\1/p' "$CONFIG_DIR/config.yaml" | head -n 1)
+	fi
+	if [ -n "$cert" ]; then echo https; else echo http; fi
 }
 
 # wait_for_hub polls /healthz until the hub answers or 30 seconds pass.
 wait_for_hub() {
 	port=$(listen_port)
 	[ -n "$port" ] || port=8080
+	scheme=$(dashboard_scheme)
 	have curl || return 0
 	i=0
 	while [ "$i" -lt 30 ]; do
-		if curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
+		# -k: the certificate names the server, not 127.0.0.1; this only asks whether it answers.
+		if curl -kfsS "$scheme://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
 			return 0
 		fi
 		i=$((i + 1))
@@ -867,10 +909,12 @@ wait_for_hub() {
 	return 1
 }
 
-# report tells the user how to continue.
+# report tells the user how to continue: where the dashboard is, how to reach
+# it when it answers on this machine only (the default), and the setup token.
 report() {
 	port=$(listen_port)
 	[ -n "$port" ] || port=8080
+	scheme=$(dashboard_scheme)
 	host=$(hostname -I 2>/dev/null | awk '{print $1}')
 	say ""
 	if wait_for_hub; then
@@ -878,15 +922,29 @@ report() {
 	else
 		warn "the hub did not answer within 30 seconds; see: journalctl -u regulus"
 	fi
-	say "  Dashboard:   http://${host:-<this server>}:$port"
+	if local_only; then
+		say "  Dashboard:   $scheme://127.0.0.1:$port (this server only)"
+	else
+		say "  Dashboard:   $scheme://${host:-<this server>}:$port"
+	fi
 	token=$($SUDO journalctl -u regulus -o cat --no-pager 2>/dev/null | sed -n 's/.*setup_token=\([^ ]*\).*/\1/p' | tail -n 1 || true)
 	if [ -n "$token" ]; then
 		say "  Setup token: $token"
-		say "Open the dashboard and use the token to create the first admin account."
 	else
 		say "  Setup token: journalctl -u regulus -o cat | grep setup_token"
 	fi
-	say "The dashboard uses plain HTTP: put a reverse proxy with TLS in front of it before exposing it to the internet."
+	if local_only; then
+		say "From your computer, open a tunnel and the dashboard, and use the token to create the first admin account:"
+		say "  ssh -L $port:127.0.0.1:$port ${USER:-you}@${host:-this-server}"
+		say "  $scheme://localhost:$port"
+		say "To reach the dashboard from the network, serve it over HTTPS (tls_cert and tls_key in $CONFIG_DIR/config.yaml)"
+		say "or put a reverse proxy with TLS in front; see \"Reaching the dashboard\" in docs/installation.md."
+	else
+		say "Open the dashboard and use the token to create the first admin account."
+		if [ "$scheme" = http ]; then
+			say "The dashboard uses plain HTTP on every interface: passwords cross the network in the clear. Set tls_cert and tls_key, or listen on 127.0.0.1 behind a reverse proxy with TLS."
+		fi
+	fi
 }
 
 main() {

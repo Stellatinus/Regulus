@@ -24,7 +24,7 @@ Regulus v0.3.0  Hub ● running
    updates.apply          false                      default
    console.tui            true                       default
 
- listen  default: :8080
+ listen  default: 127.0.0.1:8080
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ section  ↑/↓ move  enter edit  r restart  q quit

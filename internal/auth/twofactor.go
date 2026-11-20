@@ -174,6 +174,12 @@ func (s *Service) twoFactorKey(userID int64) string { return fmt.Sprintf("2fa:%d
 // checkPassword verifies the password of a logged-in user for a sensitive
 // action. Wrong passwords count toward the rate limit.
 func (s *Service) checkPassword(ctx context.Context, u User, password string) error {
+	return s.checkPasswordFor(ctx, u, password, "two-factor settings")
+}
+
+// checkPasswordFor is checkPassword with the detail recorded in the audit log
+// for a wrong password.
+func (s *Service) checkPasswordFor(ctx context.Context, u User, password, what string) error {
 	att, allowed := s.begin(s.twoFactorKey(u.ID))
 	if !allowed {
 		return ErrRateLimited
@@ -189,7 +195,7 @@ func (s *Service) checkPassword(ctx context.Context, u User, password string) er
 	}
 	if !ok {
 		att.failed()
-		s.audit(ctx, u.Username, EventPasswordFailed, u.Username, "two-factor settings")
+		s.audit(ctx, u.Username, EventPasswordFailed, u.Username, what)
 		return ErrWrongPassword
 	}
 	return nil

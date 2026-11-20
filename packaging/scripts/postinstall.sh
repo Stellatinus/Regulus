@@ -77,9 +77,12 @@ elif [ "$fresh" = true ]; then
 	cat <<'MSG'
 
 Regulus is installed and running.
-  Dashboard:    http://<this server>:8080
+  Dashboard:    http://127.0.0.1:8080 (this server only)
   Setup token:  journalctl -u regulus -o cat | grep setup_token
-Open the dashboard and use the token to create the first admin account.
+From your computer: ssh -L 8080:127.0.0.1:8080 you@this-server, then open
+http://localhost:8080 and use the token to create the first admin account.
+To reach the dashboard from the network, see "Reaching the dashboard" in
+docs/installation.md (HTTPS with tls_cert and tls_key, or a reverse proxy).
 MSG
 else
 	systemctl try-restart regulus.service regulus-agent.service || true

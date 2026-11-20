@@ -111,7 +111,7 @@ var it = strs{
 		"connected": "connesso", "stale": "in ritardo", "offline": "offline", "revoked": "revocato",
 	},
 	SettingInfo: map[string]string{
-		"listen":               "Indirizzo della dashboard e dell'API: host:porta, oppure solo la porta (8080)",
+		"listen":               "Indirizzo della dashboard e dell'API: host:porta, oppure solo la porta (8080). Il valore predefinito, 127.0.0.1:8080, è raggiungibile solo da questa macchina; la sola porta ascolta su tutte le interfacce",
 		"agent_listen":         "Indirizzo a cui si collegano gli agent remoti (gRPC su TLS); vuoto lascia spenti gli agent remoti",
 		"data_dir":             "Directory in cui l'hub conserva il database e le chiavi",
 		"database.type":        "Dove l'hub conserva i dati: sqlite (un file in data_dir, niente da preparare) o postgres (un server che hai preparato tu)",

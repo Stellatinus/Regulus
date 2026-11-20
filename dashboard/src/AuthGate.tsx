@@ -15,6 +15,7 @@ import {
 } from "./api";
 import { useT, type MessageKey } from "./i18n";
 import { SessionContext, type Session } from "./session";
+import { StepUp } from "./StepUp";
 import { TwoFactor } from "./TwoFactor";
 
 type State =
@@ -116,6 +117,7 @@ export function AuthGate({ children }: { children: (session: Session) => ReactNo
             />
           )}
           {children(session)}
+          <StepUp twoFactor={state.user.two_factor} />
         </SessionContext>
       );
     }

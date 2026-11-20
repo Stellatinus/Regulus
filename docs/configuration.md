@@ -4,7 +4,8 @@ The hub reads, in increasing priority: defaults, a YAML file (`--config` or `REG
 
 | Setting (YAML) | Flag | Environment | Default |
 |---|---|---|---|
-| `listen` | `--listen` | `REGULUS_LISTEN` | `:8080` |
+| `listen` | `--listen` | `REGULUS_LISTEN` | `127.0.0.1:8080` (this machine only; see below) |
+| `tls_cert`, `tls_key` (PEM files) | `--tls-cert`, `--tls-key` | `REGULUS_TLS_CERT`, `REGULUS_TLS_KEY` | empty: plain HTTP |
 | `trusted_proxies` (a list of addresses or CIDR blocks) | - | `REGULUS_TRUSTED_PROXIES` (comma separated) | empty: forwarding headers are ignored |
 | `data_dir` | `--data-dir` | `REGULUS_DATA_DIR` | `data` |
 | `builtin_agent` (`true`, `false`) | `--builtin-agent` | `REGULUS_BUILTIN_AGENT` | `true` |
@@ -15,6 +16,10 @@ The hub reads, in increasing priority: defaults, a YAML file (`--config` or `REG
 | `updates.check` (`true`, `false`) | - | `REGULUS_UPDATES_CHECK` | `true` |
 | `updates.apply` (`true`, `false`) | - | `REGULUS_UPDATES_APPLY` | `false` (the installer sets it) |
 | `console.tui` (`true`, `false`) | `--tui`, `--no-tui` (console commands only) | `REGULUS_NO_TUI=1` (the opposite) | `true` |
+
+`listen` is the address of the dashboard and the API. The default, `127.0.0.1:8080`, answers on the loopback interface only (#197): the port speaks plain HTTP unless `tls_cert` and `tls_key` are set, and a login, a session cookie or an enrollment token must not cross a network in the clear by default. A port alone (`:8080`) or `0.0.0.0:8080` listens on every interface; the hub then logs a warning at every start unless TLS is on. How to reach the dashboard from other machines (an SSH tunnel, a reverse proxy, or TLS here) is in [Installation](installation.md#reaching-the-dashboard). The agent port (`agent_listen`) is not affected: it is always mutual TLS.
+
+`tls_cert` and `tls_key` make the dashboard port serve **HTTPS only** (TLS 1.2 or later, HTTP/1.1) with that certificate and key; set both or neither, or the hub refuses to start. The certificate file holds the server certificate followed by its chain. The key must be readable by the hub's user (`regulus`), for example `/etc/regulus/tls/key.pem` owned by `root:regulus` with mode `0640`; the service unit can read `/etc` but not write it. The files are looked at again at most once a minute, and a renewed pair is used without a restart; a pair that cannot be loaded keeps the previous certificate and logs a warning. The session cookie is then `Secure` and HSTS is sent. They are a pair of paths, so they are set in the file or the environment, not with `regulus config set` (like `trusted_proxies`).
 
 With `builtin_agent` enabled (the default) the hub runs an agent for its own server, which connects through the same contract as any other agent (agent id `local`).
 

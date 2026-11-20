@@ -24,7 +24,7 @@ Regulus v0.3.0  Hub ● in esecuzione
    updates.apply          false                      predefinito
    console.tui            true                       predefinito
 
- listen  predefinito: :8080
+ listen  predefinito: 127.0.0.1:8080
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

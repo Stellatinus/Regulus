@@ -146,11 +146,40 @@ export function parseRetryAfter(value: string | null | undefined, now = Date.now
 // because the user must set up two-factor authentication first.
 export const TWO_FACTOR_REQUIRED_EVENT = "regulus:two-factor-required";
 
+// REAUTH_REQUIRED is the code of the hub's 403 answer to a sensitive action
+// (new users, roles, enrollment tokens, updates...) when the session has not
+// proved the password in the last minutes (step-up re-authentication, #279).
+export const REAUTH_REQUIRED = "reauth_required";
+
+// CODE_REQUIRED is the code of the hub's answer to a re-authentication without
+// a code by a user who has two-factor on.
+export const CODE_REQUIRED = "two_factor_code_required";
+
+// A ReauthHandler asks the user to confirm the password (and code) and
+// resolves true once POST /api/account/reauth succeeded, false if the user
+// cancelled. The signed-in shell registers one (StepUp.tsx).
+export type ReauthHandler = () => Promise<boolean>;
+
+let reauthHandler: ReauthHandler | null = null;
+
+// setReauthHandler registers the handler and returns a function that removes
+// it again.
+export function setReauthHandler(handler: ReauthHandler): () => void {
+  reauthHandler = handler;
+  return () => {
+    if (reauthHandler === handler) reauthHandler = null;
+  };
+}
+
+// request sends one API request. When the hub answers reauth_required and a
+// handler is registered, it asks for the password and repeats the request
+// once; if the user cancels, the ApiError of the first answer is thrown.
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
   signal?: AbortSignal,
+  retried = false,
 ): Promise<T> {
   let res: Response;
   try {
@@ -180,6 +209,9 @@ async function request<T>(
     }
     if (res.status === 403 && code === "two_factor_setup_required") {
       window.dispatchEvent(new Event(TWO_FACTOR_REQUIRED_EVENT));
+    }
+    if (res.status === 403 && code === REAUTH_REQUIRED && !retried && reauthHandler && !signal?.aborted) {
+      if (await reauthHandler()) return request<T>(method, path, body, signal, true);
     }
     if (hubMessage !== undefined) throw new ApiError(res.status, hubMessage, code, retryAfter);
     throw genericError(res.status, "request.failed", { method, path, status: res.status }, code, retryAfter);
@@ -522,6 +554,15 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
     current_password: currentPassword,
     new_password: newPassword,
   });
+
+// reauthenticate proves the password (and the code, with two-factor on) again
+// for this session; sensitive actions then work for a few minutes.
+export const reauthenticate = (password: string, code?: string) =>
+  request<{ reauth_until: string }>(
+    "POST",
+    "/api/account/reauth",
+    code ? { password, code } : { password },
+  );
 
 export const fetchSessions = (signal?: AbortSignal) =>
   request<SessionInfo[]>("GET", "/api/account/sessions", undefined, signal);

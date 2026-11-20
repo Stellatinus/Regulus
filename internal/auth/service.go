@@ -222,22 +222,30 @@ func (s *Service) Login(ctx context.Context, remote, username, password string) 
 
 // Authenticate returns the user of a session token.
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {
+	user, _, err := s.authenticate(ctx, token)
+	return user, err
+}
+
+// authenticate returns the user of a session token and what Require keeps
+// about the session.
+func (s *Service) authenticate(ctx context.Context, token string) (User, session, error) {
 	if token == "" {
-		return User{}, ErrUnauthenticated
+		return User{}, session{}, ErrUnauthenticated
 	}
 	hash := hashToken(token)
 	now := s.now()
-	user, lastUsed, err := s.store.sessionUser(ctx, hash, now)
-	if err == nil {
-		// A write, so only when it changes something (once a minute per
-		// session): checking a session otherwise only reads, and does not
-		// queue behind the writer.
-		if now.Sub(lastUsed) >= sessionTouchEvery {
-			s.store.touchSession(ctx, hash, now)
-		}
-		user.Permissions = s.permsOfUser(ctx, user).list()
+	user, lastUsed, reauthAt, err := s.store.sessionUser(ctx, hash, now)
+	if err != nil {
+		return User{}, session{}, err
 	}
-	return user, err
+	// A write, so only when it changes something (once a minute per
+	// session): checking a session otherwise only reads, and does not
+	// queue behind the writer.
+	if now.Sub(lastUsed) >= sessionTouchEvery {
+		s.store.touchSession(ctx, hash, now)
+	}
+	user.Permissions = s.permsOfUser(ctx, user).list()
+	return user, session{tokenHash: hash, reauthAt: reauthAt}, nil
 }
 
 // SessionCheck returns a function that tells, at any later time, whether the
@@ -256,7 +264,7 @@ func (s *Service) SessionCheck(r *http.Request, permission string) func(context.
 		if token == "" {
 			return false
 		}
-		u, _, err := s.store.sessionUser(ctx, hashToken(token), s.now())
+		u, _, _, err := s.store.sessionUser(ctx, hashToken(token), s.now())
 		if errors.Is(err, ErrUnauthenticated) {
 			return false
 		}

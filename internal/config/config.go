@@ -26,8 +26,21 @@ import (
 
 // Config is the complete hub configuration.
 type Config struct {
-	// Listen is the address the HTTP server listens on.
+	// Listen is the address the HTTP server (dashboard and API) listens on.
+	// The default is the loopback address only (#197): the port serves plain
+	// HTTP unless TLSCert and TLSKey are set, so reaching it from other
+	// machines is a choice the administrator makes, with a reverse proxy, with
+	// TLS here, or knowingly without.
 	Listen string `yaml:"listen"`
+	// TLSCert and TLSKey are the PEM files of the certificate (with its chain)
+	// and the private key the HTTP server uses. Both set: the dashboard and the
+	// API are served over HTTPS only, and the files are read again when they
+	// change. Both empty: plain HTTP. The key must be readable by the user the
+	// hub runs as. A pair of paths, so they are edited in the file (or with
+	// REGULUS_TLS_CERT and REGULUS_TLS_KEY), not one at a time with
+	// `regulus config set`, like trusted_proxies.
+	TLSCert string `yaml:"tls_cert"`
+	TLSKey  string `yaml:"tls_key"`
 	// AgentListen is the address where remote agents connect (gRPC over TLS
 	// with client certificates). Empty keeps remote agents off: only the
 	// built-in agent can then connect.
@@ -124,10 +137,15 @@ type Log struct {
 	Format string `yaml:"format"`
 }
 
+// DefaultListen is the address of the dashboard when nothing else is set: the
+// loopback interface only (#197). Earlier versions used ":8080", every
+// interface; an upgraded package keeps that (docs/installation.md).
+const DefaultListen = "127.0.0.1:8080"
+
 // Default returns the built-in defaults.
 func Default() Config {
 	return Config{
-		Listen:          ":8080",
+		Listen:          DefaultListen,
 		DataDir:         "data",
 		BuiltinAgent:    true,
 		MetricsInterval: 10 * time.Second,
@@ -136,6 +154,46 @@ func Default() Config {
 		Console:         Console{TUI: true},
 		Updates:         Updates{Check: true},
 	}
+}
+
+// TLS reports whether the HTTP server is configured to serve HTTPS. Whether
+// both files are set and usable is checked when the hub starts.
+func (c Config) TLS() bool { return c.TLSCert != "" || c.TLSKey != "" }
+
+// Scheme is "https" when the HTTP server serves TLS, else "http".
+func (c Config) Scheme() string {
+	if c.TLS() {
+		return "https"
+	}
+	return "http"
+}
+
+// DashboardURL is where to open the dashboard on the machine that runs the
+// hub: an address that listens everywhere is reached as localhost.
+func (c Config) DashboardURL() string {
+	host, port, err := net.SplitHostPort(c.Listen)
+	if err != nil {
+		host, port = "", "8080"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "localhost"
+	}
+	return c.Scheme() + "://" + net.JoinHostPort(host, port)
+}
+
+// LoopbackOnly reports whether a listen address (host:port) is reachable from
+// this machine only: localhost, or a loopback IP address. An empty host, a
+// wildcard, another address or a host name is not.
+func LoopbackOnly(listen string) bool {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && a.Unmap().IsLoopback()
 }
 
 // Validate reports whether the configuration is usable.
@@ -187,7 +245,9 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 		extra(fs)
 	}
 	path := fs.String("config", "", "path to the YAML configuration file (env REGULUS_CONFIG)")
-	listen := fs.String("listen", "", "address to listen on (env REGULUS_LISTEN)")
+	listen := fs.String("listen", "", "address of the dashboard and API, such as 127.0.0.1:8080 (env REGULUS_LISTEN)")
+	tlsCert := fs.String("tls-cert", "", "certificate file (PEM) to serve the dashboard over HTTPS, with --tls-key (env REGULUS_TLS_CERT)")
+	tlsKey := fs.String("tls-key", "", "private key file (PEM) of --tls-cert (env REGULUS_TLS_KEY)")
 	agentListen := fs.String("agent-listen", "", "address where remote agents connect, empty to disable (env REGULUS_AGENT_LISTEN)")
 	dataDir := fs.String("data-dir", "", "directory for the hub data (env REGULUS_DATA_DIR)")
 	builtinAgent := fs.Bool("builtin-agent", true, "run an agent inside the hub (env REGULUS_BUILTIN_AGENT)")
@@ -210,6 +270,8 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 	}
 
 	setIfNotEmpty(&cfg.Listen, getenv("REGULUS_LISTEN"))
+	setIfNotEmpty(&cfg.TLSCert, getenv("REGULUS_TLS_CERT"))
+	setIfNotEmpty(&cfg.TLSKey, getenv("REGULUS_TLS_KEY"))
 	setIfNotEmpty(&cfg.DataDir, getenv("REGULUS_DATA_DIR"))
 	setIfNotEmpty(&cfg.AgentListen, getenv("REGULUS_AGENT_LISTEN"))
 	setIfNotEmpty(&cfg.PluginsDir, getenv("REGULUS_PLUGINS_DIR"))
@@ -272,6 +334,10 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 		switch f.Name {
 		case "listen":
 			cfg.Listen = *listen
+		case "tls-cert":
+			cfg.TLSCert = *tlsCert
+		case "tls-key":
+			cfg.TLSKey = *tlsKey
 		case "agent-listen":
 			cfg.AgentListen = *agentListen
 		case "data-dir":

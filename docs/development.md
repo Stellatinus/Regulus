@@ -4,7 +4,7 @@ Requirements: Go 1.26+, Node.js 22+.
 
 ```sh
 make build            # builds the dashboard, then bin/regulus
-./bin/regulus hub     # serves the dashboard on :8080
+./bin/regulus hub     # serves the dashboard on 127.0.0.1:8080
 make test             # go vet, go test -race, dashboard typecheck and tests
 make test-postgres    # the database tests on PostgreSQL too (needs REGULUS_TEST_DATABASE_URL, see the Makefile)
 make lint             # golangci-lint and ESLint
@@ -14,7 +14,7 @@ make fuzz             # run each fuzz target for 30s (FUZZTIME=2m for longer)
 scripts/test-install.sh   # tests of the install script (also part of make test)
 ```
 
-For dashboard work, run `npm run dev` in `dashboard/` (proxies `/api` to the hub on `:8080`).
+For dashboard work, run `npm run dev` in `dashboard/` (proxies `/api` to the hub on `127.0.0.1:8080`).
 
 ## Fuzz tests
 

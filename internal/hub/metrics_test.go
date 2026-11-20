@@ -240,6 +240,9 @@ func TestConfiguredMetricsIntervalReachesAgents(t *testing.T) {
 // typicalReport has a few disks and interfaces, like a small server.
 func typicalReport(uptime uint64) *agentv1.MetricsReport {
 	r := report(uptime)
+	// A fixed time: timestamppb.Now() encodes its nanoseconds in 4 or 5 bytes
+	// depending on the moment, which would make equal reports differ in size.
+	r.CollectedAt = timestamppb.New(time.Unix(1_700_000_000, 500_000_000))
 	r.Cpu = &agentv1.CpuMetrics{UsagePercent: 12.5, Load_1: 0.3}
 	r.Memory = &agentv1.MemoryMetrics{TotalBytes: 8 << 30, UsedBytes: 3 << 30}
 	for i := range 4 {

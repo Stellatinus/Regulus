@@ -52,14 +52,24 @@ func RequireAnyPermission(permissions []string, next http.Handler) http.Handler 
 //	POST   /api/account/password       change the own password
 //	GET    /api/account/sessions       list the own sessions
 //	DELETE /api/account/sessions/{id}  end one of the own sessions
+//	POST   /api/account/reauth         prove the password (and code) again, for StepUpWindow
+//
+// The changes to accounts and roles also need a recent proof of the password
+// (RequireStepUp); the list is in docs/authentication.md.
 //
 // The two-factor endpoints are listed at twoFactorRoutes.
 //
 // The Service may be nil to list the routes only.
 func APIRoutes(s *Service) []Route {
 	users := func(h http.HandlerFunc) http.Handler { return RequirePermission(PermUsersManage, h) }
-	usersJSON := func(h http.HandlerFunc) http.Handler { return RequirePermission(PermUsersManage, RequireJSON(h)) }
-	rolesJSON := func(h http.HandlerFunc) http.Handler { return RequirePermission(PermRolesManage, RequireJSON(h)) }
+	// Every change to accounts and roles needs a recent proof of the password
+	// (stepup.go), checked after the permission.
+	usersJSON := func(h http.HandlerFunc) http.Handler {
+		return RequirePermission(PermUsersManage, s.RequireStepUp(RequireJSON(h)))
+	}
+	rolesJSON := func(h http.HandlerFunc) http.Handler {
+		return RequirePermission(PermRolesManage, s.RequireStepUp(RequireJSON(h)))
+	}
 	routes := []Route{
 		{"GET /api/users", users(s.handleListUsers)},
 		{"POST /api/users", usersJSON(s.handleCreateUser)},
@@ -74,6 +84,7 @@ func APIRoutes(s *Service) []Route {
 		{"POST /api/account/password", RequireJSON(http.HandlerFunc(s.handleChangePassword))},
 		{"GET /api/account/sessions", http.HandlerFunc(s.handleListSessions)},
 		{"DELETE /api/account/sessions/{id}", RequireJSON(http.HandlerFunc(s.handleRevokeSession))},
+		{"POST /api/account/reauth", RequireJSON(http.HandlerFunc(s.handleReauth))},
 	}
 	return append(routes, twoFactorRoutes(s)...)
 }
@@ -91,6 +102,8 @@ func (s *Service) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrInvalidReset):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, ErrUnauthenticated):
+		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, ErrWrongPassword), errors.Is(err, ErrForbidden):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, ErrRateLimited):
