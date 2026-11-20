@@ -73,6 +73,12 @@ describe("the servers pages in Italian", () => {
     expect(screen.queryByText("Last contact")).not.toBeInTheDocument();
   });
 
+  it("marks a server with limited metrics", async () => {
+    mockHub([{ ...online, collector: "basic", unavailable: ["cpu"] }]);
+    renderAdmin(<ServersPage />);
+    expect(await screen.findByText("metriche limitate")).toBeInTheDocument();
+  });
+
   it("shows the dashboard and its widget picker", async () => {
     mockHub([]);
     renderAdmin(<Dashboard />);

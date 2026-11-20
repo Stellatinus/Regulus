@@ -29,6 +29,13 @@ Ubuntu Server comes first because it is the system used for the first real tests
 
 Other distributions with systemd can use the `tar.gz` archive. An apt repository or PPA for Ubuntu is postponed.
 
+What runs where (#230; the table is in [Remote agents](remote-agents.md#supported-platforms)):
+
+- **Releases are Linux amd64 and arm64 only, on systemd.** Updates from the dashboard need systemd: the root helper is started by path units. Linux without systemd runs the agent from the `tar.gz` but gets no updates; another OS is not built.
+- **An agent that cannot read something says so** instead of sending zeros: every `MetricsReport` names its collector (`linux` or `basic`, fields 9 and 10 with `unavailable`) and the parts it could not read. Added to protocol 1 without raising `protocol.Version`: an older hub ignores the fields, an older agent sends none and looks as before. The hub keeps them in the stored report (an empty list costs nothing), so a metrics point says what its zeros mean. The basic collector is still chosen once at start, by reading `/proc/stat`; the Linux collector reports per report what it could not read.
+- **No cgroup limits.** CPU, load and memory come from `/proc`, so in a container they are the host's unless LXCFS virtualizes `/proc`; the CPU count follows `cpuset` (`runtime.NumCPU`) but not a quota. Instead of reading cgroup v1/v2 files (two formats, and limits that do not say what is used on the host), the agent reports the container it detects (`SystemInfo.container`, field 8) and the dashboard says the figures may be the host's. Reading cgroup limits is left for a follow-up.
+- **Network filesystems and overlay are not disks.** nfs, cifs and the like belong to the server that exports them (which reports them with its own agent) and are the mounts most likely to hang; overlay is a container's view of the host's disk. A container therefore shows "No disks reported", which is not the same as "not available".
+
 ## Roadmap: phases and milestones
 
 The README describes four **phases**; the work is tracked in six **milestones**, M1 to M6. Issue titles still carry the phase they were first written for (`[Phase 1]`, …), so a title and a milestone can disagree: the milestone is what counts.
@@ -178,6 +185,17 @@ Agent certificates last five years and the CA twenty, with no renewal (#128), an
 - **One log line a day**, not one per certificate: checked every hour, logged at start and then at most once in 24 hours while something ends soon. A restart logs it again.
 - **Not verified on a real machine:** the dates shown on a real install and the daily log line under journald (to be added to the certificate test, #241).
 
+## Certificate kinds: every certificate of the hub CA says what it is for (audit issue #316)
+
+Agent certificates were told apart only by `Organization: "Regulus agent"`, which nothing checked: any later certificate from the same CA (a phone in Regulus Access, #154; a hub-to-hub certificate, #107) would have passed the agent listener as an agent named after its common name, and an agent certificate could have passed a future service. Choices:
+
+- **The kind is a URI in the subject alternative names**: `regulus:<kind>:<id>` for a client certificate, whose id must equal the common name, and `regulus:hub` for the listener certificate. Kinds today: `agent`, `hub`, and `device` reserved for #154 (nothing issues it; it exists so that the refusal is tested). A new kind is added to `internal/pki/kind.go`; exactly one `regulus:` URI per certificate. **Rejected:** a private EKU or policy OID (an OID needs a registered arc, and is harder to read with `openssl x509 -text`); an intermediate CA per kind (the right answer if #107 delegates, but more key material and more to rotate today; the URI does not prevent it later).
+- **Each service accepts only its kind.** `pki.ClientIdentity` returns the kind; the agent listener uses `pki.AgentIdentity` and refuses any other kind, an unknown one, two of them, or a mismatched id with `PermissionDenied` **before** the registry is asked. A future service must check its own kind the same way. Agents refuse a listener certificate that carries a kind other than `hub`.
+- **Already-enrolled agents keep working.** A certificate with **no** `regulus:` URI and the organization `Regulus agent` is accepted as an agent (`Identity.Legacy`): that is exactly what every older hub issued, and nothing else, as a client certificate, and every certificate issued from now on carries a kind, so an unmarked certificate cannot be of a new kind. Any other unmarked certificate is refused. A listener certificate without a kind is accepted too (an agent updated before its hub).
+- **For how long:** while such certificates exist, that is until renewal (#128) re-issues them or they end (five years after the last enrollment on a hub older than this change). The legacy path is to be removed in the first release after #128 has re-issued every agent certificate; until then nothing counts the legacy agents (follow-up).
+- **The threat models of #154 and #107** start from this rule; a line says so in [regulus-access.md](regulus-access.md) section 3 and [hub-redundancy.md](hub-redundancy.md) section 5.
+- **Verified by tests only** (`internal/pki/kind_test.go`, `TestStreamsNeedAValidCertificate`): a legacy agent of a real older hub reconnecting after the update is not verified on a real machine.
+
 ## Remote agents from the dashboard
 
 Remote agents can be turned on from the dashboard (#90), so that enrolling a second server needs no terminal on the hub. The choice is kept in the database, because the hub runs as `regulus` and cannot write `/etc/regulus/config.yaml`. `agent_listen` in the configuration always wins: when it is set the dashboard shows it and cannot change it. Turning the listener on needs `servers.manage`, the same permission as making enrollment tokens, since one is useless without the other; it is audited. Turning it off from the dashboard is not offered yet.
@@ -312,6 +330,15 @@ Written on 2026-11-19. **Proposed**: waiting for the maintainer's agreement. Not
 - **The type travels with the enrollment token**: the wizard stores the intended preset with the token and the hub assigns it at enrollment. The node still applies only what `allow` permits.
 - **Secrets:** token rules unchanged. The token is shown once and never appears in the docs, the configurator, URLs, logs, audit details or the wizard's saved record.
 - **Not decided:** the permission name and whether `operator` gets the light changes; whether `accept_promotion` moves into `allow`; a redundant hub that also carries agent capabilities (proposed no); leaving the development type; the minimum resources per type (to measure).
+
+## Capabilities: consent is part of the model (audit issue #317)
+
+The draft `internal/capability` turned `relay` and `inbound-listener` on in the gateway preset, while [node-types.md](node-types.md) called them opt-in, and `Has(Relay)` was true without the node's agreement: code written later against it could open a public listener on a node that never agreed. Choices (the package is still a draft that nothing calls):
+
+- **Consent is modelled, not left to callers.** `Resolve(preset, override, allowed)` takes the node's `allow` list (as the node reported it) and returns only the effective set: a capability that needs consent is in it only when assigned **and** allowed; otherwise it is in `Withheld` ("assigned, not allowed by the node"). `Defaults(p)` is `Resolve` with no override and an empty list, so no preset reports an exposure capability by default. **Rejected:** only removing relay from the gateway defaults: it would agree with the table but `Has` would still mean "the hub said so", and the next exposure capability would have the same hole.
+- **The gateway preset still assigns `relay` and `inbound-listener`**: choosing the type is the hub's key, as in [node-type-changes.md](node-type-changes.md) (`--allow gateway` writes `relay`); the table in node-types.md now says `consent` for them and keeps `opt-in` (administrator **and** node) for `notifications` and `authentication`.
+- **The listener follows the capabilities**: `inbound-listener` is effective only while a consent-needing capability is effective (`PermissionNeedsConsent`), because `allow` names capabilities only.
+- **Unknown names are refused** in an override and in the allow list (`ErrUnknown`), and the allow list may hold only capabilities that need consent (`ErrNoConsentNeeded`), as node-type-changes.md says for the file.
 
 ## Web terminal and file browser (#236, #237, proposed)
 

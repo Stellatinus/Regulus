@@ -27,17 +27,19 @@ func identityFrom(ctx context.Context) (pki.Identity, bool) {
 	return id, ok
 }
 
-// peerIdentity returns the verified client certificate of the caller.
-func peerIdentity(ctx context.Context) (pki.Identity, bool) {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return pki.Identity{}, false
+// peerIdentity returns the verified agent certificate of the caller. ok is
+// false when there is none; err is pki.ErrNotAgent when the caller presented a
+// certificate of the hub CA that is not an agent certificate (#316).
+func peerIdentity(ctx context.Context) (id pki.Identity, ok bool, err error) {
+	p, found := peer.FromContext(ctx)
+	if !found {
+		return pki.Identity{}, false, nil
 	}
-	info, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok {
-		return pki.Identity{}, false
+	info, found := p.AuthInfo.(credentials.TLSInfo)
+	if !found {
+		return pki.Identity{}, false, nil
 	}
-	return pki.ClientIdentity(info.State)
+	return pki.AgentIdentity(info.State)
 }
 
 func peerHost(ctx context.Context) string {
@@ -65,33 +67,39 @@ func (w wrappedStream) Context() context.Context { return w.ctx }
 const authorizeTimeout = 10 * time.Second
 
 // requireAgent is the stream interceptor of the network listener: a stream
-// needs the certificate of an agent that was enrolled and not revoked.
+// needs the certificate of an agent that was enrolled and not revoked. A
+// certificate of another kind from the same CA is refused before its id is
+// looked at.
 func (h *Hub) requireAgent(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	ctx := ss.Context()
-	id, ok := peerIdentity(ctx)
+	id, ok, err := peerIdentity(ctx)
+	if err != nil {
+		h.log.Warn("refusing a certificate that is not an agent's", "from", peerHost(ctx), "err", err)
+		return status.Error(codes.PermissionDenied, err.Error())
+	}
 	if !ok {
 		return status.Error(codes.Unauthenticated, "a client certificate is required")
 	}
 	// The one database read of a handshake; bounded, so a database that does
 	// not answer refuses the agent (it retries) instead of holding it.
 	actx, cancel := context.WithTimeout(ctx, authorizeTimeout)
-	err := h.fleet.Authorize(actx, id.AgentID, id.Serial)
+	err = h.fleet.Authorize(actx, id.ID, id.Serial)
 	cancel()
 	if err != nil {
 		switch {
 		case errors.Is(err, fleet.ErrNotFound), errors.Is(err, fleet.ErrRevoked):
-			h.log.Warn("refusing agent", "agent", id.AgentID, "err", err)
+			h.log.Warn("refusing agent", "agent", id.ID, "err", err)
 			return status.Error(codes.PermissionDenied, "this agent is not enrolled or was revoked")
 		default:
-			h.log.Error("checking agent", "agent", id.AgentID, "err", err)
+			h.log.Error("checking agent", "agent", id.ID, "err", err)
 			return status.Error(codes.Internal, "cannot check the agent")
 		}
 	}
 	// Agents enrolled before the hub kept the end of their certificate get it
 	// filled in (#245), by the presence writer, not here: a failure only
 	// leaves the date unknown, and must not hold the connection.
-	h.seen.put("cert/"+id.AgentID, func(ctx context.Context) error {
-		return h.fleet.CertificateSeen(ctx, id.AgentID, id.Serial, id.NotAfter)
+	h.seen.put("cert/"+id.ID, func(ctx context.Context) error {
+		return h.fleet.CertificateSeen(ctx, id.ID, id.Serial, id.NotAfter)
 	})
 	return handler(srv, wrappedStream{ss, context.WithValue(ctx, identityKey{}, id)})
 }

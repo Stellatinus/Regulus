@@ -56,6 +56,11 @@ func TestSanitizeReport(t *testing.T) {
 	if len(r.Disks[0].MountPoint) > maxTextBytes || r.Networks[0].Interface != "eth0" {
 		t.Errorf("texts not cleaned: %d bytes, %q", len(r.Disks[0].MountPoint), r.Networks[0].Interface)
 	}
+	u := &agentv1.MetricsReport{Collector: "basic\x1b", Unavailable: make([]string, 1000)}
+	u.Unavailable[0] = "cpu\n"
+	if !sanitizeReport(u) || len(u.Unavailable) != maxListEntries || u.Unavailable[0] != "cpu" || u.Collector != "basic" {
+		t.Errorf("unavailable list not cut or cleaned: %d entries, %q, collector %q", len(u.Unavailable), u.Unavailable[0], u.Collector)
+	}
 	if sanitizeReport(&agentv1.MetricsReport{Disks: []*agentv1.DiskMetrics{{MountPoint: "/"}}}) {
 		t.Error("a normal report was reported as cut")
 	}

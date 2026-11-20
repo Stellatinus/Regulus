@@ -192,6 +192,18 @@ func TestStreamsNeedAValidCertificate(t *testing.T) {
 		t.Error("a certificate from another CA was accepted")
 	}
 
+	// A certificate of another kind from this hub's own CA is refused, even
+	// when it is named after an enrolled agent (#316).
+	key, csr, _ = pki.NewAgentKey()
+	der, _, err := h.fleet.CA().IssueClient(csr, pki.KindDevice, creds.AgentID, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, _ := pki.PinnedClientTLS(fp, &tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key})
+	if err := connect(device); status.Code(err) != codes.PermissionDenied || !strings.Contains(err.Error(), pki.ErrNotAgent.Error()) {
+		t.Errorf("a device certificate on the agent port: err = %v, want PermissionDenied (not an agent certificate)", err)
+	}
+
 	// A valid certificate may not claim another agent's id.
 	good, _ := pki.PinnedClientTLS(fp, &tls.Certificate{Certificate: [][]byte{creds.CertDER}, PrivateKey: creds.Key})
 	conn, err := grpc.NewClient(h.AgentAddr(), grpc.WithTransportCredentials(credentials.NewTLS(good)))

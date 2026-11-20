@@ -88,6 +88,8 @@ Open in #106: the inventory table (copied, regenerated, never copied), RPO and R
 
 What exists today and the new design builds on ([architecture.md](architecture.md), section 3): a CA created by the hub, agents pinning its fingerprint, 5-year client certificates, no certificate renewal (#128). Open in #107: the trust model options, what agents pin when the hub changes, the hub-to-redundant channel (the existing gRPC with mutual TLS is the baseline), signed hub-change announcements with replay protection, promotion token security, certificate lifecycle and revocation of a retired hub, and the threat model. Raspberry Pi class hardware must be supported.
 
+Already decided (#316, [decisions.md](decisions.md#certificate-kinds-every-certificate-of-the-hub-ca-says-what-it-is-for-audit-issue-316)): any new certificate issued from this CA or from one it delegates to (options A and B of #107) carries a **kind** (`regulus:<kind>:<id>`), a new kind is added to `internal/pki/kind.go`, and each service accepts only its own kind. A certificate for the hub-to-redundant channel, for example, must not pass the agent listener as an agent.
+
 ## 6. Failure detection, terms and split-brain prevention ([#108](https://github.com/Stellatinus/Regulus/issues/108))
 
 *Status: not designed.*
