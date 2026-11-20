@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, fetchPlugins, type PluginsStatus, type PluginStatus } from "./api";
 import { formatAgo } from "./format";
 import { useT, type MessageKey } from "./i18n";
+import { usePluginsVersion } from "./LiveProvider";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
 
-const REFRESH_MS = 10_000;
+// A burst of changes (a plugin that keeps crashing at start) is read once:
+// the page waits this long after a change before asking the hub.
+export const RELOAD_DELAY_MS = 250;
 
 type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: PluginsStatus };
 
@@ -16,6 +19,13 @@ const STATE_LABEL: Record<string, MessageKey> = {
   failed: "plugins.state.failed",
   incompatible: "plugins.state.incompatible",
   stopped: "plugins.state.stopped",
+  invalid: "plugins.state.invalid",
+};
+
+const STATE_HINT: Record<string, MessageKey> = {
+  failed: "plugins.state.failedHint",
+  incompatible: "plugins.state.incompatibleHint",
+  invalid: "plugins.state.invalidHint",
 };
 
 // The badge colour of a state (styles.css .status.*).
@@ -26,35 +36,44 @@ const STATE_CLASS: Record<string, string> = {
   failed: "failed",
   incompatible: "failed",
   stopped: "off",
+  invalid: "failed",
 };
 
 // PluginsPage shows the state of the plugins of the hub and of every
-// connected server that runs plugins (#262). The hub does not push plugin
-// changes on the live stream, so the page asks again every 10 seconds.
+// connected server that runs plugins (#262), and the directories that are not
+// usable plugins (state "invalid", #319). It loads them once, then again
+// whenever the live stream says they may have changed ("plugins.changed", a
+// snapshot after a reconnection, a server that comes or goes): no polling.
 export function PluginsPage() {
   const t = useT();
   const session = useSession();
   const expired = session?.expired;
+  const version = usePluginsVersion();
   const [state, setState] = useState<State>({ kind: "loading" });
+  const loadedOnce = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     const load = () =>
       fetchPlugins(controller.signal).then(
-        (data) => setState({ kind: "ready", data }),
+        (data) => {
+          loadedOnce.current = true;
+          setState({ kind: "ready", data });
+        },
         (err: unknown) => {
           if (controller.signal.aborted) return;
           if (err instanceof ApiError && err.status === 401) return expired?.();
           setState({ kind: "error", message: errorMessage(err) });
         },
       );
-    void load();
-    const timer = setInterval(() => void load(), REFRESH_MS);
+    // The first load is at once; a reload waits for the burst to end. A newer
+    // change cancels a reload that has not answered yet.
+    const timer = setTimeout(() => void load(), loadedOnce.current ? RELOAD_DELAY_MS : 0);
     return () => {
+      clearTimeout(timer);
       controller.abort();
-      clearInterval(timer);
     };
-  }, [expired]);
+  }, [expired, version]);
 
   return (
     <section aria-labelledby="plugins-heading">
@@ -111,7 +130,8 @@ function PluginTable({ plugins }: { plugins: PluginStatus[] }) {
       <tbody>
         {plugins.map((p) => {
           const label = STATE_LABEL[p.state];
-          const hint = p.state === "failed" ? t("plugins.state.failedHint") : p.state === "incompatible" ? t("plugins.state.incompatibleHint") : "";
+          const hintKey = STATE_HINT[p.state];
+          const hint = hintKey ? t(hintKey) : "";
           return (
             <tr key={p.id}>
               <td data-label={t("plugins.column.plugin")} className="mono">

@@ -724,7 +724,7 @@ func (m Model) pluginsBody() []string {
 		switch p.State {
 		case plugin.StateRunning:
 			style = goodStyle
-		case plugin.StateFailed, plugin.StateIncompatible:
+		case plugin.StateFailed, plugin.StateIncompatible, plugin.StateInvalid:
 			style = badStyle
 		}
 		line := fmt.Sprintf("   %-20s %-10s %s  %s %d", p.ID, p.Version, style.Render(fmt.Sprintf("%-14s", pluginState(p.State))), T.PluginRestarts, p.Restarts)

@@ -871,8 +871,10 @@ type PluginStatus struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Version string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	// One of starting, running, restarting, failed, incompatible, stopped. A
-	// hub shows a value it does not know as it is.
+	// One of starting, running, restarting, failed, incompatible, stopped,
+	// invalid (a directory that is not a usable plugin: id is the directory
+	// name, version is empty, last_error says why). A hub shows a value it
+	// does not know as it is.
 	State string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
 	// How many times it was started again since the agent started.
 	Restarts uint32 `protobuf:"varint,4,opt,name=restarts,proto3" json:"restarts,omitempty"`

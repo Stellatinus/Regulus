@@ -195,6 +195,14 @@ var it = strs{
 	PluginStopped:      "fermato",
 	// --- end of the plugins block.
 
+	// --- Plugins in the Health tab (#319).
+	PluginInvalid: "non valido",
+	ChkPlugins:    "Plugin",
+	PlgOK:         "%d plugin dell'hub, nessuno fallito o non valido",
+	PlgProblem:    "nessun plugin è in esecuzione: %s",
+	PlgBad:        "da controllare (vedi la scheda Stato): %s",
+	// --- end of the plugin health block.
+
 	// --- Setting errors (#318).
 	SettingErrors: map[string]string{
 		"unknown_setting":  "impostazione sconosciuta %s (note: %s)",

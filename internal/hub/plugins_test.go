@@ -273,3 +273,95 @@ func TestPluginsNeedServersRead(t *testing.T) {
 		t.Errorf("anonymous: %d", rec.Code)
 	}
 }
+
+// A directory whose plugin.yaml is invalid is shown in GET /api/plugins with
+// its error, and a change of a hub plugin's state is pushed on the live
+// stream (#319).
+func TestInvalidHubPluginsAreShownAndChangesArePushed(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "broken"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "broken", plugin.ManifestName), []byte("id: broken\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A plugin that dies a second after it starts: its state changes after
+	// the stream below is open.
+	dir := filepath.Join(root, "slowcrash")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bin", "run"), []byte("#!/bin/sh\nsleep 1\nexit 7\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "id: slowcrash\nversion: 0.0.1\nname: Slow\napi: 1\ncomponents:\n  hub:\n    command: bin/run\n"
+	if err := os.WriteFile(filepath.Join(dir, plugin.ManifestName), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.BuiltinAgent = false
+	cfg.PluginsDir = root
+	h := startHubWithConfig(t, cfg, fastPlugins(t))
+	conn, ctx := dialStream(t, h)
+	next(t, ctx, conn, "snapshot")
+
+	handler := NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Plugins: h, Log: quiet()})
+	waitFor(t, "the invalid plugin", func() bool { return getPlugins(t, handler).hubPlugin("broken").State == plugin.StateInvalid })
+	if p := getPlugins(t, handler).hubPlugin("broken"); p.Version != "" || !strings.Contains(p.LastError, "version") {
+		t.Errorf("broken = %+v", p)
+	}
+
+	if ev := next(t, ctx, conn, "plugins.changed"); ev["source"] != "hub" || ev["id"] != nil {
+		t.Errorf("event = %v", ev)
+	}
+}
+
+// An agent's report pushes "plugins.changed" only when its plugins changed.
+func TestAgentPluginChangesArePushed(t *testing.T) {
+	h := startHub(t)
+	stream, _ := register(t, h, "a1")
+	waitFor(t, "agent", func() bool { return len(h.Agents()) == 1 })
+	conn, ctx := dialStream(t, h)
+	next(t, ctx, conn, "snapshot")
+
+	send := func(state string) {
+		t.Helper()
+		report := &agentv1.MetricsReport{
+			CollectedAt: timestamppb.Now(), PluginsEnabled: true,
+			Plugins: []*agentv1.PluginStatus{{Id: "p", Version: "1", State: state}},
+		}
+		if err := stream.Send(&agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Metrics{Metrics: report}}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(60 * time.Millisecond) // past the minimum gap between reports
+	}
+	send("running")
+	send("running") // the same: no event
+	send("failed")
+
+	var changes []map[string]any
+	for metrics := 0; metrics < 3; {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var msg map[string]any
+		if err := json.Unmarshal(data, &msg); err != nil {
+			t.Fatal(err)
+		}
+		switch msg["type"] {
+		case "agent.metrics":
+			metrics++
+		case "plugins.changed":
+			changes = append(changes, msg)
+		}
+	}
+	if len(changes) != 2 {
+		t.Fatalf("events = %v, want two", changes)
+	}
+	for _, ev := range changes {
+		if ev["source"] != "agent" || ev["id"] != "a1" {
+			t.Errorf("event = %v", ev)
+		}
+	}
+}

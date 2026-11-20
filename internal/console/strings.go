@@ -113,6 +113,12 @@ type strs struct {
 	PluginFailed, PluginIncompatible, PluginStopped string
 	// --- end of the plugins block.
 
+	// --- Plugins in the Health tab and the invalid state (#319). PlgOK
+	// takes the number of plugins; PlgProblem why none runs; PlgBad the
+	// plugins that need a look, each "id (state)".
+	PluginInvalid, ChkPlugins, PlgOK, PlgProblem, PlgBad string
+	// --- end of the plugin health block.
+
 	// --- Setting errors (#318): why config.Normalize or config.SetFile
 	// refused a value, by config.ErrorCode. Each %s takes the arguments of
 	// config.SettingError.Args, in order (documented in internal/config).
@@ -285,6 +291,14 @@ var en = strs{
 	PluginIncompatible: "incompatible",
 	PluginStopped:      "stopped",
 	// --- end of the plugins block.
+
+	// --- Plugins in the Health tab (#319).
+	PluginInvalid: "invalid",
+	ChkPlugins:    "Plugins",
+	PlgOK:         "%d plugins of the hub, none failed or invalid",
+	PlgProblem:    "no plugin runs: %s",
+	PlgBad:        "need a look (see the Status tab): %s",
+	// --- end of the plugin health block.
 
 	// --- Setting errors (#318).
 	SettingErrors: map[string]string{
