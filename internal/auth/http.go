@@ -164,8 +164,12 @@ func (s *Service) handleLoginTwoFactor(w http.ResponseWriter, r *http.Request) {
 	case err == nil:
 		s.setSessionCookie(w, r, res.Token, res.Expires)
 		writeJSON(w, http.StatusOK, loginResponse{User: res.User, RecoveryCodeUsed: res.RecoveryUsed, RecoveryCodesLeft: res.RecoveryLeft})
-	case errors.Is(err, ErrInvalidCode), errors.Is(err, ErrLoginExpired):
-		writeError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, ErrInvalidCode):
+		writeErrorCode(w, http.StatusUnauthorized, err.Error(), "invalid_code")
+	case errors.Is(err, ErrLoginExpired):
+		// The dashboard tells the two apart by the code, not by the text,
+		// which is English and may change.
+		writeErrorCode(w, http.StatusUnauthorized, err.Error(), "login_expired")
 	default:
 		s.fail(w, err)
 	}
@@ -268,6 +272,12 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// writeErrorCode is writeError with a machine-readable code, for answers a
+// client must tell apart without reading the English text.
+func writeErrorCode(w http.ResponseWriter, status int, msg, code string) {
+	writeJSON(w, status, map[string]string{"error": msg, "code": code})
 }
 
 // peerIP is the address of the other end of the connection.

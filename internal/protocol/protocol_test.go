@@ -1,6 +1,9 @@
 package protocol
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSupported(t *testing.T) {
 	tests := []struct {
@@ -68,5 +71,19 @@ func TestTheUpdateContractIsNeverDropped(t *testing.T) {
 	}
 	if UpdateContract > MinSupported {
 		t.Errorf("UpdateContract %d above MinSupported %d", UpdateContract, MinSupported)
+	}
+}
+
+// TestKeepaliveEndsAgree: the hub's policy must allow the agent's pings, and a
+// dead hub must be noticed within about 45 s (#222).
+func TestKeepaliveEndsAgree(t *testing.T) {
+	if KeepaliveMinTime > KeepaliveTime {
+		t.Errorf("the hub refuses pings closer than %v but agents ping every %v", KeepaliveMinTime, KeepaliveTime)
+	}
+	if d := KeepaliveTime + KeepaliveTimeout; d > 45*time.Second {
+		t.Errorf("a dead hub is noticed after up to %v, want 45 s at most", d)
+	}
+	if KeepaliveTime < 10*time.Second {
+		t.Errorf("gRPC never pings more often than every 10 s; KeepaliveTime = %v", KeepaliveTime)
 	}
 }

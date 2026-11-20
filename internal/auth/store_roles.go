@@ -20,7 +20,7 @@ type roleRow struct {
 
 // customRoles returns all the stored roles, ordered by name.
 func (s store) customRoles(ctx context.Context) ([]roleRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT name, description, created_at FROM roles ORDER BY name`)
+	rows, err := s.read().QueryContext(ctx, `SELECT name, description, created_at FROM roles ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s store) customRoles(ctx context.Context) ([]roleRow, error) {
 	}
 	_ = rows.Close()
 
-	perms, err := s.db.QueryContext(ctx, `SELECT role, permission FROM role_permissions ORDER BY permission`)
+	perms, err := s.read().QueryContext(ctx, `SELECT role, permission FROM role_permissions ORDER BY permission`)
 	if err != nil {
 		return nil, err
 	}
@@ -67,13 +67,13 @@ func (s store) customRole(ctx context.Context, name Role) (roleRow, error) {
 		r       roleRow
 		created string
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT name, description, created_at FROM roles WHERE name = ?`, string(name)).
+	err := s.read().QueryRowContext(ctx, `SELECT name, description, created_at FROM roles WHERE name = ?`, string(name)).
 		Scan(&r.name, &r.description, &created)
 	if err != nil {
 		return roleRow{}, err
 	}
 	r.createdAt, _ = time.Parse(timeLayout, created)
-	rows, err := s.db.QueryContext(ctx, `SELECT permission FROM role_permissions WHERE role = ? ORDER BY permission`, string(name))
+	rows, err := s.read().QueryContext(ctx, `SELECT permission FROM role_permissions WHERE role = ? ORDER BY permission`, string(name))
 	if err != nil {
 		return roleRow{}, err
 	}
@@ -173,7 +173,7 @@ func (s store) deleteRole(ctx context.Context, name Role) (inUse int, err error)
 
 // roleUserCounts returns how many users have each role.
 func (s store) roleUserCounts(ctx context.Context) (map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT lower(role), COUNT(*) FROM users GROUP BY lower(role)`)
+	rows, err := s.read().QueryContext(ctx, `SELECT lower(role), COUNT(*) FROM users GROUP BY lower(role)`)
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,17 @@ export const authIt: Record<keyof typeof auth, string> = {
   "auth.code.verify": "Verifica",
   "auth.code.back": "Indietro",
 
+  "auth.error.credentials": "Nome utente o password errati.",
+  "auth.error.code": "Il codice non è valido. Controllalo e riprova.",
+  "auth.error.expired": "Questo accesso è scaduto. Torna indietro e accedi di nuovo.",
+  "auth.error.tooMany": "Troppi tentativi non riusciti. Riprova tra {minutes} minuti.",
+  "auth.error.tooManyOne": "Troppi tentativi non riusciti. Riprova tra un minuto.",
+  "auth.error.tooManyLater": "Troppi tentativi non riusciti. Riprova più tardi.",
+  "auth.error.busy": "L'hub è occupato a verificare le password. Nuovo tentativo tra {seconds} secondi…",
+  "auth.error.busyGaveUp": "L'hub è ancora occupato a verificare le password. Riprova tra poco.",
+  "auth.error.setupToken": "Il token di configurazione non è valido. Copialo di nuovo dal log dell'hub.",
+  "auth.error.setupDone": "L'account amministratore è già stato creato. Ricarica la pagina per accedere.",
+
   "auth.recovery.one":
     "Hai effettuato l'accesso con un codice di recupero; ne resta {count}. Se non eri tu, cambia la password. Genera nuovi codici dalla pagina Account.",
   "auth.recovery.many":

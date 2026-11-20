@@ -10,6 +10,7 @@ import (
 
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/localstatus"
+	"github.com/CodexCircle/Regulus/internal/storage"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
 
@@ -61,9 +62,14 @@ func TestLocalStatusGoneWithTheHub(t *testing.T) {
 // A database that does not answer (#313): the status must still come back
 // well within the client's timeout, and name the problem once the watcher
 // recorded it. Holding the only connection of the SQLite pool makes every
-// ping and query block, like PostgreSQL behind a firewall that drops packets.
+// ping and query block, like PostgreSQL behind a firewall that drops packets;
+// the hub runs without its read pool (#219), so that one connection is all
+// it has.
 func TestLocalStatusAnswersWhileTheDatabaseBlocks(t *testing.T) {
+	old := tuneStorage
+	tuneStorage = func(c *storage.Config) { c.ReadConns = -1 }
 	h := startHubWithConfig(t, config.Default())
+	tuneStorage = old
 	if h.cfg.Storage().IsPostgres() {
 		t.Skip("blocks the single connection of the SQLite pool")
 	}

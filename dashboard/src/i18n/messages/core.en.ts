@@ -48,4 +48,9 @@ export const core = {
   "database.down":
     "The database is not answering. Signing in and most pages will fail until it is back. The hub keeps running and reconnects by itself.",
   "database.recovered": "The database is answering again.",
+
+  "request.failed": "The hub answered {status} to {method} {path}, without an explanation.",
+  "request.notJson": "The answer to {method} {path} is not JSON ({type}); a proxy or captive portal may be in the way.",
+  "request.notJsonNoType": "The answer to {method} {path} is not JSON (it has no content type); a proxy or captive portal may be in the way.",
+  "request.network": "No answer from the hub to {method} {path}. Check the network connection and that the hub is running.",
 } as const;

@@ -7,10 +7,13 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"runtime"
+	"strconv"
 	"testing"
 	"testing/fstest"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/CodexCircle/Regulus/internal/config"
@@ -188,6 +191,10 @@ func TestMetricsEndpointErrors(t *testing.T) {
 		"/api/agents/a/metrics?since=today": http.StatusBadRequest,
 		"/api/agents/a/metrics?limit=0":     http.StatusBadRequest,
 		"/api/agents/a/metrics?limit=x":     http.StatusBadRequest,
+		"/api/agents/a/metrics?step=x":      http.StatusBadRequest,
+		"/api/agents/a/metrics?step=30":     http.StatusBadRequest,
+		"/api/agents/a/metrics?step=500ms":  http.StatusBadRequest,
+		"/api/agents/a/metrics?step=2h":     http.StatusBadRequest,
 	} {
 		if res, _ := getMetrics(t, src, path); res.StatusCode != want {
 			t.Errorf("%s: status = %d, want %d", path, res.StatusCode, want)
@@ -227,5 +234,162 @@ func TestConfiguredMetricsIntervalReachesAgents(t *testing.T) {
 	defer func() { _ = h.Close() }()
 	if got := h.agents.metricsInterval; got != 7*time.Second {
 		t.Fatalf("metrics interval = %v, want 7s", got)
+	}
+}
+
+// typicalReport has a few disks and interfaces, like a small server.
+func typicalReport(uptime uint64) *agentv1.MetricsReport {
+	r := report(uptime)
+	r.Cpu = &agentv1.CpuMetrics{UsagePercent: 12.5, Load_1: 0.3}
+	r.Memory = &agentv1.MemoryMetrics{TotalBytes: 8 << 30, UsedBytes: 3 << 30}
+	for i := range 4 {
+		r.Disks = append(r.Disks, &agentv1.DiskMetrics{MountPoint: "/srv/data" + strconv.Itoa(i), Filesystem: "ext4", TotalBytes: 1 << 40, UsedBytes: 1 << 39})
+		r.Networks = append(r.Networks, &agentv1.NetworkMetrics{Interface: "eth" + strconv.Itoa(i), RxBytes: 1 << 30, TxBytes: 1 << 29})
+	}
+	return r
+}
+
+// TestMetricsStoreKeepsAGlobalBudget is #244: with many agents the store stays
+// within its budget, and what goes is the oldest samples, whichever agent
+// they belong to.
+func TestMetricsStoreKeepsAGlobalBudget(t *testing.T) {
+	now := time.Now()
+	store := newMetricsStore(time.Hour)
+	store.now = func() time.Time { return now }
+	per := sampleCost(typicalReport(1000)) // uptimes 1000 to 2999 have the same size
+	store.budget = 300 * per               // room for 300 samples
+	const agents, rounds = 100, 20
+
+	for r := range rounds {
+		for a := range agents {
+			now = now.Add(time.Millisecond) // every sample has its own time
+			store.add("agent-"+strconv.Itoa(a), typicalReport(uint64(1000+r*agents+a)))
+			if used := store.size(); used > store.budget {
+				t.Fatalf("round %d, agent %d: the store uses %d, over its budget of %d", r, a, used, store.budget)
+			}
+		}
+	}
+
+	// Exactly the newest 300 samples are left: the last three rounds.
+	var kept []uint64
+	for a := range agents {
+		for _, s := range store.history("agent-" + strconv.Itoa(a)) {
+			kept = append(kept, s.Report.GetUptimeSeconds())
+		}
+	}
+	if len(kept) != 300 {
+		t.Fatalf("kept %d samples, want 300", len(kept))
+	}
+	first := uint64(1000 + (rounds-3)*agents)
+	for _, u := range kept {
+		if u < first {
+			t.Fatalf("sample %d was kept, but everything before %d is older than what was dropped", u, first)
+		}
+	}
+}
+
+// TestMetricsStoreKeepsTheNewestSampleOfEachAgent: a budget too small even for
+// one sample per agent still leaves every agent its current state.
+func TestMetricsStoreKeepsTheNewestSampleOfEachAgent(t *testing.T) {
+	store := newMetricsStore(time.Hour)
+	store.budget = 1
+	for i := range 3 {
+		for _, id := range []string{"a", "b"} {
+			store.add(id, report(uint64(i)))
+		}
+	}
+	for _, id := range []string{"a", "b"} {
+		if got := store.history(id); len(got) != 1 || got[0].Report.GetUptimeSeconds() != 2 {
+			t.Fatalf("history(%s) = %v, want only the newest sample", id, got)
+		}
+	}
+}
+
+// TestMetricsStoreBudgetMatchesTheHeap checks the estimate of sampleCost
+// against the memory the Go runtime really holds for the store.
+func TestMetricsStoreBudgetMatchesTheHeap(t *testing.T) {
+	store := newMetricsStore(time.Hour)
+	store.budget = 8 << 20
+	wire, err := proto.Marshal(typicalReport(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := range 15000 {
+		// Reports arrive as the hub decodes them: fresh messages.
+		r := &agentv1.MetricsReport{}
+		if err := proto.Unmarshal(wire, r); err != nil {
+			t.Fatal(err)
+		}
+		store.add("agent-"+strconv.Itoa(i%500), r)
+	}
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+	held := int64(after.HeapAlloc) - int64(before.HeapAlloc)
+	t.Logf("budget %d, estimate %d, heap held %d", store.budget, store.size(), held)
+	if held > store.budget*5/4 {
+		t.Errorf("the store holds %d bytes of heap, more than its budget of %d by over 25%%", held, store.budget)
+	}
+	runtime.KeepAlive(store)
+}
+
+func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
+	// Six reports 10 s apart from a whole minute: buckets of 30 s hold three
+	// each.
+	t0 := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	var samples []MetricsSample
+	for i := range 6 {
+		samples = append(samples, MetricsSample{At: t0.Add(time.Duration(i) * 10 * time.Second), Report: &agentv1.MetricsReport{
+			Cpu:      &agentv1.CpuMetrics{UsagePercent: float64(10 * (i + 1)), Load_1: float64(i)},
+			Memory:   &agentv1.MemoryMetrics{TotalBytes: 1000, UsedBytes: uint64(100 * (i + 1))},
+			Disks:    []*agentv1.DiskMetrics{{MountPoint: "/", UsedBytes: uint64(i)}},
+			Networks: []*agentv1.NetworkMetrics{{Interface: "eth0", RxBytes: uint64(100 * i * i), TxBytes: uint64(10 * i)}},
+			// The agent's own times: rates come from them.
+			CollectedAt:   timestamppb.New(t0.Add(time.Duration(i) * 10 * time.Second)),
+			UptimeSeconds: uint64(1000 + 10*i),
+		}})
+	}
+	src := fakeSource{metrics: map[string][]MetricsSample{"a": samples}}
+
+	res, out := getMetrics(t, src, "/api/agents/a/metrics?step=30s")
+	if res.StatusCode != http.StatusOK || len(out.Points) != 2 {
+		t.Fatalf("status = %d, %d points, want 2", res.StatusCode, len(out.Points))
+	}
+	first, second := out.Points[0], out.Points[1]
+	if !first.At.Equal(t0.Add(20*time.Second)) || !second.At.Equal(t0.Add(50*time.Second)) {
+		t.Errorf("times = %v, %v; want the newest report of each bucket", first.At, second.At)
+	}
+	if first.CPUPercent != 20 || second.CPUPercent != 50 || first.Load1 != 1 || first.MemoryUsedBytes != 200 {
+		t.Errorf("means: cpu %v %v, load %v, memory %v", first.CPUPercent, second.CPUPercent, first.Load1, first.MemoryUsedBytes)
+	}
+	if first.UptimeSeconds != 1020 || first.MemoryTotalBytes != 1000 || first.Disks[0].UsedBytes != 2 || first.Networks[0].RxBytes != 400 {
+		t.Errorf("the newest report's values were not kept: %+v", first)
+	}
+	// rx rates per report: null, 10, 30 | 50, 70, 90 B/s; tx: null, 1, 1 | 1, 1, 1.
+	if r := first.Networks[0].RxBytesPerSec; r == nil || math.Abs(*r-20) > 1e-9 {
+		t.Errorf("first bucket rx rate = %v, want 20 (the null rate left out)", r)
+	}
+	if r := second.Networks[0].RxBytesPerSec; r == nil || math.Abs(*r-70) > 1e-9 {
+		t.Errorf("second bucket rx rate = %v, want 70", r)
+	}
+	if r := second.Networks[0].TxBytesPerSec; r == nil || math.Abs(*r-1) > 1e-9 {
+		t.Errorf("second bucket tx rate = %v, want 1", r)
+	}
+
+	// Buckets do not move with since: the reports after it fill the same
+	// bucket, and limit counts buckets.
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=30s&since="+t0.Add(30*time.Second).Format(time.RFC3339Nano))
+	if len(out.Points) != 1 || !out.Points[0].At.Equal(t0.Add(50*time.Second)) || out.Points[0].CPUPercent != 55 {
+		t.Errorf("step+since: %+v", out.Points)
+	}
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=10s&limit=2")
+	if len(out.Points) != 2 || out.Points[1].CPUPercent != 60 {
+		t.Errorf("a step as long as the interval must not change the points: %+v", out.Points)
+	}
+	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=1h")
+	if len(out.Points) != 1 || out.Points[0].CPUPercent != 35 {
+		t.Errorf("one bucket for the hour: %+v", out.Points)
 	}
 }

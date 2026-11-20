@@ -566,8 +566,14 @@ func TestRolloutStateSurvivesARestart(t *testing.T) {
 	admin.do("POST", "/api/updates/rollout", map[string]any{})
 	waitRollout(t, admin, RolloutFailed)
 
-	reopen := func() *Hub {
+	// One hub per data directory (and per database): the old one stops
+	// before the next starts, as in a real restart. Close may run again in the
+	// cleanups; only its first call does anything.
+	reopen := func(old *Hub) *Hub {
 		t.Helper()
+		if err := old.Close(); err != nil {
+			t.Fatal(err)
+		}
 		h2, err := New(t.Context(), h.cfg, quiet(), fstest.MapFS{}, WithVersion("9.9.9"),
 			WithUpdateSource(rs.Source), WithUpdateVerifier(acceptAll{}))
 		if err != nil {
@@ -576,7 +582,7 @@ func TestRolloutStateSurvivesARestart(t *testing.T) {
 		t.Cleanup(func() { _ = h2.Close() })
 		return h2
 	}
-	h2 := reopen()
+	h2 := reopen(h)
 	if h2.rollout.failedTarget != "9.9.9" {
 		t.Errorf("failed target after a restart = %q", h2.rollout.failedTarget)
 	}
@@ -593,13 +599,16 @@ func TestRolloutStateSurvivesARestart(t *testing.T) {
 	run.status.Agents = []RolloutAgent{{ID: "x", Status: AgentInstalling}, {ID: "y", Status: AgentPending}}
 	h2.rollout.mu.Unlock()
 	h2.persistRollout(run)
-	h3 := reopen()
+	h3 := reopen(h2)
 	st, _ = h3.RolloutStatus(t.Context())
 	if st.State != RolloutStopped || st.FinishedAt == nil || st.Agents[0].Status != AgentUnknown || st.Agents[0].Message != msgHubRestarted || st.Agents[1].Status != AgentSkipped {
 		t.Errorf("an interrupted rollout after a restart = %+v", st)
 	}
 
 	// A hub of another version does not show a rollout to the old one.
+	if err := h3.Close(); err != nil {
+		t.Fatal(err)
+	}
 	h4, err := New(t.Context(), h.cfg, quiet(), fstest.MapFS{}, WithVersion("9.9.10"),
 		WithUpdateSource(rs.Source), WithUpdateVerifier(acceptAll{}))
 	if err != nil {

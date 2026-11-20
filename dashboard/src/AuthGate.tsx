@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   ApiError,
+  apiErrorText,
   fetchMe,
   isPending,
   login,
@@ -12,7 +13,7 @@ import {
   type Me,
   type User,
 } from "./api";
-import { useT } from "./i18n";
+import { useT, type MessageKey } from "./i18n";
 import { SessionContext, type Session } from "./session";
 import { StepUp } from "./StepUp";
 import { TwoFactor } from "./TwoFactor";
@@ -137,25 +138,81 @@ export function AuthFrame({ children }: { children: ReactNode }) {
   );
 }
 
-function useSubmit<T>(action: () => Promise<T>, onDone: (result: T) => void) {
+// AuthForm names the form an answer belongs to: the same status means
+// different things on each.
+type AuthForm = "login" | "code" | "setup";
+
+type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
+
+// BUSY_RETRIES is how many times a form tries again by itself when the hub
+// answers 503 (too many passwords being checked at once).
+export const BUSY_RETRIES = 3;
+const BUSY_WAIT_SECONDS = 5;
+
+// authErrorText turns what a sign-in, code or setup request failed with into
+// a sentence in the user's language. The hub's English text is shown only
+// for answers without a key of their own (a 400 on input the hub refused).
+export function authErrorText(t: Translate, form: AuthForm, err: unknown): string {
+  if (!(err instanceof ApiError)) return apiErrorText(t, err);
+  switch (err.status) {
+    case 401:
+      if (form === "code") return t(err.code === "login_expired" ? "auth.error.expired" : "auth.error.code");
+      return t("auth.error.credentials");
+    case 403:
+      if (form === "setup") return t("auth.error.setupToken");
+      break;
+    case 409:
+      if (form === "setup") return t("auth.error.setupDone");
+      break;
+    case 429: {
+      if (err.retryAfter === undefined) return t("auth.error.tooManyLater");
+      const minutes = Math.max(1, Math.ceil(err.retryAfter / 60));
+      return t(minutes === 1 ? "auth.error.tooManyOne" : "auth.error.tooMany", { minutes });
+    }
+    case 503:
+      return t("auth.error.busyGaveUp");
+  }
+  return apiErrorText(t, err);
+}
+
+// useSubmit runs a form's request. A 503 (the hub is busy checking passwords)
+// is tried again by itself after Retry-After seconds, up to BUSY_RETRIES
+// times, with a note in the meantime; every other failure is shown at once.
+function useSubmit<T>(form: AuthForm, action: () => Promise<T>, onDone: (result: T) => void) {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    action().then(
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const attempt = (run: () => Promise<T>, retriesLeft: number) => {
+    run().then(
       (result) => {
         // The form may stay on screen (a login that asks for a code, then
         // Back): it must be usable again.
         setBusy(false);
+        setError(null);
         onDone(result);
       },
       (err: unknown) => {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : String(err));
-      setBusy(false);
+        if (err instanceof ApiError && err.status === 503 && retriesLeft > 0) {
+          const seconds = err.retryAfter ?? BUSY_WAIT_SECONDS;
+          setError(t("auth.error.busy", { seconds }));
+          timer.current = setTimeout(() => attempt(run, retriesLeft - 1), seconds * 1000);
+          return;
+        }
+        setError(authErrorText(t, form, err));
+        setBusy(false);
       },
     );
+  };
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    clearTimeout(timer.current);
+    setBusy(true);
+    setError(null);
+    attempt(action, BUSY_RETRIES);
   };
   return { error, busy, submit };
 }
@@ -167,6 +224,7 @@ function LoginForm({ onDone }: { onDone: (result: LoginResult) => void }) {
   // Set once the password was right and the account asks for a code.
   const [pending, setPending] = useState<string | null>(null);
   const { error, busy, submit } = useSubmit(
+    "login",
     () => login(username, password),
     (result) => {
       if (isPending(result)) setPending(result.pending_token);
@@ -208,7 +266,7 @@ function LoginForm({ onDone }: { onDone: (result: LoginResult) => void }) {
 function CodeForm({ pending, onDone, onBack }: { pending: string; onDone: (r: LoginResult) => void; onBack: () => void }) {
   const t = useT();
   const [code, setCode] = useState("");
-  const { error, busy, submit } = useSubmit(() => loginTwoFactor(pending, code), onDone);
+  const { error, busy, submit } = useSubmit("code", () => loginTwoFactor(pending, code), onDone);
   return (
     <form onSubmit={submit} aria-labelledby="code-heading">
       <h2 id="code-heading">{t("auth.code.title")}</h2>
@@ -255,7 +313,7 @@ function SetupForm({ onDone }: { onDone: (result: LoginResult) => void }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [mismatch, setMismatch] = useState(false);
-  const { error, busy, submit } = useSubmit(() => setupAdmin(token.trim(), username, password), onDone);
+  const { error, busy, submit } = useSubmit("setup", () => setupAdmin(token.trim(), username, password), onDone);
 
   const onSubmit = (e: FormEvent) => {
     if (password !== confirm) {

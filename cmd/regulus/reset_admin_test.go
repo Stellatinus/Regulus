@@ -88,3 +88,29 @@ func TestResetAdminRejectsAWrongAccount(t *testing.T) {
 		t.Errorf("stderr = %q, stdout = %q", errOut.String(), out.String())
 	}
 }
+
+// reset-admin runs beside a hub that may be older than the binary (a package
+// upgrade before the service restart): it must not migrate (#217).
+func TestResetAdminDoesNotMigrate(t *testing.T) {
+	dir := hubWithAdmin(t)
+	db := storagetest.Open(t, dir)
+	var last int
+	if err := db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&last); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version = ?`, last); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if code := resetAdmin([]string{"--data-dir", dir}, storagetest.Getenv(t, dir), &out, &errOut); code != 1 {
+		t.Fatalf("exit code = %d, want 1; stderr = %s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "restart the hub") || out.Len() != 0 {
+		t.Errorf("stderr = %q, stdout = %q; want the advice to restart the hub and no link", errOut.String(), out.String())
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = ?`, last).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("migration %d was applied by reset-admin (count %d, err %v)", last, n, err)
+	}
+}

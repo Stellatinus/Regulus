@@ -17,7 +17,7 @@ const removesAnAdmin = `(users.role <> 'admin' OR users.disabled = 1 OR EXISTS (
 	SELECT 1 FROM users o WHERE o.id <> users.id AND o.role = 'admin' AND o.disabled = 0))`
 
 func (s store) listUsers(ctx context.Context) ([]User, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, username, role, created_at, disabled, `+hasTwoFactor+` FROM users ORDER BY username`)
+	rows, err := s.read().QueryContext(ctx, `SELECT id, username, role, created_at, disabled, `+hasTwoFactor+` FROM users ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ type SessionInfo struct {
 }
 
 func (s store) listSessions(ctx context.Context, userID int64, now time.Time, currentHash string) ([]SessionInfo, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.read().QueryContext(ctx,
 		`SELECT token_hash, remote_addr, user_agent, created_at, last_used_at, expires_at
 		 FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY last_used_at DESC`,
 		userID, now.UTC().Format(timeLayout))
@@ -172,7 +172,7 @@ func (s store) deleteSessionByID(ctx context.Context, userID int64, id string) e
 func (s store) touchSession(ctx context.Context, tokenHash string, now time.Time) {
 	_, _ = s.db.ExecContext(ctx,
 		`UPDATE sessions SET last_used_at = ? WHERE token_hash = ? AND last_used_at < ?`,
-		now.UTC().Format(timeLayout), tokenHash, now.Add(-time.Minute).UTC().Format(timeLayout))
+		now.UTC().Format(timeLayout), tokenHash, now.Add(-sessionTouchEvery).UTC().Format(timeLayout))
 }
 
 // AuditEntry is one recorded account event.
@@ -196,7 +196,7 @@ func (s store) addAudit(ctx context.Context, e AuditEntry) error {
 }
 
 func (s store) listAudit(ctx context.Context, limit int) ([]AuditEntry, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.read().QueryContext(ctx,
 		`SELECT id, at, actor, event, target, remote, detail FROM audit_log ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err

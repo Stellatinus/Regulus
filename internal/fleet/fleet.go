@@ -84,6 +84,7 @@ type Agent struct {
 // Service is the registry of remote agents.
 type Service struct {
 	db    *sql.DB
+	rd    *sql.DB // plain reads: the check of a connecting agent, the lists
 	ca    *pki.CA
 	audit Auditor
 	now   func() time.Time
@@ -99,7 +100,15 @@ type failure struct {
 
 // New returns the service. audit may be nil.
 func New(db *sql.DB, ca *pki.CA, audit Auditor) *Service {
-	return &Service{db: db, ca: ca, audit: audit, now: time.Now, failures: map[string]*failure{}}
+	return &Service{db: db, rd: db, ca: ca, audit: audit, now: time.Now, failures: map[string]*failure{}}
+}
+
+// ReadFrom makes the service do its plain reads (Authorize, Agents,
+// PendingTokens) on rd, a pool beside the one it writes with (see
+// storage.HubDB), so that a connecting agent is not checked behind a write.
+func (s *Service) ReadFrom(rd *sql.DB) *Service {
+	s.rd = rd
+	return s
 }
 
 // CA returns the certificate authority, for the listener.
@@ -207,7 +216,7 @@ type PendingToken struct {
 // PendingTokens lists the enrollment tokens that can still be used, oldest
 // first.
 func (s *Service) PendingTokens(ctx context.Context) ([]PendingToken, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.rd.QueryContext(ctx,
 		`SELECT token_hash, name, created_by, created_at, expires_at FROM enrollment_tokens WHERE expires_at > ? ORDER BY created_at, token_hash`,
 		ts(s.now()))
 	if err != nil {
@@ -350,7 +359,7 @@ func (s *Service) Authorize(ctx context.Context, id, serial string) error {
 		want    string
 		revoked sql.NullString
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT cert_serial, revoked_at FROM agents WHERE id = ?`, id).Scan(&want, &revoked)
+	err := s.rd.QueryRowContext(ctx, `SELECT cert_serial, revoked_at FROM agents WHERE id = ?`, id).Scan(&want, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -397,7 +406,7 @@ func (s *Service) Revoke(ctx context.Context, by, id string) error {
 
 // Agents lists the enrolled agents, oldest first.
 func (s *Service) Agents(ctx context.Context) ([]Agent, error) {
-	rows, err := s.db.QueryContext(ctx,
+	rows, err := s.rd.QueryContext(ctx,
 		`SELECT id, name, hostname, version, os_version, created_at, enrolled_from, last_seen_at, revoked_at, cert_not_after FROM agents ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err

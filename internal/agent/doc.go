@@ -14,7 +14,8 @@
 //     connection).
 //
 // Reading order: agent.go (Run and Options), collector.go and sysinfo.go (what is
-// measured), update.go (applying an update), remote.go (enrollment and the remote
-// connection). The certificates are issued by package pki through the hub, and
+// measured), update.go (applying an update), remote.go (enrollment, and the remote
+// connection with its keepalive). Reports collected while no connection is up
+// are not kept or replayed. The certificates are issued by package pki through the hub, and
 // the hub side of the protocol lives in package hub.
 package agent

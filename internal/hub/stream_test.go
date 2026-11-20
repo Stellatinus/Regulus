@@ -262,3 +262,68 @@ func TestStreamEndsWhenTheSessionEnds(t *testing.T) {
 		t.Errorf("a valid session lost its stream: %v", err)
 	}
 }
+
+// TestStreamsPerUserAreCapped is #244: a user cannot open more than
+// maxStreamsPerUser streams; one more is refused, and it works again once one
+// of them closes. Other users are not affected.
+func TestStreamsPerUserAreCapped(t *testing.T) {
+	old := maxStreamsPerUser
+	maxStreamsPerUser = 3
+	t.Cleanup(func() { maxStreamsPerUser = old })
+
+	h := startHub(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	admin, adminToken, _, err := h.auth.Setup(ctx, h.auth.SetupToken(), "admin", "correct horse battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.auth.CreateUser(ctx, admin, "viewer1", "correct horse battery", auth.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	_, viewerToken, _, err := h.auth.Login(ctx, "198.51.100.7", "viewer1", "correct horse battery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Auth: h.auth}))
+	defer srv.Close()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/api/stream"
+	open := func(token string) (*websocket.Conn, *http.Response, error) {
+		conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": {auth.CookieName + "=" + token}}})
+		if err == nil {
+			t.Cleanup(func() { _ = conn.CloseNow() })
+			next(t, ctx, conn, "snapshot")
+		}
+		return conn, resp, err
+	}
+
+	var conns []*websocket.Conn
+	for i := range maxStreamsPerUser {
+		conn, _, err := open(adminToken)
+		if err != nil {
+			t.Fatalf("stream %d: %v", i+1, err)
+		}
+		conns = append(conns, conn)
+	}
+	if _, resp, err := open(adminToken); err == nil || resp == nil || resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("one stream over the cap: err = %v, response = %v, want 429", err, resp)
+	}
+	// Another user has streams of their own.
+	if _, _, err := open(viewerToken); err != nil {
+		t.Fatalf("another user: %v", err)
+	}
+
+	// Closing one frees its place once the server has seen it go.
+	_ = conns[0].Close(websocket.StatusNormalClosure, "")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, _, err := open(adminToken)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after closing a stream: %v", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

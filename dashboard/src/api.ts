@@ -1,3 +1,4 @@
+import { detectLanguage, translate, type MessageKey } from "./i18n";
 import { toMetricsPoints } from "./shapes";
 
 // Agent as returned by GET /api/agents (see internal/hub/api.go).
@@ -73,20 +74,72 @@ export interface Me {
   two_factor_setup_required?: boolean;
 }
 
-// ApiError is thrown for any non-2xx answer, and for a 2xx answer that is not
-// JSON (code INVALID_RESPONSE); message is the hub's explanation when it sent
-// one.
+// ApiError is thrown for any non-2xx answer, for a 2xx answer that is not JSON
+// (code INVALID_RESPONSE) and when the hub cannot be reached (status 0, code
+// NETWORK_ERROR). message is the hub's explanation when it sent one; otherwise
+// it is a catalog text (messageKey, messageParams) in the language of the page
+// when the error was made, which a component can translate again with
+// apiErrorText.
 export class ApiError extends Error {
   readonly status: number;
   // A machine-readable reason some answers carry, such as two_factor_setup_required.
   readonly code?: string;
+  // How many seconds the hub asks to wait (its Retry-After header), on a 429
+  // or 503 answer that sends one.
+  readonly retryAfter?: number;
+  // The catalog text of message, when the dashboard wrote it (not the hub).
+  readonly messageKey?: MessageKey;
+  readonly messageParams?: Record<string, string | number>;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    retryAfter?: number,
+    text?: { key: MessageKey; params?: Record<string, string | number> },
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;
+    this.messageKey = text?.key;
+    this.messageParams = text?.params;
   }
+}
+
+// genericError is an ApiError whose text comes from the catalog, written in
+// the page's current language.
+function genericError(
+  status: number,
+  key: MessageKey,
+  params: Record<string, string | number>,
+  code?: string,
+  retryAfter?: number,
+): ApiError {
+  return new ApiError(status, translate(detectLanguage(), key, params), code, retryAfter, { key, params });
+}
+
+// apiErrorText is the text of an error in the language of t: a catalog text
+// again for the errors the dashboard wrote, the hub's text or the message
+// otherwise.
+export function apiErrorText(
+  t: (key: MessageKey, params?: Record<string, string | number>) => string,
+  err: unknown,
+): string {
+  if (err instanceof ApiError && err.messageKey) return t(err.messageKey, err.messageParams);
+  return err instanceof Error ? err.message : String(err);
+}
+
+// parseRetryAfter reads a Retry-After header: a number of seconds, or an HTTP
+// date (turned into the seconds left from now). Anything else is undefined.
+export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return Number(v);
+  const at = Date.parse(v);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, Math.ceil((at - now) / 1000));
 }
 
 // TWO_FACTOR_REQUIRED_EVENT is sent on window when the hub refuses a request
@@ -128,23 +181,31 @@ async function request<T>(
   signal?: AbortSignal,
   retried = false,
 ): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    signal,
-    credentials: "same-origin",
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      signal,
+      credentials: "same-origin",
+      headers:
+        body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (err) {
+    // An abort is the caller's doing, not a failure to report.
+    if (signal?.aborted || (err instanceof Error && err.name === "AbortError")) throw err;
+    throw genericError(0, "request.network", { method, path }, NETWORK_ERROR);
+  }
+  const retryAfter = typeof res.headers?.get === "function" ? parseRetryAfter(res.headers.get("Retry-After")) : undefined;
   if (!res.ok) {
-    let message = `${method} ${path} failed: ${res.status}`;
+    let hubMessage: string | undefined;
     let code: string | undefined;
     try {
       const data = (await res.json()) as { error?: string; code?: string };
-      if (data.error) message = data.error;
+      if (data.error) hubMessage = data.error;
       code = data.code;
     } catch {
-      // keep the generic message
+      // no explanation: the generic text below
     }
     if (res.status === 403 && code === "two_factor_setup_required") {
       window.dispatchEvent(new Event(TWO_FACTOR_REQUIRED_EVENT));
@@ -152,7 +213,8 @@ async function request<T>(
     if (res.status === 403 && code === REAUTH_REQUIRED && !retried && reauthHandler && !signal?.aborted) {
       if (await reauthHandler()) return request<T>(method, path, body, signal, true);
     }
-    throw new ApiError(res.status, message, code);
+    if (hubMessage !== undefined) throw new ApiError(res.status, hubMessage, code, retryAfter);
+    throw genericError(res.status, "request.failed", { method, path, status: res.status }, code, retryAfter);
   }
   if (res.status === 204) return undefined as T;
   // The hub answers JSON. Anything else with a 2xx status comes from
@@ -161,13 +223,13 @@ async function request<T>(
   // letting the JSON parser throw a bare SyntaxError.
   const type = typeof res.headers?.get === "function" ? res.headers.get("Content-Type") : null;
   if (type !== null && !/json/i.test(type)) {
-    throw new ApiError(res.status, notJSON(method, path, type), INVALID_RESPONSE);
+    throw notJSON(res.status, method, path, type);
   }
   try {
     return (await res.json()) as T;
   } catch (err) {
     if (signal?.aborted) throw err;
-    throw new ApiError(res.status, notJSON(method, path, type), INVALID_RESPONSE);
+    throw notJSON(res.status, method, path, type);
   }
 }
 
@@ -175,8 +237,15 @@ async function request<T>(
 // the JSON the hub sends.
 export const INVALID_RESPONSE = "invalid_response";
 
-const notJSON = (method: string, path: string, type: string | null) =>
-  `${method} ${path}: the answer is not JSON (${type || "no content type"}); a proxy or captive portal may be in the way`;
+// NETWORK_ERROR is the code of the ApiError (status 0) thrown when no answer
+// came: the network is down, the hub is not running, or the browser refused
+// the request.
+export const NETWORK_ERROR = "network_error";
+
+const notJSON = (status: number, method: string, path: string, type: string | null) =>
+  type
+    ? genericError(status, "request.notJson", { method, path, type }, INVALID_RESPONSE)
+    : genericError(status, "request.notJsonNoType", { method, path }, INVALID_RESPONSE);
 
 // fetchAgents lists the connected agents, or with all every enrolled agent.
 export const fetchAgents = (signal?: AbortSignal, all = false) =>

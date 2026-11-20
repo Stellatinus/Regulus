@@ -14,9 +14,11 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/keepalive"
 
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/pki"
+	"github.com/CodexCircle/Regulus/internal/protocol"
 )
 
 const enrollTimeout = 30 * time.Second
@@ -141,7 +143,15 @@ func Enroll(ctx context.Context, hubAddr, fingerprint, token, version, dir strin
 
 // Dial opens the connection to the hub at hubAddr with the credentials. The
 // connection is made lazily and re-made by gRPC when it drops.
-func (c *Credentials) Dial(hubAddr string) (*grpc.ClientConn, error) {
+//
+// It pings the hub when it has heard nothing for protocol.KeepaliveTime and
+// drops the connection when the answer does not come within
+// protocol.KeepaliveTimeout (#222): a hub whose host lost power, or a NAT that
+// forgot the flow, is noticed in well under a minute and Run reconnects.
+// Without it the agent would believe it is connected until TCP gives up,
+// about 15 minutes later. opts are added after these (a later option wins);
+// tests use them to shorten the keepalive.
+func (c *Credentials) Dial(hubAddr string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	tlsCfg, err := pki.PinnedClientTLS(pki.Fingerprint(c.CADER), &tls.Certificate{
 		Certificate: [][]byte{c.CertDER},
 		PrivateKey:  c.Key,
@@ -149,5 +159,19 @@ func (c *Credentials) Dial(hubAddr string) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return grpc.NewClient(hubAddr, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+	all := append([]grpc.DialOption{
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
+		grpc.WithKeepaliveParams(ClientKeepalive()),
+	}, opts...)
+	return grpc.NewClient(hubAddr, all...)
+}
+
+// ClientKeepalive is the keepalive of the connection to the hub. It pings even
+// with no stream open, between two sessions, which the hub's policy allows.
+func ClientKeepalive() keepalive.ClientParameters {
+	return keepalive.ClientParameters{
+		Time:                protocol.KeepaliveTime,
+		Timeout:             protocol.KeepaliveTimeout,
+		PermitWithoutStream: true,
+	}
 }

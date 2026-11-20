@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/CodexCircle/Regulus/internal/auth"
@@ -36,7 +35,8 @@ sessions. The password is chosen in the dashboard, so it never appears in a
 terminal. Run it as the user that owns the data directory (for the package
 install: sudo -u regulus regulus hub reset-admin --config
 /etc/regulus/config.yaml), on the machine where the
-hub runs; the hub may keep running.
+hub runs; the hub may keep running. It never changes the database schema:
+after a package upgrade, restart the hub first.
 
 Flags:
 `)
@@ -77,21 +77,11 @@ Flags:
 // recoverAdmin opens the database of the hub in cfg and makes the one-time
 // reset link of an admin (see auth.RecoverAdmin).
 func recoverAdmin(ctx context.Context, cfg config.Config, user string) (auth.Recovery, string, error) {
-	// Do not create an empty database where there is none: that would be a
-	// wrong data directory, not a recovery.
-	sc := cfg.Storage()
-	if sc.IsPostgres() {
-		rep, err := storage.Check(ctx, sc)
-		if err != nil {
-			return auth.Recovery{}, "", err
-		}
-		if rep.Schema == 0 {
-			return auth.Recovery{}, "", fmt.Errorf("no hub data in %s: check the database settings", rep.Where)
-		}
-	} else if dbFile := filepath.Join(cfg.DataDir, storage.FileName); !fileExists(dbFile) {
-		return auth.Recovery{}, "", fmt.Errorf("no hub database at %s: check --data-dir (or data_dir in the configuration)", dbFile)
-	}
-	db, err := storage.Open(ctx, sc)
+	// Do not create an empty database where there is none (that would be a
+	// wrong data directory, not a recovery), and do not migrate one: the hub
+	// that uses it may be an older version still running after a package
+	// upgrade, and migrating is the job of the hub that starts next.
+	db, err := storage.OpenExisting(ctx, cfg.Storage())
 	if err != nil {
 		return auth.Recovery{}, "", err
 	}
@@ -106,9 +96,4 @@ func recoverAdmin(ctx context.Context, cfg config.Config, user string) (auth.Rec
 		return auth.Recovery{}, "", err
 	}
 	return rec, fmt.Sprintf("%s/#/reset/%s", cfg.DashboardURL(), rec.Token), nil
-}
-
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }

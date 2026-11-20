@@ -70,8 +70,11 @@ An agent is a remote machine, and one that is compromised or buggy must not be a
 | Texts (host name, versions, mount points, interface names…) | 256 bytes, no control characters | cut, cleaned |
 | Disks and network interfaces per report | 64 each | the rest is cut (logged once per stream) |
 | Reports | one per half of the metrics interval | the extra reports are dropped (logged once per stream) |
+| Metrics kept for all agents together | about 256 MiB (estimated from the size of the reports) | the oldest reports of any agent are dropped first; each agent keeps at least its newest report |
+| Keepalive pings from one connection | one per 15 seconds | the connection is closed (`too_many_pings`) |
+| Calls without a client certificate | only `Enroll` | any other call is refused (`Unauthenticated`), including calls added later |
 
-With one report per interval and one hour of history, a single agent keeps at most about 50 KB per report times the number of reports of that hour (for example about 36 MB at the 10 s default in the worst case, a normal host uses a few hundred bytes per report). The hub does not yet keep a global memory budget across agents; the dashboard port also has header and idle limits (`internal/hub/hub.go`).
+With one report per interval and one hour of history, a single agent keeps at most about 50 KB per report times the number of reports of that hour (for example about 36 MB at the 10 s default in the worst case, a normal host uses a few hundred bytes per report). The budget for all agents together keeps a full hour for about 500 agents with a few disks and interfaces each (a report of such a host costs about 1.3 KB in memory); with more, every agent's history gets shorter, oldest first. The dashboard port also has header and idle limits (`internal/hub/hub.go`), and one user can have at most 16 live streams (`/api/stream`) open.
 
 ## When a disk or the collector does not answer
 
@@ -80,3 +83,5 @@ A network or storage mount whose server is gone can block `statfs` for as long a
 ## How an agent reconnects
 
 When the connection to the hub is lost the agent waits and tries again: 1 second, then twice as long each time up to 30 seconds (`min_backoff` and `max_backoff` of the agent runtime), and every wait is a **random time between half of the delay and all of it**, so that agents that lost the hub together (a restart) do not come back together. The delay starts over at 1 second only after a connection that **held for at least 30 seconds**: a hub that accepts the agent and drops it at once does not turn the retries into a loop of one per second. If the hub closes the stream because a newer connection with the **same identity** took over, two machines hold one certificate (a cloned disk or virtual machine, a copied `/var/lib/regulus-agent`): the agent logs that and waits the longest delay each time. Give each machine its own enrollment. To see it on a real machine follow the `[Test]` issue for agent reconnection.
+
+**A hub that goes silent** (its host lost power, a NAT forgot the connection) is noticed by the keepalive: the agent pings the hub after 30 seconds without hearing from it and drops the connection when the answer does not come within 10 seconds, so it starts reconnecting within about 40 seconds instead of the quarter of an hour TCP takes on its own. The hub does the same towards a silent agent, and refuses a client that pings more often than every 15 seconds. **Reports collected while the hub is away are not kept**: the agent sends nothing until it is connected again, and the history on the dashboard shows a gap for that time (see [Design decisions](decisions.md)).
