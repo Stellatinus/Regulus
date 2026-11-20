@@ -191,13 +191,13 @@ func (s *agentServer) Connect(stream grpc.BidiStreamingServer[agentv1.AgentMessa
 	id := hello.GetAgentId()
 	if who, ok := identityFrom(ctx); ok {
 		// A remote agent is who its certificate says, whatever Hello claims.
-		if id != "" && id != who.AgentID {
+		if id != "" && id != who.ID {
 			return stream.Send(&agentv1.HubMessage{Payload: &agentv1.HubMessage_Reject{Reject: &agentv1.Reject{
 				Reason:  agentv1.Reject_REASON_UNAUTHORIZED,
 				Message: "the agent id does not match the client certificate",
 			}}})
 		}
-		id = who.AgentID
+		id = who.ID
 	}
 	if id == "" {
 		if id, err = newAgentID(); err != nil {
@@ -549,7 +549,7 @@ func (s *agentServer) reject(ctx context.Context, stream grpc.BidiStreamingServe
 	if who, ok := identityFrom(ctx); ok {
 		s.mu.Lock()
 		if len(s.rejected) < maxRejections {
-			s.rejected[who.AgentID] = Rejection{At: time.Now(), Version: hello.GetAgentVersion(), Message: r.GetMessage()}
+			s.rejected[who.ID] = Rejection{At: time.Now(), Version: hello.GetAgentVersion(), Message: r.GetMessage()}
 		}
 		s.mu.Unlock()
 	}

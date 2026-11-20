@@ -27,6 +27,8 @@ Rejected for the first version: a public Access port on every node, and a mandat
 
 *Status: not designed.* Device key, enrollment by QR code, revocation of a lost phone, certificate renewal, threat model.
 
+Already decided (#316, [decisions.md](decisions.md#certificate-kinds-every-certificate-of-the-hub-ca-says-what-it-is-for-audit-issue-316)): a device certificate from the hub CA carries the kind `regulus:device:<id>`, the agent listener refuses it, and the Access service must accept **only** that kind, so an agent certificate is never taken for a phone and the other way round. The threat model of #154 starts from this.
+
 ## 4. Reachability and the gateway ([#155](https://github.com/Stellatinus/Regulus/issues/155), [#161](https://github.com/Stellatinus/Regulus/issues/161), [#162](https://github.com/Stellatinus/Regulus/issues/162))
 
 *Status: direction above, not designed.* Address list, the relay's exposure analysis, local discovery, optional overlay. The gateway's capabilities: relay (first version), notifications (second), authentication (later, separate design).

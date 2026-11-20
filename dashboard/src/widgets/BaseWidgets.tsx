@@ -3,7 +3,8 @@ import { useT } from "../i18n";
 import { formatBytes, formatDuration, formatPercent, formatRate } from "../format";
 import type { MetricsPoint } from "../api";
 import { countedInterfaces } from "../networkInterfaces";
-import { AgentView, Waiting } from "./AgentView";
+import { AgentView, NotAvailable, Waiting } from "./AgentView";
+import { metricsSummary, missing } from "../limits";
 import type { WidgetProps } from "./registry";
 
 // derive computes a value from a widget's window of reports once: the window
@@ -46,21 +47,31 @@ export function SystemWidget(props: WidgetProps) {
           [t("servers.fact.status"), t(`servers.status.${stale ? "stale" : agent.status}`)],
           [t("servers.fact.agentVersion"), agent.version || "-"],
         ];
+        if (agent.container) rows.push([t("servers.fact.container"), agent.container]);
+        const notAvailable = t("servers.metrics.notAvailable");
         if (latest) {
-          rows.push([t("servers.fact.loadAverage"), [latest.load_1, latest.load_5, latest.load_15].map((l) => l.toFixed(2)).join(" · ")]);
-          rows.push([t("servers.fact.uptime"), formatDuration(latest.uptime_seconds, t)]);
-        } else if (agent.uptime_seconds !== null) {
+          rows.push([
+            t("servers.fact.loadAverage"),
+            missing("load", agent, latest) ? notAvailable : [latest.load_1, latest.load_5, latest.load_15].map((l) => l.toFixed(2)).join(" · "),
+          ]);
+          rows.push([t("servers.fact.uptime"), missing("uptime", agent, latest) ? notAvailable : formatDuration(latest.uptime_seconds, t)]);
+        } else if (agent.uptime_seconds !== null && !missing("uptime", agent, latest)) {
           rows.push([t("servers.fact.uptime"), formatDuration(agent.uptime_seconds, t)]);
         }
+        const summary = metricsSummary(agent.collector, latest ? latest.unavailable : agent.unavailable, t);
+        if (summary) rows.push([t("servers.fact.metrics"), summary]);
         return (
-          <dl className="facts">
-            {rows.map(([name, value]) => (
-              <div key={name}>
-                <dt>{name}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <dl className="facts">
+              {rows.map(([name, value]) => (
+                <div key={name}>
+                  <dt>{name}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+            {agent.container && <p className="note">{t("servers.widget.containerNote", { name: agent.container })}</p>}
+          </>
         );
       }}
     </AgentView>
@@ -75,16 +86,22 @@ export function CpuWidget(props: WidgetProps) {
       {({ agent, points, times, latest }) =>
         !latest ? (
           <Waiting />
+        ) : missing("cpu", agent, latest) ? (
+          <NotAvailable part="cpu" />
         ) : (
           <>
             <Stat
               value={formatPercent(latest.cpu_percent)}
-              caption={t(agent.cpu_count ? "servers.widget.cpuLoadCores" : "servers.widget.cpuLoad", {
-                one: latest.load_1.toFixed(2),
-                five: latest.load_5.toFixed(2),
-                fifteen: latest.load_15.toFixed(2),
-                count: agent.cpu_count ?? 0,
-              })}
+              caption={
+                missing("load", agent, latest)
+                  ? undefined
+                  : t(agent.cpu_count ? "servers.widget.cpuLoadCores" : "servers.widget.cpuLoad", {
+                      one: latest.load_1.toFixed(2),
+                      five: latest.load_5.toFixed(2),
+                      fifteen: latest.load_15.toFixed(2),
+                      count: agent.cpu_count ?? 0,
+                    })
+              }
             />
             <Chart
               title={t("servers.widget.cpuChart")}
@@ -105,9 +122,11 @@ export function MemoryWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ points, times, latest }) =>
+      {({ agent, points, times, latest }) =>
         !latest ? (
           <Waiting />
+        ) : missing("memory", agent, latest) ? (
+          <NotAvailable part="memory" />
         ) : (
           <>
             <Stat
@@ -143,8 +162,9 @@ export function DiskWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ latest }) => {
+      {({ agent, latest }) => {
         if (!latest) return <Waiting />;
+        if (missing("disks", agent, latest)) return <NotAvailable part="disks" />;
         if (latest.disks.length === 0) return <p>{t("servers.widget.noDisks")}</p>;
         return (
           <ul className="disks">
@@ -189,8 +209,9 @@ export function NetworkWidget(props: WidgetProps) {
   const t = useT();
   return (
     <AgentView {...props}>
-      {({ points, times, latest }) => {
+      {({ agent, points, times, latest }) => {
         if (!latest) return <Waiting />;
+        if (missing("network", agent, latest)) return <NotAvailable part="network" />;
         // The total leaves out bridges, container ports and tunnels, whose bytes
         // are already counted on the physical interface; the table lists all.
         const { down, up } = derive(points, "network", () => {
@@ -249,6 +270,7 @@ export function UptimeWidget(props: WidgetProps) {
   return (
     <AgentView {...props}>
       {({ agent, latest }) => {
+        if (missing("uptime", agent, latest)) return <NotAvailable part="uptime" />;
         const seconds = latest?.uptime_seconds ?? agent.uptime_seconds;
         if (seconds === null || seconds === undefined) return <Waiting />;
         const since = latest ? Date.parse(latest.at) - seconds * 1000 : null;

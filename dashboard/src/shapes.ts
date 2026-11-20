@@ -61,7 +61,18 @@ const POINT_NUMBERS = [
 export function toMetricsPoint(v: unknown): MetricsPoint | null {
   if (!isObj(v) || typeof v.at !== "string" || Number.isNaN(Date.parse(v.at))) return null;
   if (!POINT_NUMBERS.every((k) => isNum(v[k]))) return null;
-  return { ...(v as unknown as MetricsPoint), disks: list(v.disks, toDisk), networks: list(v.networks, toNetwork) };
+  return {
+    ...(v as unknown as MetricsPoint),
+    disks: list(v.disks, toDisk),
+    networks: list(v.networks, toNetwork),
+    unavailable: strings(v.unavailable),
+  };
+}
+
+// strings keeps the strings of a list, or returns undefined when there are none.
+function strings(v: unknown): string[] | undefined {
+  const out = list(v, strOrNull);
+  return out.length > 0 ? out : undefined;
 }
 
 // toAgent returns an agent with an id and the fields the widgets read set to
@@ -76,6 +87,9 @@ export function toAgent(v: unknown): Agent | null {
     last_heartbeat: strOrNull(v.last_heartbeat),
     metrics_at: strOrNull(v.metrics_at),
     uptime_seconds: numOrNull(v.uptime_seconds),
+    collector: typeof v.collector === "string" ? v.collector : undefined,
+    container: typeof v.container === "string" ? v.container : undefined,
+    unavailable: strings(v.unavailable),
   };
 }
 

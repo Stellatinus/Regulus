@@ -73,6 +73,16 @@ type agentJSON struct {
 	// CertNotAfter is when the agent's client certificate ends; absent for the
 	// built-in agent and while the hub does not know it (#245).
 	CertNotAfter *time.Time `json:"cert_not_after,omitempty"`
+	// Container is the container the agent says it runs in ("lxc", "docker",
+	// ...), absent on a machine of its own; CPU and memory may then be the
+	// host's (#230).
+	Container string `json:"container,omitempty"`
+	// Collector and Unavailable come from the last metrics report: which
+	// collector the agent uses ("linux" or "basic") and the parts it could not
+	// read ("cpu", "load", "memory", "disks", "network", "uptime"). Both are
+	// absent before the first report and for an agent older than them.
+	Collector   string   `json:"collector,omitempty"`
+	Unavailable []string `json:"unavailable,omitempty"`
 }
 
 // withRegistry adds what the registry knows of an enrolled agent to its JSON.
@@ -104,6 +114,7 @@ func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON
 		out.Arch = s.Arch
 		out.CPUCount = s.CpuCount
 		out.MemoryTotalBytes = s.MemoryTotalBytes
+		out.Container = s.Container
 	}
 
 	lastSeen := a.ConnectedAt
@@ -123,6 +134,8 @@ func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON
 		}
 		uptime := m.UptimeSeconds
 		out.UptimeSeconds = &uptime
+		out.Collector = m.GetCollector()
+		out.Unavailable = m.GetUnavailable()
 	}
 	return out
 }
@@ -226,6 +239,9 @@ type pointJSON struct {
 	UptimeSeconds        uint64        `json:"uptime_seconds"`
 	Disks                []diskJSON    `json:"disks"`
 	Networks             []networkJSON `json:"networks"`
+	// Unavailable names the parts of the report the agent could not read; their
+	// numbers are zero and mean nothing (#230). Absent when all was read.
+	Unavailable []string `json:"unavailable,omitempty"`
 }
 
 type diskJSON struct {
@@ -292,6 +308,7 @@ func toPoint(s MetricsSample, prev *MetricsSample) pointJSON {
 		UptimeSeconds:        r.GetUptimeSeconds(),
 		Disks:                []diskJSON{},
 		Networks:             []networkJSON{},
+		Unavailable:          r.GetUnavailable(),
 	}
 	for _, d := range r.GetDisks() {
 		p.Disks = append(p.Disks, diskJSON{d.GetMountPoint(), d.GetFilesystem(), d.GetTotalBytes(), d.GetUsedBytes()})

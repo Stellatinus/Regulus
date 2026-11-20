@@ -459,8 +459,14 @@ type SystemInfo struct {
 	Arch             string                 `protobuf:"bytes,5,opt,name=arch,proto3" json:"arch,omitempty"` // for example "amd64", "arm64"
 	CpuCount         uint32                 `protobuf:"varint,6,opt,name=cpu_count,json=cpuCount,proto3" json:"cpu_count,omitempty"`
 	MemoryTotalBytes uint64                 `protobuf:"varint,7,opt,name=memory_total_bytes,json=memoryTotalBytes,proto3" json:"memory_total_bytes,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The container the agent runs in, when it can tell: "docker", "podman",
+	// "lxc", "systemd-nspawn" or another name systemd gives; empty on a machine
+	// of its own (or when it cannot tell). In a container the CPU and memory
+	// figures read from /proc may be the host's (docs/remote-agents.md).
+	// Added in protocol 1 without a new version: an older hub ignores it.
+	Container     string `protobuf:"bytes,8,opt,name=container,proto3" json:"container,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SystemInfo) Reset() {
@@ -540,6 +546,13 @@ func (x *SystemInfo) GetMemoryTotalBytes() uint64 {
 		return x.MemoryTotalBytes
 	}
 	return 0
+}
+
+func (x *SystemInfo) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
 }
 
 // Welcome accepts the agent and configures the stream.
@@ -776,8 +789,18 @@ type MetricsReport struct {
 	// Added in protocol 1 without a new version: an older hub ignores them.
 	Plugins        []*PluginStatus `protobuf:"bytes,7,rep,name=plugins,proto3" json:"plugins,omitempty"`
 	PluginsEnabled bool            `protobuf:"varint,8,opt,name=plugins_enabled,json=pluginsEnabled,proto3" json:"plugins_enabled,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Which collector made the report: "linux" (everything from /proc and
+	// statfs) or "basic" (a system without /proc: time and uptime only). Empty
+	// from an agent older than this field.
+	Collector string `protobuf:"bytes,9,opt,name=collector,proto3" json:"collector,omitempty"`
+	// The parts of the report the agent could not read on this system, so that
+	// the dashboard says so instead of showing zeros or an empty widget: any of
+	// "cpu", "load", "memory", "disks", "network", "uptime". A hub shows a value
+	// it does not know as it is. Empty when everything was read, and from an
+	// agent older than this field. Added in protocol 1 without a new version.
+	Unavailable   []string `protobuf:"bytes,10,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MetricsReport) Reset() {
@@ -864,6 +887,20 @@ func (x *MetricsReport) GetPluginsEnabled() bool {
 		return x.PluginsEnabled
 	}
 	return false
+}
+
+func (x *MetricsReport) GetCollector() string {
+	if x != nil {
+		return x.Collector
+	}
+	return ""
+}
+
+func (x *MetricsReport) GetUnavailable() []string {
+	if x != nil {
+		return x.Unavailable
+	}
+	return nil
 }
 
 // PluginStatus is the state of one plugin as the agent's supervisor sees it.
@@ -1689,7 +1726,7 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\ragent_version\x18\x02 \x01(\tR\fagentVersion\x12\x19\n" +
 	"\bagent_id\x18\x03 \x01(\tR\aagentId\x124\n" +
 	"\x06system\x18\x04 \x01(\v2\x1c.regulus.agent.v1.SystemInfoR\x06system\x120\n" +
-	"\x14min_protocol_version\x18\x05 \x01(\rR\x12minProtocolVersion\"\xce\x01\n" +
+	"\x14min_protocol_version\x18\x05 \x01(\rR\x12minProtocolVersion\"\xec\x01\n" +
 	"\n" +
 	"SystemInfo\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x0e\n" +
@@ -1699,7 +1736,8 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x06kernel\x18\x04 \x01(\tR\x06kernel\x12\x12\n" +
 	"\x04arch\x18\x05 \x01(\tR\x04arch\x12\x1b\n" +
 	"\tcpu_count\x18\x06 \x01(\rR\bcpuCount\x12,\n" +
-	"\x12memory_total_bytes\x18\a \x01(\x04R\x10memoryTotalBytes\"\xb9\x02\n" +
+	"\x12memory_total_bytes\x18\a \x01(\x04R\x10memoryTotalBytes\x12\x1c\n" +
+	"\tcontainer\x18\b \x01(\tR\tcontainer\"\xb9\x02\n" +
 	"\aWelcome\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12\x1f\n" +
 	"\vhub_version\x18\x02 \x01(\tR\n" +
@@ -1721,7 +1759,7 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x13REASON_UNAUTHORIZED\x10\x02\x12\x18\n" +
 	"\x14REASON_AGENT_TOO_OLD\x10\x03\"@\n" +
 	"\tHeartbeat\x123\n" +
-	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xb4\x03\n" +
+	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xf4\x03\n" +
 	"\rMetricsReport\x12=\n" +
 	"\fcollected_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12.\n" +
 	"\x03cpu\x18\x02 \x01(\v2\x1c.regulus.agent.v1.CpuMetricsR\x03cpu\x127\n" +
@@ -1730,7 +1768,10 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\bnetworks\x18\x05 \x03(\v2 .regulus.agent.v1.NetworkMetricsR\bnetworks\x12%\n" +
 	"\x0euptime_seconds\x18\x06 \x01(\x04R\ruptimeSeconds\x128\n" +
 	"\aplugins\x18\a \x03(\v2\x1e.regulus.agent.v1.PluginStatusR\aplugins\x12'\n" +
-	"\x0fplugins_enabled\x18\b \x01(\bR\x0epluginsEnabled\"\xbb\x01\n" +
+	"\x0fplugins_enabled\x18\b \x01(\bR\x0epluginsEnabled\x12\x1c\n" +
+	"\tcollector\x18\t \x01(\tR\tcollector\x12 \n" +
+	"\vunavailable\x18\n" +
+	" \x03(\tR\vunavailable\"\xbb\x01\n" +
 	"\fPluginStatus\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +

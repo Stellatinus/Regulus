@@ -82,6 +82,12 @@ message SystemInfo {
   string arch = 5;        // for example "amd64", "arm64"
   uint32 cpu_count = 6;
   uint64 memory_total_bytes = 7;
+  // The container the agent runs in, when it can tell: "docker", "podman",
+  // "lxc", "systemd-nspawn" or another name systemd gives; empty on a machine
+  // of its own (or when it cannot tell). In a container the CPU and memory
+  // figures read from /proc may be the host's (docs/remote-agents.md).
+  // Added in protocol 1 without a new version: an older hub ignores it.
+  string container = 8;
 }
 
 // Welcome accepts the agent and configures the stream.
@@ -143,6 +149,16 @@ message MetricsReport {
   // Added in protocol 1 without a new version: an older hub ignores them.
   repeated PluginStatus plugins = 7;
   bool plugins_enabled = 8;
+  // Which collector made the report: "linux" (everything from /proc and
+  // statfs) or "basic" (a system without /proc: time and uptime only). Empty
+  // from an agent older than this field.
+  string collector = 9;
+  // The parts of the report the agent could not read on this system, so that
+  // the dashboard says so instead of showing zeros or an empty widget: any of
+  // "cpu", "load", "memory", "disks", "network", "uptime". A hub shows a value
+  // it does not know as it is. Empty when everything was read, and from an
+  // agent older than this field. Added in protocol 1 without a new version.
+  repeated string unavailable = 10;
 }
 
 // PluginStatus is the state of one plugin as the agent's supervisor sees it.
