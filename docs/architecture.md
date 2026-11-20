@@ -87,7 +87,7 @@ Everything here is in `internal/pki` (certificates) and `internal/fleet` (tokens
 - **Certificate kinds (#316).** Every certificate the CA issues says what it is for, as one URI in its subject alternative names: `regulus:agent:<id>` for an agent (the id is also the common name), `regulus:hub` for the listener certificate; `regulus:device:<id>` is reserved for Regulus Access and issued by nothing yet (`internal/pki/kind.go`). The agent listener accepts only `agent` (`pki.AgentIdentity`, checked in `requireAgent` before the id is looked at); a certificate of another kind, of an unknown kind, with two kinds, or whose URI and common name disagree is refused with `PermissionDenied`. Agents refuse a listener certificate that carries a kind other than `hub`. **Legacy:** an agent certificate from a hub before #316 has no `regulus:` URI; one with the organization `Regulus agent` and no such URI is still accepted as an agent (`Identity.Legacy`), until renewal (#128) re-issues it or it ends (at most five years). A listener certificate without a kind is accepted for the same reason (an agent updated before its hub).
 - **Identity.** On every stream the hub reads the agent id and certificate serial number from the verified certificate, never from what the agent says, and calls `fleet.Authorize`: the agent must exist, not be revoked, and the serial must be the one issued for it (`requireAgent` in `internal/hub/agent_net.go`). `Enroll` is the only call that works without a certificate; the TLS server asks for a client certificate "if given" and verifies it against the CA (`VerifyClientCertIfGiven`).
 - **Revocation.** `fleet.Revoke` marks the agent in the database; the hub closes its connection; the agent can never connect again (`DELETE /api/agents/{id}`). There is no revocation list to distribute, because the hub checks the registry on every connection.
-- **Registry.** Table `agents` (id, name, hostname, certificate serial and end, `last_seen`, revoked time…). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
+- **Registry.** Table `agents` (id, name, hostname, certificate serial and end, `last_seen`, revoked time…). `last_seen_at` and what an agent reports about itself are written by one goroutine of the hub (`internal/hub/seen.go`), never on the handshake: at connect and disconnect, every minute for the connected agents (so after a crash it is at most a minute old) and once more at shutdown before the database closes. The only database access of a connection is `Authorize`, a read bounded to 10 seconds; an established stream does no database I/O, so a database outage stops new connections, not the ones already open (#218). `internal/fleet` also records audit events (`agent_enrolled`, `agent_revoked`, …).
 
 ### Diagram: enrolling an agent
 
@@ -118,7 +118,7 @@ sequenceDiagram
     Agent->>Hub: Hello(version, system, protocol range)
     Hub-->>Agent: Welcome(protocol, heartbeat interval)
     Agent->>Hub: Heartbeat
-    Hub->>DB: record last seen
+    Hub-)DB: record last seen (later, by the presence writer; every minute while connected)
 ```
 
 *Sources: `internal/fleet/fleet.go` (`CreateToken`, `Enroll`, `Authorize`), `internal/pki/pki.go` (`SignClient`, `ServerCertificate`), `internal/agent/remote.go` (`Enroll`, `Dial`), `internal/hub/agent_net.go`, `internal/hub/agents.go` (`Connect`). An order detail: a token is deleted before the request is checked, so a malformed request wastes the token (`fleet.go` comment).*
@@ -142,7 +142,7 @@ Agents do not use any of this: they authenticate with client certificates (secti
 
 ## 5. Data
 
-**Which databases.** **SQLite** (default; `modernc.org/sqlite`, pure Go) and **PostgreSQL** (`pgx`, pure Go, so the binary stays static), selected by `database.type` (#122). `internal/storage` is the one place that knows the dialect: it opens the right backend, wraps the PostgreSQL connection so the `?` placeholders used by every query become `$1, $2, ...` (`storage.Rebind`), keeps one migration directory per backend, and exposes `Check` (used by `regulus db check`) and `IsUniqueViolation`. The other packages receive a `*sql.DB` and do not care. The installer choice is #123 and moving data between backends is #124 (not done). Details, settings and prerequisites: [Database](database.md).
+**Which databases.** **SQLite** (default; `modernc.org/sqlite`, pure Go) and **PostgreSQL** (`pgx`, pure Go, so the binary stays static), selected by `database.type` (#122). `internal/storage` is the one place that knows the dialect: it opens the right backend, wraps the PostgreSQL connection so the `?` placeholders used by every query become `$1, $2, ...` (`storage.Rebind`), keeps one migration directory per backend, and exposes `Check` (used by `regulus db check`) and `IsUniqueViolation`. The other packages receive a `*sql.DB` and do not care. The hub opens it with `storage.OpenHub`, which on SQLite gives one connection that writes and a pool of 4 read-only connections for plain reads (the session check, the lists, `Authorize`), so reads do not queue behind a write (#219). The installer choice is #123 and moving data between backends is #124 (not done). Details, settings and prerequisites: [Database](database.md).
 
 ```mermaid
 flowchart LR
@@ -174,6 +174,7 @@ flowchart LR
 | `regulus.db` | everything in the tables above | contains hashes and encrypted TOTP secrets |
 | `secret.key` | master secret for TOTP encryption; created at first start | owner-only; **back up with the database** |
 | `pki/ca.crt`, `pki/ca.key` | the CA | `ca.key` owner-only; whoever has it can issue agent certificates |
+| `hub.lock` | held locked (`flock`) by the running hub, with its process id inside; a second hub on the same directory refuses to start (#217) | none; never delete it while a hub runs |
 | `regulus.sock` | Unix socket for local tools (console, `regulus status`), mode `0600`, owner = the user running the hub | no login; file permissions are the proof |
 | `updates/` | downloaded, verified releases | |
 | `tuf/` | cache of the Sigstore trusted root | |
@@ -272,7 +273,7 @@ There is no TLS on the dashboard port; put a reverse proxy in front outside a tr
 **Hub** (`regulus hub`, `cmd/regulus/main.go` then `internal/hub/hub.go`):
 
 1. Load the configuration: defaults, then the YAML file, then environment variables, then flags (`internal/config`).
-2. `hub.New`: open the database and apply migrations (`storage.Open`); load or create `secret.key`; create the account service; load or create the CA in `pki/`; create the fleet service, the agent service and the in-process transport; create the update manager and stager.
+2. `hub.New`: lock the data directory (`hub.lock`; a second hub fails here); open the database and apply migrations (`storage.OpenHub`, which on PostgreSQL first takes the "active hub" advisory lock); load or create `secret.key`; create the account service; load or create the CA in `pki/`; create the fleet service, the agent service and the in-process transport; create the update manager and stager.
 3. `Hub.Serve`: register the agent service on the in-process transport; if `agent_listen` is set, start the network listener (a new hub certificate is made now); if `builtin_agent` is true, start the built-in agent; start the local socket; start the rollout timer (every 5 minutes it checks whether the automatic mode should roll out) and the update manager loop; finally serve HTTP.
 4. On cancel (SIGINT/SIGTERM) the HTTP server shuts down gracefully; agent streams are stopped abruptly because they are long-lived.
 

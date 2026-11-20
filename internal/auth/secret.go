@@ -38,23 +38,63 @@ func LoadOrCreateSecret(dir string) ([]byte, error) {
 	if _, err := rand.Read(secret); err != nil {
 		return nil, fmt.Errorf("generate secret: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) { // another process won the race
-			return LoadOrCreateSecret(dir)
-		}
+	switch err := publishSecret(dir, path, secret); {
+	case err == nil:
+		return secret, nil
+	case errors.Is(err, os.ErrExist): // another process won the race
+		return LoadOrCreateSecret(dir)
+	default:
 		return nil, err
+	}
+}
+
+// publishSecret makes path hold secret, complete, or fails with os.ErrExist
+// when path already exists. The secret is written to a temporary file and
+// synced first, then linked to its name: a link is created in one step and
+// never replaces a file, so another process reading path sees the whole key or
+// no file at all, and a crash in the middle leaves at most a stray temporary
+// file, not an empty secret.key that would lock everybody out of two-factor.
+func publishSecret(dir, path string, secret []byte) error {
+	f, err := os.CreateTemp(dir, ".secret.key.*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return err
 	}
 	if _, err := f.Write(secret); err != nil {
 		_ = f.Close()
-		_ = os.Remove(path)
-		return nil, err
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
 	}
 	if err := f.Close(); err != nil {
-		_ = os.Remove(path)
-		return nil, err
+		return err
 	}
-	return secret, nil
+	if err := os.Link(tmp, path); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return os.ErrExist
+		}
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	syncDir(dir)
+	return nil
+}
+
+// syncDir makes a new name in dir durable; a failure is not fatal (some
+// file systems do not sync directories).
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	_ = d.Sync()
+	_ = d.Close()
 }
 
 // sealer encrypts small secrets (AES-256-GCM) with a key derived from the hub

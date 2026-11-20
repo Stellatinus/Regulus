@@ -15,6 +15,8 @@
 //     contract (proto/regulus/agent/v1): heartbeats, metrics, commands,
 //     the in-process connection of the built-in agent, and refusal of agents
 //     whose version is not accepted.
+//   - seen.go: the presence writer, which records when agents were seen off
+//     the handshake path, every minute for connected agents and at Close.
 //   - fleet_api.go: enrollment tokens and the list of enrolled agents, on top of
 //     package fleet.
 //   - metrics.go, events.go, stream.go: samples kept in memory and the live

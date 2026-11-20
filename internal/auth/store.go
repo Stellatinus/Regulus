@@ -48,8 +48,21 @@ var (
 // (time.RFC3339Nano drops trailing zeros, which breaks the order).
 const timeLayout = "2006-01-02T15:04:05.000000000Z"
 
+// store reads and writes the tables of this package. db is the pool that
+// writes; rd, if set, is a pool for reads that need not see a transaction of
+// their own (storage.HubDB.Read), so that checking a session does not wait
+// behind a write.
 type store struct {
 	db *sql.DB
+	rd *sql.DB
+}
+
+// read returns the pool for plain reads.
+func (s store) read() *sql.DB {
+	if s.rd != nil {
+		return s.rd
+	}
+	return s.db
 }
 
 func (s store) countUsers(ctx context.Context) (int, error) {
@@ -106,28 +119,30 @@ func (s store) createSession(ctx context.Context, tokenHash string, userID int64
 	return nil
 }
 
-// sessionUser returns the user of a session that has not expired.
-func (s store) sessionUser(ctx context.Context, tokenHash string, now time.Time) (User, error) {
+// sessionUser returns the user of a session that has not expired, and when
+// the session was last used.
+func (s store) sessionUser(ctx context.Context, tokenHash string, now time.Time) (User, time.Time, error) {
 	var (
-		u                User
-		created, expires string
+		u                          User
+		created, expires, lastUsed string
 	)
-	err := s.db.QueryRowContext(ctx,
-		`SELECT users.id, users.username, users.role, users.created_at, s.expires_at, `+hasTwoFactor+`
+	err := s.read().QueryRowContext(ctx,
+		`SELECT users.id, users.username, users.role, users.created_at, s.expires_at, s.last_used_at, `+hasTwoFactor+`
 		 FROM sessions s JOIN users ON users.id = s.user_id WHERE s.token_hash = ? AND users.disabled = 0`, tokenHash).
-		Scan(&u.ID, &u.Username, &u.Role, &created, &expires, &u.TwoFactor)
+		Scan(&u.ID, &u.Username, &u.Role, &created, &expires, &lastUsed, &u.TwoFactor)
 	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, ErrUnauthenticated
+		return User{}, time.Time{}, ErrUnauthenticated
 	}
 	if err != nil {
-		return User{}, err
+		return User{}, time.Time{}, err
 	}
 	exp, err := time.Parse(timeLayout, expires)
 	if err != nil || !now.Before(exp) {
-		return User{}, ErrUnauthenticated
+		return User{}, time.Time{}, ErrUnauthenticated
 	}
 	u.CreatedAt, _ = time.Parse(timeLayout, created)
-	return u, nil
+	used, _ := time.Parse(timeLayout, lastUsed)
+	return u, used, nil
 }
 
 func (s store) deleteSession(ctx context.Context, tokenHash string) error {
