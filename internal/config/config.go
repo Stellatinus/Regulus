@@ -1,6 +1,9 @@
 // Package config loads the hub configuration. Sources are applied in this
 // order, each one overriding the previous: built-in defaults, configuration
-// file (YAML), environment variables, command-line flags.
+// file (YAML), environment variables, command-line flags. It also reads and
+// changes single settings for the console and `regulus config`; their errors
+// are *SettingError values with a code a GUI can translate (it has no texts
+// in any language but English itself).
 package config
 
 import (

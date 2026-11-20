@@ -17,7 +17,8 @@ export type LiveAction =
   | { type: "disconnected"; id: string }
   | { type: "heartbeat"; id: string; at: string }
   | { type: "metrics"; id: string; point: MetricsPoint }
-  | { type: "history"; id: string; points: MetricsPoint[] };
+  | { type: "history"; id: string; points: MetricsPoint[] }
+  | { type: "plugins" };
 
 // A window of a series: the reports and when each was taken (epoch ms).
 export interface SeriesWindow {
@@ -160,6 +161,9 @@ export interface AgentEntry {
 export const ROSTER = "roster";
 export const STATUS = "status";
 export const WATCH = "watch";
+// PLUGINS wakes the views of the plugins (the Plugins page) when they may
+// have changed: see LiveStore.pluginsVersion.
+export const PLUGINS = "plugins";
 export const agentKey = (id: string) => `agent:${id}`;
 
 const byId = (a: Agent, b: Agent) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -185,6 +189,12 @@ export class LiveStore {
   connection: Connection = "connecting";
   // The current time, refreshed every few seconds, for staleness checks.
   now = Date.now();
+  // pluginsVersion grows whenever the state of the plugins may have changed:
+  // a "plugins.changed" event, a new list of agents (a snapshot after a
+  // reconnection, which may have missed events) and an agent that connects
+  // or disconnects (its plugins come and go with it). The stream carries no
+  // plugin state; a view reads GET /api/plugins again when it grows.
+  pluginsVersion = 0;
 
   private listeners = new Map<string, Set<() => void>>();
   private watchers = new Map<string, number>();
@@ -244,6 +254,11 @@ export class LiveStore {
     this.emit(STATUS);
   }
 
+  private pluginsChanged() {
+    this.pluginsVersion++;
+    this.emit(PLUGINS);
+  }
+
   private setRoster(roster: Agent[]) {
     if (sameRoster(this.roster, roster)) return;
     this.roster = roster;
@@ -286,17 +301,23 @@ export class LiveStore {
         for (const agent of agents) this.put(agent);
         this.setRoster(agents);
         this.setReady(action.staleAfterSeconds === undefined ? this.staleAfterMs : action.staleAfterSeconds * 1000);
+        this.pluginsChanged();
         return;
       }
       case "connected":
         this.put(action.agent);
         this.setRoster([...this.roster.filter((a) => a.id !== action.agent.id), action.agent].sort(byId));
         this.setReady(this.staleAfterMs);
+        this.pluginsChanged();
         return;
       case "disconnected":
         if (!this.entries.delete(action.id)) return;
         this.emit(agentKey(action.id));
         this.setRoster(this.roster.filter((a) => a.id !== action.id));
+        this.pluginsChanged();
+        return;
+      case "plugins":
+        this.pluginsChanged();
         return;
       case "heartbeat":
         this.update(action.id, (e) => ({ ...e, agent: { ...e.agent, status: "connected", last_heartbeat: action.at } }));
@@ -355,6 +376,8 @@ export function parseStreamMessage(data: unknown): LiveAction | null {
       const point = toMetricsPoint(msg.point);
       return str(msg.id) && point ? { type: "metrics", id: msg.id, point } : null;
     }
+    case "plugins.changed":
+      return { type: "plugins" };
     default:
       return null;
   }

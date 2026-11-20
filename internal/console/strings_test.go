@@ -138,3 +138,28 @@ func TestUseLocale(t *testing.T) {
 		t.Error("UseLocale does not reset to English")
 	}
 }
+
+// Every code internal/config can return has a text in both languages, with
+// as many verbs as the code has arguments (#318).
+func TestSettingErrorsCoverEveryCode(t *testing.T) {
+	codes := config.ErrorCodes()
+	for _, table := range []struct {
+		name string
+		s    strs
+	}{{"English", en}, {"Italian", it}} {
+		for _, c := range codes {
+			tpl := table.s.SettingErrors[string(c)]
+			if strings.TrimSpace(tpl) == "" {
+				t.Errorf("%s has no text for the setting error %s", table.name, c)
+				continue
+			}
+			want := len(verbRE.FindAllString(config.EnglishError(c), -1))
+			if got := len(verbRE.FindAllString(tpl, -1)); got != want {
+				t.Errorf("%s %s has %d verbs, the code has %d arguments", table.name, c, got, want)
+			}
+		}
+		if len(table.s.SettingErrors) != len(codes) {
+			t.Errorf("%s has %d setting errors, internal/config %d codes", table.name, len(table.s.SettingErrors), len(codes))
+		}
+	}
+}

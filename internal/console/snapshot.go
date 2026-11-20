@@ -15,6 +15,7 @@ import (
 
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/localstatus"
+	"github.com/CodexCircle/Regulus/internal/plugin"
 	"github.com/CodexCircle/Regulus/internal/storage"
 )
 
@@ -312,6 +313,37 @@ func healthChecks(snap Snapshot, cfg config.Config, fetchErr error) []Check {
 		add("database", dbName, OK, tr(func(s strs) string { return s.DBFile }, storage.FileName, FormatBytes(snap.DatabaseSize)))
 	default:
 		add("database", dbName, Info, tr(func(s strs) string { return s.DBNone }))
+	}
+
+	// The hub's plugins, while it runs with a plugins directory (#319): a
+	// plugin that failed for good, cannot run here or is not a usable plugin
+	// needs the administrator; one that is starting or restarting does not
+	// yet.
+	if snap.Running && snap.PluginsEnabled {
+		plgName := func(s strs) string { return s.ChkPlugins }
+		var bad []Plugin
+		for _, p := range snap.Plugins {
+			switch p.State {
+			case plugin.StateFailed, plugin.StateIncompatible, plugin.StateInvalid:
+				bad = append(bad, p)
+			}
+		}
+		switch {
+		case snap.PluginsProblem != "":
+			add("plugins", plgName, Warn, tr(func(s strs) string { return s.PlgProblem }, snap.PluginsProblem))
+		case len(bad) > 0:
+			add("plugins", plgName, Warn, func(s strs) string {
+				parts := make([]string, len(bad))
+				for i, p := range bad {
+					parts[i] = p.ID + " (" + pluginStateIn(s, p.State) + ")"
+				}
+				return fmt.Sprintf(s.PlgBad, strings.Join(parts, ", "))
+			})
+		case len(snap.Plugins) == 0:
+			add("plugins", plgName, Info, tr(func(s strs) string { return s.NoPlugins }))
+		default:
+			add("plugins", plgName, OK, tr(func(s strs) string { return s.PlgOK }, len(snap.Plugins)))
+		}
 	}
 	return checks
 }

@@ -362,3 +362,14 @@ func TestResetAdminLinkFromTheConsole(t *testing.T) {
 		t.Errorf("without a database: %v", err)
 	}
 }
+
+// `regulus config set` is CLI: its errors stay English in an Italian
+// terminal, while the console translates the same errors (#318).
+func TestConfigSetErrorsStayEnglish(t *testing.T) {
+	defer console.UseLocale(func(string) string { return "" })
+	f := newFixture(t, false, false, map[string]string{"LANG": "it_IT.UTF-8"})
+	code := configCommand([]string{"set", "listen", "70000", "--config", f.file}, f.env)
+	if code == 0 || !strings.Contains(f.errOut.String(), "listen: the port must be a number from 1 to 65535") {
+		t.Errorf("exit %d, stderr %q", code, f.errOut.String())
+	}
+}

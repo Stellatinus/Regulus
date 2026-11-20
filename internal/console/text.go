@@ -218,20 +218,25 @@ func onOff(b bool) string {
 
 // pluginState is a plugin state in the console's language; a state this
 // console does not know is shown as it is.
-func pluginState(s string) string {
+func pluginState(s string) string { return pluginStateIn(T, s) }
+
+// pluginStateIn is a plugin state in the language of t.
+func pluginStateIn(t strs, s string) string {
 	switch s {
 	case plugin.StateStarting:
-		return T.PluginStarting
+		return t.PluginStarting
 	case plugin.StateRunning:
-		return T.PluginRunning
+		return t.PluginRunning
 	case plugin.StateRestarting:
-		return T.PluginRestarting
+		return t.PluginRestarting
 	case plugin.StateFailed:
-		return T.PluginFailed
+		return t.PluginFailed
 	case plugin.StateIncompatible:
-		return T.PluginIncompatible
+		return t.PluginIncompatible
 	case plugin.StateStopped:
-		return T.PluginStopped
+		return t.PluginStopped
+	case plugin.StateInvalid:
+		return t.PluginInvalid
 	}
 	return s
 }

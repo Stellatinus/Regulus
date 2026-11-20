@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -139,12 +138,21 @@ func (c Config) Get(key string) (string, bool) {
 }
 
 // Normalize checks a value typed for a setting and returns it in canonical
-// form (for example "9090" becomes ":9090"). The error says what is wrong in
-// words fit for a person typing it.
+// form (for example "9090" becomes ":9090"). The error is a *SettingError
+// that says what is wrong in words fit for a person typing it.
 func Normalize(key, raw string) (string, error) {
 	if _, ok := Lookup(key); !ok {
-		return "", fmt.Errorf("unknown setting %q (known: %s)", key, strings.Join(Keys(), ", "))
+		return "", settingErr("", ErrUnknownSetting, key, strings.Join(Keys(), ", "))
 	}
+	v, err := normalize(key, raw)
+	if err != nil {
+		err.Key = key
+		return "", err
+	}
+	return v, nil
+}
+
+func normalize(key, raw string) (string, *SettingError) {
 	v := strings.TrimSpace(raw)
 	switch key {
 	case "listen":
@@ -156,7 +164,7 @@ func Normalize(key, raw string) (string, error) {
 		return normalizeAddress(v)
 	case "data_dir":
 		if v == "" {
-			return "", errors.New("data_dir must not be empty")
+			return "", settingErr("", ErrEmpty)
 		}
 		return v, nil
 	case "database.type":
@@ -167,35 +175,35 @@ func Normalize(key, raw string) (string, error) {
 		return v, nil
 	case "database.name", "database.user":
 		if v == "" {
-			return "", errors.New("must not be empty")
+			return "", settingErr("", ErrEmpty)
 		}
 		return v, nil
 	case "database.port":
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 65535 {
-			return "", errors.New("the port must be a number from 1 to 65535")
+			return "", settingErr("", ErrPort)
 		}
 		return strconv.Itoa(n), nil
 	case "database.schema":
 		if !storage.ValidSchema(v) {
-			return "", errors.New("use letters, digits and underscore, not starting with a digit")
+			return "", settingErr("", ErrSchema)
 		}
 		return v, nil
 	case "database.password":
-		return "", errors.New("the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service")
+		return "", settingErr("", ErrPasswordInFile)
 	case "builtin_agent", "console.tui", "updates.check", "updates.apply":
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return "", errors.New("use true or false")
+			return "", settingErr("", ErrBool)
 		}
 		return strconv.FormatBool(b), nil
 	case "metrics_interval":
 		d, err := time.ParseDuration(v)
 		if err != nil {
-			return "", errors.New("use a duration such as 10s or 1m")
+			return "", settingErr("", ErrDuration)
 		}
 		if d < MinMetricsInterval {
-			return "", fmt.Errorf("too short (minimum %v)", MinMetricsInterval)
+			return "", settingErr("", ErrTooShort, MinMetricsInterval.String())
 		}
 		return d.String(), nil
 	case "log.level":
@@ -203,34 +211,34 @@ func Normalize(key, raw string) (string, error) {
 	case "log.format":
 		return oneOf(v, "text", "json")
 	}
-	return "", fmt.Errorf("unknown setting %q", key)
+	return "", settingErr("", ErrUnknownSetting, key, strings.Join(Keys(), ", "))
 }
 
-func oneOf(v string, choices ...string) (string, error) {
+func oneOf(v string, choices ...string) (string, *SettingError) {
 	v = strings.ToLower(v)
 	for _, c := range choices {
 		if v == c {
 			return v, nil
 		}
 	}
-	return "", fmt.Errorf("use one of: %s", strings.Join(choices, ", "))
+	return "", settingErr("", ErrChoice, strings.Join(choices, ", "))
 }
 
 // normalizeAddress accepts host:port or a bare port.
-func normalizeAddress(v string) (string, error) {
+func normalizeAddress(v string) (string, *SettingError) {
 	if v == "" {
-		return "", errors.New("must not be empty")
+		return "", settingErr("", ErrEmpty)
 	}
 	if _, err := strconv.Atoi(v); err == nil {
 		v = ":" + v
 	}
 	host, port, err := net.SplitHostPort(v)
 	if err != nil {
-		return "", errors.New("use host:port, such as :8080 or 127.0.0.1:8080, or only the port")
+		return "", settingErr("", ErrAddress)
 	}
 	n, err := strconv.Atoi(port)
 	if err != nil || n < 1 || n > 65535 {
-		return "", errors.New("the port must be a number from 1 to 65535")
+		return "", settingErr("", ErrPort)
 	}
 	if host == "" {
 		return ":" + port, nil
@@ -333,13 +341,13 @@ func SetFileForce(path, key, raw string) (string, error) { return setFile(path, 
 func setFile(path, key, raw string, force bool) (string, error) {
 	value, err := Normalize(key, raw)
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", key, err)
+		return "", err
 	}
 	// Nobody else edits the file between the read and the write.
 	defer lockDir(filepath.Dir(path))()
 	old, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read config file: %w", err)
+		return "", &SettingError{Code: ErrReadFile, Args: []string{err.Error()}, Err: err}
 	}
 	if key == "data_dir" && !force {
 		if err := checkDataDirChange(string(old), value); err != nil {
@@ -355,13 +363,17 @@ func setFile(path, key, raw string, force bool) (string, error) {
 	dec := yaml.NewDecoder(strings.NewReader(updated))
 	dec.KnownFields(true)
 	if err := dec.Decode(&check); err != nil && !errors.Is(err, io.EOF) {
-		return "", fmt.Errorf("the edit would leave %s unreadable: %w", path, err)
+		return "", &SettingError{Code: ErrUnreadable, Args: []string{path, err.Error()}, Err: err}
 	}
 	if got, _ := check.Get(key); got != value {
-		return "", fmt.Errorf("cannot edit %s in %s automatically (it is written in a form this tool does not change); edit the file by hand", key, path)
+		return "", settingErr(key, ErrHandEdit, path)
+	}
+	if check.Database.Type == storage.TypePostgres && check.Database.Host == "" {
+		// The one way a valid value makes the file invalid as a whole.
+		return "", settingErr("", ErrPostgresHost)
 	}
 	if err := check.Validate(); err != nil {
-		return "", fmt.Errorf("invalid configuration: %w", err)
+		return "", &SettingError{Code: ErrInvalid, Args: []string{err.Error()}, Err: err}
 	}
 
 	if updated == string(old) {
@@ -369,9 +381,9 @@ func setFile(path, key, raw string, force bool) (string, error) {
 	}
 	if err := writeConfig(path, []byte(updated)); err != nil {
 		if errors.Is(err, fs.ErrPermission) {
-			return "", fmt.Errorf("write config file: %w (the file belongs to another user: run it with sudo)", err)
+			return "", &SettingError{Code: ErrWritePermission, Args: []string{err.Error()}, Err: err}
 		}
-		return "", fmt.Errorf("write config file: %w", err)
+		return "", &SettingError{Code: ErrWriteFile, Args: []string{err.Error()}, Err: err}
 	}
 	return value, nil
 }
@@ -464,7 +476,7 @@ func checkDataDirChange(oldYAML, newDir string) error {
 	if oldDir == newAbs || !holdsHubData(oldDir) || holdsHubData(newAbs) {
 		return nil
 	}
-	return fmt.Errorf("data_dir: %s holds the hub's data and %s holds none. Changing the setting does not move it: the hub would start with an empty database, a new secret key and a new CA, every enrolled agent would distrust it and the two-factor secrets would be lost. Stop the hub, copy the directory to the new place, then change the setting; or repeat the command with --force to start fresh on purpose", oldDir, newAbs)
+	return settingErr("data_dir", ErrDataDirMove, oldDir, newAbs)
 }
 
 func absPath(p string) string {
@@ -528,7 +540,7 @@ func editYAML(text, key, value string) (string, error) {
 		if keyRE.MatchString(l) {
 			m := commentRE.FindStringSubmatch(l)
 			if m == nil {
-				return "", fmt.Errorf("cannot edit %s automatically (unusual line %q); edit the file by hand", key, l)
+				return "", settingErr(key, ErrUnusualLine, l)
 			}
 			lines[i] = m[1] + " " + rendered + m[3]
 			return strings.Join(lines, "\n") + "\n", nil

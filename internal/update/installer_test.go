@@ -321,6 +321,48 @@ func TestAgentHealthIsConnectingAgainAfterTheRestart(t *testing.T) {
 	}
 }
 
+// A hub without its local status socket (#312: the data directory's path is
+// too long for one) is judged by the running.json it writes when it starts.
+func TestHubHealthWithoutTheStatusSocket(t *testing.T) {
+	f := newInstallFixture(t, "0.1.0", "0.2.0", nil)
+	in := f.in
+	in.Probe = nil
+	in.defaults()
+	restart := in.Now()
+
+	_, err := in.Probe(t.Context(), restart)
+	if err == nil || !strings.Contains(err.Error(), "local status socket") || !strings.Contains(err.Error(), RunningName) {
+		t.Errorf("a hub that wrote nothing: %v", err)
+	}
+	// What the hub wrote before the restart is not proof.
+	_ = WriteRunning(f.dataDir, Running{Version: "0.2.0", StartedAt: restart.Add(-time.Minute)})
+	if _, err := in.Probe(t.Context(), restart); err == nil {
+		t.Error("a hub from before the restart counts")
+	}
+	_ = WriteRunning(f.dataDir, Running{Version: "0.2.0", StartedAt: restart.Add(time.Second), StatusSocket: "too long"})
+	if v, err := in.Probe(t.Context(), restart); err != nil || v != "0.2.0" {
+		t.Errorf("probe = %q, %v", v, err)
+	}
+
+	// The whole update: the new hub writes the file when systemd restarts it.
+	_ = os.Remove(filepath.Join(f.dataDir, RunningName))
+	run := in.Run
+	in.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		if name == "systemctl" && len(args) > 0 && args[0] == "restart" {
+			data, _ := os.ReadFile(f.binary)
+			_ = WriteRunning(f.dataDir, Running{Version: string(data), StartedAt: restart.Add(time.Second)})
+		}
+		return run(ctx, name, args...)
+	}
+	f.request(t, "0.2.0")
+	if res, err := in.Apply(t.Context()); err != nil || res.Outcome != OutcomeApplied {
+		t.Fatalf("result = %+v, err = %v", res, err)
+	}
+	if got := f.installed(t); got != "0.2.0" {
+		t.Errorf("installed = %q", got)
+	}
+}
+
 // A file in the request's place that is not a request must be removed once,
 // reported as failed and must not wake the helper again: systemd starts it for
 // as long as the file exists, and a helper that leaves it behind is started

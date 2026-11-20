@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -489,5 +491,44 @@ func TestLoadRefusesAnEmptyConfigFile(t *testing.T) {
 	}
 	if _, err := Load([]string{"--config", path}, noEnv, io.Discard); err != nil {
 		t.Errorf("a file with only comments: %v", err)
+	}
+}
+
+// The errors carry a code and arguments for a GUI that translates them, and
+// read the same in English as before (#318).
+func TestSettingErrorsHaveCodes(t *testing.T) {
+	for _, tc := range []struct {
+		key, in string
+		code    ErrorCode
+		args    []string
+		text    string
+	}{
+		{"listen", "nope", ErrAddress, nil, "listen: use host:port, such as :8080 or 127.0.0.1:8080, or only the port"},
+		{"database.port", "0", ErrPort, nil, "database.port: the port must be a number from 1 to 65535"},
+		{"metrics_interval", "10ms", ErrTooShort, []string{"1s"}, "metrics_interval: too short (minimum 1s)"},
+		{"log.format", "xml", ErrChoice, []string{"text, json"}, "log.format: use one of: text, json"},
+		{"colour", "red", ErrUnknownSetting, nil, `unknown setting "colour"`},
+	} {
+		_, err := Normalize(tc.key, tc.in)
+		var se *SettingError
+		if !errors.As(err, &se) || se.Code != tc.code || (tc.args != nil && !slices.Equal(se.Args, tc.args)) {
+			t.Errorf("Normalize(%s, %q) = %#v", tc.key, tc.in, err)
+			continue
+		}
+		if !strings.HasPrefix(err.Error(), tc.text) {
+			t.Errorf("Normalize(%s, %q) says %q, want %q", tc.key, tc.in, err, tc.text)
+		}
+	}
+
+	path := copyPackaged(t)
+	_, err := SetFile(path, "database.type", "postgres")
+	var se *SettingError
+	if !errors.As(err, &se) || se.Code != ErrPostgresHost {
+		t.Errorf("postgres without a host: %v", err)
+	}
+	for _, c := range ErrorCodes() {
+		if EnglishError(c) == "" {
+			t.Errorf("code %s has no English text", c)
+		}
 	}
 }

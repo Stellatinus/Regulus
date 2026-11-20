@@ -53,8 +53,10 @@ func (h *Hub) checkDatabase(ctx context.Context) {
 	}
 }
 
-// watchDatabase checks the database until ctx ends. Only a remote database
-// can go away, so SQLite is not polled.
+// watchDatabase checks the database until ctx ends, once at the start and
+// then every dbWatchInterval. Only a remote database can go away, so SQLite is
+// not polled. The local status socket reports what this records instead of
+// pinging itself (#313).
 func (h *Hub) watchDatabase(ctx context.Context) {
 	if !h.cfg.Storage().IsPostgres() {
 		return
@@ -62,6 +64,7 @@ func (h *Hub) watchDatabase(ctx context.Context) {
 	go func() {
 		t := time.NewTicker(dbWatchInterval)
 		defer t.Stop()
+		h.checkDatabase(ctx)
 		for {
 			select {
 			case <-ctx.Done():

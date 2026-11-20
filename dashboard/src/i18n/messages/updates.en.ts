@@ -127,6 +127,7 @@ export const updates = {
   "updates.agent.updated": "updated",
   "updates.agent.failed": "failed",
   "updates.agent.skipped": "not tried",
+  "updates.agent.unknown": "result unknown",
   "updates.agent.row": "{name} ({from}): {status}",
   "updates.agent.rowMessage": "{name} ({from}): {status} — {message}",
 } as const;

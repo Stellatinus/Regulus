@@ -1,0 +1,43 @@
+name: Fuzz
+
+# Runs every fuzz target for a short time each night. The seed corpora run
+# with every `go test` (in the CI workflow); this job looks for new inputs.
+# A failure uploads the input that broke the target: commit it under
+# testdata/fuzz/<Target> of that package, with the fix, as a regression test.
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  # Lets a maintainer run it by hand (Actions tab, "Run workflow").
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pkg: ./internal/agent, target: FuzzParseCPUTimes }
+          - { pkg: ./internal/agent, target: FuzzParseMemInfo }
+          - { pkg: ./internal/agent, target: FuzzParseMounts }
+          - { pkg: ./internal/agent, target: FuzzParseNetDev }
+          - { pkg: ./internal/agent, target: FuzzUnescapeMount }
+          - { pkg: ./internal/hub, target: FuzzNetworkRate }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ${{ matrix.pkg }} -run '^$' -fuzz '^${{ matrix.target }}$' -fuzztime 30s
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: ${{ matrix.pkg }}/testdata/fuzz/${{ matrix.target }}
+          if-no-files-found: ignore

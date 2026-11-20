@@ -90,3 +90,68 @@ func TestNoPluginSectionWithoutAPluginsDirectory(t *testing.T) {
 		t.Errorf("a plugin section without plugins_dir:\n%s", text.String())
 	}
 }
+
+func pluginCheck(snap Snapshot) (Check, bool) {
+	for _, c := range snap.Health {
+		if c.Key == "plugins" {
+			return c, true
+		}
+	}
+	return Check{}, false
+}
+
+// A failed or invalid plugin of the hub makes the Health tab warn, in English
+// and Italian; --json and --plain keep English (#319).
+func TestHealthWarnsAboutAFailedHubPlugin(t *testing.T) {
+	defer func() { T = en }()
+	sys := pluginSystem()
+	fetch := sys.Fetch
+	sys.Fetch = func(ctx context.Context, dir string) (localstatus.Status, error) {
+		st, err := fetch(ctx, dir)
+		st.Plugins = append(st.Plugins, Plugin{ID: "broken", State: "invalid", LastError: "plugin.yaml: version is required"})
+		return st, err
+	}
+	for _, tc := range []struct {
+		table      strs
+		title, txt string
+	}{
+		{en, "Plugins", "need a look (see the Status tab): crasher (failed), broken (invalid)"},
+		{it, "Plugin", "da controllare (vedi la scheda Stato): crasher (fallito), broken (non valido)"},
+	} {
+		T = tc.table
+		snap := Collect(context.Background(), sys, "testdata/config.yaml", "v0.3.0")
+		c, ok := pluginCheck(snap)
+		if !ok || c.Status != Warn || c.Title != tc.title || c.Text != tc.txt {
+			t.Errorf("check = %+v", c)
+		}
+		if c.Name != "Plugins" || c.Detail != "need a look (see the Status tab): crasher (failed), broken (invalid)" {
+			t.Errorf("the English fields changed with the language: %+v", c)
+		}
+	}
+
+	// All running: ok. No plugin: info. The directory cannot be read: warn.
+	T = en
+	ok := fakeSystem()
+	fetchOK := ok.Fetch
+	ok.Fetch = func(ctx context.Context, dir string) (localstatus.Status, error) {
+		st, err := fetchOK(ctx, dir)
+		st.PluginsEnabled = true
+		st.Plugins = []Plugin{{ID: "example-hello", Version: "0.1.0", State: "running"}, {ID: "x", State: "restarting"}}
+		return st, err
+	}
+	if c, _ := pluginCheck(Collect(context.Background(), ok, "testdata/config.yaml", "v0.3.0")); c.Status != OK {
+		t.Errorf("running plugins: %+v", c)
+	}
+	ok.Fetch = func(ctx context.Context, dir string) (localstatus.Status, error) {
+		st, err := fetchOK(ctx, dir)
+		st.PluginsEnabled, st.PluginsProblem = true, "reading the plugins directory: not a directory"
+		return st, err
+	}
+	if c, _ := pluginCheck(Collect(context.Background(), ok, "testdata/config.yaml", "v0.3.0")); c.Status != Warn || !strings.Contains(c.Text, "not a directory") {
+		t.Errorf("unreadable directory: %+v", c)
+	}
+	// No plugins directory: no check at all.
+	if _, found := pluginCheck(Collect(context.Background(), fakeSystem(), "testdata/config.yaml", "v0.3.0")); found {
+		t.Error("a plugins check without plugins_dir")
+	}
+}
