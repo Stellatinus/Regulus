@@ -181,18 +181,26 @@ jobs:
   e2e:
     name: End-to-end (hub and remote agent binaries over mTLS)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
       - name: make e2e
+        env:
+          # Lets the test of the previous release read the release list without
+          # GitHub's anonymous rate limit.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
           make e2e 2>&1 | tee e2e.log
-          # A skipped test would pass without proving anything.
-          if grep -q -e '--- SKIP' e2e.log; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+          # A skipped test would pass without proving anything. The one that
+          # needs a published release to download may skip, with its reason (a
+          # repository without releases, or GitHub not answering): it says so
+          # in the log, and this prints it as a warning.
+          if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+          if grep -q -e '--- SKIP: TestAgentOfAnOlderRelease' e2e.log; then echo "::warning::the test of the previous release was skipped: $(grep -h -e 'no previous release' e2e.log | head -1)"; fi
 
   proto:
     name: Protobuf (generated code up to date)

@@ -40,9 +40,11 @@ smoke:
 
 # End-to-end test of a hub and a remote agent, each the real binary (built
 # with -race by the test) in its own process, over the mTLS agent listener.
-# It needs no dashboard build. See internal/e2e and docs/development.md.
+# It needs no dashboard build. See internal/e2e and docs/development.md. One
+# test downloads the previous published release's agent (see
+# TestAgentOfAnOlderRelease); it skips, saying why, when it cannot.
 e2e:
-	REGULUS_E2E=1 go test -race -count=1 -timeout 5m -v ./internal/e2e/
+	REGULUS_E2E=1 go test -race -count=1 -timeout 10m -v ./internal/e2e/
 
 # Run every fuzz target for FUZZTIME each (the nightly Fuzz workflow uses 30s).
 # A plain `go test` already runs their seed corpora.
