@@ -1,9 +1,11 @@
 // Package pki is the small certificate authority of the hub. It signs the
 // client certificates of enrolled agents and the certificate the hub shows
 // them, and gives the agents what they need to trust the hub without a public
-// certificate: they pin the fingerprint of the CA. agent.go holds what the
-// agent side needs (generating its key and the TLS configuration that pins the
-// CA fingerprint). Which agents exist, their
+// certificate: they pin the fingerprint of the CA. Every certificate it issues
+// carries a kind (kind.go) and each service accepts only its own; agent
+// certificates of older hubs, which have none, are still accepted as agents.
+// agent.go holds what the agent side needs (generating its key and the TLS
+// configuration that pins the CA fingerprint). Which agents exist, their
 // tokens and their revocation are in package fleet.
 package pki
 
@@ -20,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,6 +185,7 @@ func (ca *CA) ServerCertificate(now time.Time, hosts ...string) (tls.Certificate
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{"localhost"},
+		URIs:         []*url.URL{kindURI(KindHub, "")},
 	}
 	tmpl.DNSNames = append(tmpl.DNSNames, hosts...)
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &key.PublicKey, ca.key)
@@ -192,9 +196,24 @@ func (ca *CA) ServerCertificate(now time.Time, hosts ...string) (tls.Certificate
 }
 
 // SignClient issues the client certificate of an agent from a certificate
-// request. The subject of the request is ignored; the certificate is made for
-// agentID. It returns the certificate (DER) and its serial number in hex.
+// request: IssueClient with KindAgent. It is the only client certificate the
+// hub issues today.
 func (ca *CA) SignClient(csrDER []byte, agentID string, now time.Time) (certDER []byte, serialHex string, err error) {
+	return ca.IssueClient(csrDER, KindAgent, agentID, now)
+}
+
+// IssueClient issues a client certificate of the given kind from a
+// certificate request. The subject of the request is ignored; the certificate
+// is made for id, which is its common name, and carries its kind as the URI
+// "regulus:<kind>:<id>" (see Kind). It returns the certificate (DER) and its
+// serial number in hex.
+func (ca *CA) IssueClient(csrDER []byte, kind Kind, id string, now time.Time) (certDER []byte, serialHex string, err error) {
+	if !kind.isClient() {
+		return nil, "", fmt.Errorf("not a client certificate kind: %q", kind)
+	}
+	if !validID(id) {
+		return nil, "", fmt.Errorf("invalid certificate id %q", id)
+	}
 	csr, err := x509.ParseCertificateRequest(csrDER)
 	if err != nil {
 		return nil, "", fmt.Errorf("parse certificate request: %w", err)
@@ -214,13 +233,20 @@ func (ca *CA) SignClient(csrDER []byte, agentID string, now time.Time) (certDER 
 	if err != nil {
 		return nil, "", err
 	}
+	subject := pkix.Name{CommonName: id}
+	if kind == KindAgent {
+		// Kept so that the certificates of every version look alike; it is
+		// not what tells an agent certificate apart (the URI is).
+		subject.Organization = []string{legacyAgentOrganization}
+	}
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: agentID, Organization: []string{"Regulus agent"}},
+		Subject:      subject,
 		NotBefore:    now.Add(-clockSkew),
 		NotAfter:     now.Add(ClientValidity),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		URIs:         []*url.URL{kindURI(kind, id)},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, csr.PublicKey, ca.key)
 	if err != nil {
@@ -246,14 +272,23 @@ func (ca *CA) ServerTLS(cert tls.Certificate) *tls.Config {
 
 // Identity is a verified client certificate.
 type Identity struct {
-	AgentID string
-	Serial  string // hex
+	// Kind is what the certificate was issued for. Every service checks it
+	// before it looks at ID (the agent listener: AgentIdentity).
+	Kind Kind
+	// ID is the common name: the agent id for KindAgent.
+	ID     string
+	Serial string // hex
 	// NotAfter is when the certificate ends.
 	NotAfter time.Time
+	// Legacy is true for an agent certificate issued before kinds existed
+	// (no kind URI); see kindOf.
+	Legacy bool
 }
 
 // ClientIdentity returns the identity from the state of a TLS connection, or
-// false if the client presented no verified certificate.
+// false if the client presented no verified certificate, or one whose kind
+// cannot be told (see kindOf). It returns every kind: a service that serves
+// one kind must check Identity.Kind, or use AgentIdentity.
 func ClientIdentity(state tls.ConnectionState) (Identity, bool) {
 	if len(state.VerifiedChains) == 0 || len(state.VerifiedChains[0]) == 0 {
 		return Identity{}, false
@@ -262,5 +297,27 @@ func ClientIdentity(state tls.ConnectionState) (Identity, bool) {
 	if leaf.Subject.CommonName == "" {
 		return Identity{}, false
 	}
-	return Identity{AgentID: leaf.Subject.CommonName, Serial: leaf.SerialNumber.Text(16), NotAfter: leaf.NotAfter}, true
+	kind, legacy, ok := kindOf(leaf)
+	if !ok {
+		return Identity{}, false
+	}
+	return Identity{Kind: kind, ID: leaf.Subject.CommonName, Serial: leaf.SerialNumber.Text(16), NotAfter: leaf.NotAfter, Legacy: legacy}, true
+}
+
+// ErrNotAgent is returned by AgentIdentity for a verified certificate that is
+// not an agent certificate.
+var ErrNotAgent = errors.New("this certificate is not an agent certificate")
+
+// AgentIdentity is ClientIdentity for the agent listener: it returns false
+// when no verified certificate was presented, and ErrNotAgent when one was but
+// it is of another kind (or of no kind that can be told).
+func AgentIdentity(state tls.ConnectionState) (Identity, bool, error) {
+	if len(state.VerifiedChains) == 0 || len(state.VerifiedChains[0]) == 0 {
+		return Identity{}, false, nil
+	}
+	id, ok := ClientIdentity(state)
+	if !ok || id.Kind != KindAgent {
+		return Identity{}, true, ErrNotAgent
+	}
+	return id, true, nil
 }
