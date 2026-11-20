@@ -1,6 +1,7 @@
 // plugins.go runs the hub's own plugins (plugins_dir, role hub) beside its
 // servers and serves GET /api/plugins: the state of the hub's plugins and of
-// the plugins each connected agent reports with its metrics. See
+// the plugins each connected agent reports with its metrics, and announces
+// their changes on the live stream ("plugins.changed"). See
 // docs/plugins/runtime.md.
 
 package hub
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/plugin"
 )
 
@@ -61,6 +63,7 @@ func (h *Hub) startPlugins(ctx context.Context) (stop func()) {
 		Role:        plugin.RoleHub,
 		CoreVersion: h.version,
 		Log:         h.log.With("component", "plugins"),
+		OnChange:    func() { h.agents.events.publish(hubPluginsChanged) },
 	}
 	if h.pluginTune != nil {
 		h.pluginTune(sup)
@@ -76,6 +79,7 @@ func (h *Hub) startPlugins(ctx context.Context) (stop func()) {
 			r.mu.Lock()
 			r.problem = err.Error()
 			r.mu.Unlock()
+			h.agents.events.publish(hubPluginsChanged)
 		}
 	}()
 	h.log.Info("plugins enabled", "dir", h.cfg.PluginsDir)
@@ -94,6 +98,38 @@ func (h *Hub) HubPlugins() HubPlugins {
 	out.Problem = r.problem
 	r.mu.Unlock()
 	return out
+}
+
+// pluginsEvent is "plugins.changed" on GET /api/stream: the plugins of the hub
+// (source "hub") or of one agent (source "agent", with its id) changed state,
+// restart count or last error, or appeared. It carries no state: the client
+// reads GET /api/plugins again, which applies the same permission and names
+// the agents. A client also reads it again after a snapshot (a new or
+// resumed stream may have missed events) and when an agent connects or
+// disconnects (its plugins come and go with it).
+type pluginsEvent struct {
+	Type   string `json:"type"` // "plugins.changed"
+	Source string `json:"source"`
+	ID     string `json:"id,omitempty"`
+}
+
+var hubPluginsChanged = pluginsEvent{Type: "plugins.changed", Source: "hub"}
+
+// samePlugins reports whether two reports of an agent's plugins show the same
+// thing, so that only a change is pushed. Since is left out: it moves only
+// with the state.
+func samePlugins(aOn bool, a []*agentv1.PluginStatus, bOn bool, b []*agentv1.PluginStatus) bool {
+	if aOn != bOn || len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x.GetId() != y.GetId() || x.GetVersion() != y.GetVersion() || x.GetState() != y.GetState() ||
+			x.GetRestarts() != y.GetRestarts() || x.GetLastError() != y.GetLastError() {
+			return false
+		}
+	}
+	return true
 }
 
 // pluginJSON is one plugin in GET /api/plugins, the same shape for the hub and

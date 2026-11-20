@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -365,5 +366,35 @@ func TestAPluginGetsACleanEnvironment(t *testing.T) {
 	}
 	if strings.Contains(string(data), secret) {
 		t.Error("the database password reached the plugin")
+	}
+}
+
+// A directory that is not a usable plugin is listed with the state invalid,
+// its directory name and the reason, beside the plugins that run; every
+// change of state is announced through OnChange (#319).
+func TestInvalidPluginDirectoriesAreListed(t *testing.T) {
+	root := t.TempDir()
+	pluginDir(t, root, "good", "ok")
+	if err := os.MkdirAll(filepath.Join(root, "broken"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "broken", ManifestName), []byte("id: broken\nversion: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var changes atomic.Int32
+	rs := startSupervisor(t, root, func(s *Supervisor) { s.OnChange = func() { changes.Add(1) } })
+	waitFor(t, "the good plugin to run", func() bool { return rs.state("good").State == StateRunning })
+	for _, id := range []string{"broken", "empty"} {
+		st := rs.state(id)
+		if st.State != StateInvalid || st.Version != "" || st.LastError == "" || st.PID != 0 || st.Since.IsZero() {
+			t.Errorf("%s: status = %+v", id, st)
+		}
+	}
+	// broken and empty appear, good starts and runs: at least four changes.
+	if n := changes.Load(); n < 4 {
+		t.Errorf("OnChange was called %d times", n)
 	}
 }

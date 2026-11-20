@@ -165,8 +165,10 @@ message MetricsReport {
 message PluginStatus {
   string id = 1;
   string version = 2;
-  // One of starting, running, restarting, failed, incompatible, stopped. A
-  // hub shows a value it does not know as it is.
+  // One of starting, running, restarting, failed, incompatible, stopped,
+  // invalid (a directory that is not a usable plugin: id is the directory
+  // name, version is empty, last_error says why). A hub shows a value it
+  // does not know as it is.
   string state = 3;
   // How many times it was started again since the agent started.
   uint32 restarts = 4;
