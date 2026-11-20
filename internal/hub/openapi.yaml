@@ -1954,7 +1954,14 @@ components:
         - networks
       properties:
         at: { type: string, format: date-time, description: When the hub received the report. }
-        cpu_percent: { type: number, minimum: 0, maximum: 100 }
+        cpu_percent:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+          description: >-
+            CPU use over the last interval. Null when the agent could not read
+            the CPU times (the report then lists "cpu" in unavailable); it is
+            not 0.
         load_1: { type: number }
         load_5: { type: number }
         load_15: { type: number }

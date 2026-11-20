@@ -226,8 +226,10 @@ type metricsJSON struct {
 // the counters of two consecutive reports and are null for the first one and
 // after a counter reset.
 type pointJSON struct {
-	At                   time.Time     `json:"at"`
-	CPUPercent           float64       `json:"cpu_percent"`
+	At time.Time `json:"at"`
+	// CPUPercent is null when the agent could not read the CPU times (#340):
+	// an agent that cannot read /proc/stat is not idle.
+	CPUPercent           *float64      `json:"cpu_percent"`
 	Load1                float64       `json:"load_1"`
 	Load5                float64       `json:"load_5"`
 	Load15               float64       `json:"load_15"`
@@ -292,11 +294,24 @@ func toPoints(samples []MetricsSample) []pointJSON {
 	return points
 }
 
+// cpuPercent is the CPU use of a report, or nil when it is unknown (#340).
+// An agent that cannot read /proc/stat sends 0 and lists "cpu" in unavailable;
+// the 0 is not a measurement, so it becomes null here. A field with explicit
+// presence would say the same, but changing usage_percent to optional is a
+// breaking change for buf, and unavailable already exists (docs/versioning.md).
+func cpuPercent(r *agentv1.MetricsReport) *float64 {
+	if slices.Contains(r.GetUnavailable(), "cpu") {
+		return nil
+	}
+	v := r.GetCpu().GetUsagePercent()
+	return &v
+}
+
 func toPoint(s MetricsSample, prev *MetricsSample) pointJSON {
 	r := s.Report
 	p := pointJSON{
 		At:                   s.At.UTC(),
-		CPUPercent:           r.GetCpu().GetUsagePercent(),
+		CPUPercent:           cpuPercent(r),
 		Load1:                r.GetCpu().GetLoad_1(),
 		Load5:                r.GetCpu().GetLoad_5(),
 		Load15:               r.GetCpu().GetLoad_15(),

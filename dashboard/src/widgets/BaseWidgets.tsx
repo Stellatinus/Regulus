@@ -86,12 +86,12 @@ export function CpuWidget(props: WidgetProps) {
       {({ agent, points, times, latest }) =>
         !latest ? (
           <Waiting />
-        ) : missing("cpu", agent, latest) ? (
+        ) : latest.cpu_percent === null || missing("cpu", agent, latest) ? (
           <NotAvailable part="cpu" />
         ) : (
           <>
             <Stat
-              value={formatPercent(latest.cpu_percent)}
+              value={formatPercent(latest.cpu_percent ?? 0)}
               caption={
                 missing("load", agent, latest)
                   ? undefined

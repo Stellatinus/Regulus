@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -112,7 +113,7 @@ func TestMetricsEndpointFieldsAndRates(t *testing.T) {
 		t.Fatalf("status = %d, body = %+v", res.StatusCode, out)
 	}
 	p := out.Points[0]
-	if p.CPUPercent != 12.5 || p.Load1 != 0.5 || p.MemoryTotalBytes != 1000 || p.MemoryUsedBytes != 400 ||
+	if cpuVal(p) != 12.5 || p.Load1 != 0.5 || p.MemoryTotalBytes != 1000 || p.MemoryUsedBytes != 400 ||
 		p.SwapUsedBytes != 10 || p.UptimeSeconds != 99 || len(p.Disks) != 1 || p.Disks[0].UsedBytes != 200 {
 		t.Errorf("first point: %+v", p)
 	}
@@ -217,7 +218,7 @@ func TestBuiltinAgentMetricsAreServed(t *testing.T) {
 		t.Fatalf("status = %d, points = %d", res.StatusCode, len(out.Points))
 	}
 	last := out.Points[len(out.Points)-1]
-	if last.MemoryTotalBytes == 0 || last.UptimeSeconds == 0 || last.CPUPercent < 0 || last.CPUPercent > 100 {
+	if last.MemoryTotalBytes == 0 || last.UptimeSeconds == 0 || cpuVal(last) < 0 || cpuVal(last) > 100 {
 		t.Errorf("implausible metrics from the real collector: %+v", last)
 	}
 }
@@ -364,8 +365,8 @@ func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
 	if !first.At.Equal(t0.Add(20*time.Second)) || !second.At.Equal(t0.Add(50*time.Second)) {
 		t.Errorf("times = %v, %v; want the newest report of each bucket", first.At, second.At)
 	}
-	if first.CPUPercent != 20 || second.CPUPercent != 50 || first.Load1 != 1 || first.MemoryUsedBytes != 200 {
-		t.Errorf("means: cpu %v %v, load %v, memory %v", first.CPUPercent, second.CPUPercent, first.Load1, first.MemoryUsedBytes)
+	if cpuVal(first) != 20 || cpuVal(second) != 50 || first.Load1 != 1 || first.MemoryUsedBytes != 200 {
+		t.Errorf("means: cpu %v %v, load %v, memory %v", cpuVal(first), cpuVal(second), first.Load1, first.MemoryUsedBytes)
 	}
 	if first.UptimeSeconds != 1020 || first.MemoryTotalBytes != 1000 || first.Disks[0].UsedBytes != 2 || first.Networks[0].RxBytes != 400 {
 		t.Errorf("the newest report's values were not kept: %+v", first)
@@ -384,15 +385,15 @@ func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
 	// Buckets do not move with since: the reports after it fill the same
 	// bucket, and limit counts buckets.
 	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=30s&since="+t0.Add(30*time.Second).Format(time.RFC3339Nano))
-	if len(out.Points) != 1 || !out.Points[0].At.Equal(t0.Add(50*time.Second)) || out.Points[0].CPUPercent != 55 {
+	if len(out.Points) != 1 || !out.Points[0].At.Equal(t0.Add(50*time.Second)) || cpuVal(out.Points[0]) != 55 {
 		t.Errorf("step+since: %+v", out.Points)
 	}
 	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=10s&limit=2")
-	if len(out.Points) != 2 || out.Points[1].CPUPercent != 60 {
+	if len(out.Points) != 2 || cpuVal(out.Points[1]) != 60 {
 		t.Errorf("a step as long as the interval must not change the points: %+v", out.Points)
 	}
 	_, out = getMetrics(t, src, "/api/agents/a/metrics?step=1h")
-	if len(out.Points) != 1 || out.Points[0].CPUPercent != 35 {
+	if len(out.Points) != 1 || cpuVal(out.Points[0]) != 35 {
 		t.Errorf("one bucket for the hour: %+v", out.Points)
 	}
 }
@@ -425,5 +426,44 @@ func TestHubUsesTheConfiguredMetricsBudget(t *testing.T) {
 	}
 	if store.size() < store.budget/2 {
 		t.Fatalf("the store uses %d, far under its budget of %d: nothing was kept", store.size(), store.budget)
+	}
+}
+
+// cpuVal is the CPU of a point, or -1 when it is unknown (null in the API).
+func cpuVal(p pointJSON) float64 {
+	if p.CPUPercent == nil {
+		return -1
+	}
+	return *p.CPUPercent
+}
+
+// TestCPUIsUnknownNotZeroWhenTheAgentCannotReadIt is #340: a report from an
+// agent that listed "cpu" as unavailable has no CPU value in the API (null, not
+// 0), and so does a bucket made only of such reports; a bucket that also has
+// known reports is their mean.
+func TestCPUIsUnknownNotZeroWhenTheAgentCannotReadIt(t *testing.T) {
+	now := time.Now()
+	unknown := func(at time.Time) MetricsSample {
+		return MetricsSample{At: at, Report: &agentv1.MetricsReport{Cpu: &agentv1.CpuMetrics{Load_1: 1}, Unavailable: []string{"cpu"}}}
+	}
+	idle := MetricsSample{At: now, Report: &agentv1.MetricsReport{Cpu: &agentv1.CpuMetrics{}}}
+
+	if p := toPoint(unknown(now), nil); p.CPUPercent != nil {
+		t.Errorf("unknown CPU = %v, want null", *p.CPUPercent)
+	}
+	if body, err := json.Marshal(toPoint(unknown(now), nil)); err != nil || !strings.Contains(string(body), `"cpu_percent":null`) {
+		t.Errorf("JSON %s (%v) lacks cpu_percent null", body, err)
+	}
+	if p := toPoint(idle, nil); p.CPUPercent == nil || *p.CPUPercent != 0 {
+		t.Errorf("an idle agent that read its CPU: %v, want 0", p.CPUPercent)
+	}
+
+	a, b := toPoint(unknown(now), nil), toPoint(unknown(now.Add(time.Millisecond)), nil)
+	if got := downsample([]pointJSON{a, b}, time.Minute); len(got) != 1 || got[0].CPUPercent != nil {
+		t.Errorf("a bucket of unknown reports = %+v, want one null", got)
+	}
+	known := toPoint(MetricsSample{At: now.Add(2 * time.Millisecond), Report: &agentv1.MetricsReport{Cpu: &agentv1.CpuMetrics{UsagePercent: 40}}}, nil)
+	if got := downsample([]pointJSON{a, known}, time.Minute); len(got) != 1 || got[0].CPUPercent == nil || *got[0].CPUPercent != 40 {
+		t.Errorf("a bucket with one known report = %+v, want 40 (the mean of what is known)", got)
 	}
 }

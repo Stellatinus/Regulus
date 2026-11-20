@@ -235,6 +235,9 @@ func TestLinuxCollectorFromFixtures(t *testing.T) {
 	if got := r.GetCpu().GetUsagePercent(); got != 0 {
 		t.Errorf("cpu usage after an idle interval = %v, want 0", got)
 	}
+	if slices.Contains(r.GetUnavailable(), partCPU) {
+		t.Errorf("unavailable = %v: a measured 0%% must not be listed as unknown", r.GetUnavailable())
+	}
 }
 
 // A source that cannot be read is named in the report, so that the dashboard

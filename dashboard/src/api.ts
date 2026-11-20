@@ -414,7 +414,8 @@ export const saveLayout = (layout: unknown) =>
 // pushed in "agent.metrics" stream events (see internal/hub/api.go).
 export interface MetricsPoint {
   at: string;
-  cpu_percent: number;
+  // null when the agent could not read the CPU times: it is not 0%.
+  cpu_percent: number | null;
   load_1: number;
   load_5: number;
   load_15: number;

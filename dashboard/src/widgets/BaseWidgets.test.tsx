@@ -109,6 +109,18 @@ describe("built-in widgets", () => {
     expect(screen.getByText("1d 1h")).toBeInTheDocument();
   });
 
+  // #340: the hub sends null for a CPU share the agent could not read; it is
+  // not shown as 0%, in the number or in the chart.
+  it("a null CPU share says it is not available instead of 0%", async () => {
+    mockHub({
+      agents: [agent("local")],
+      history: { local: [point(-10, { cpu_percent: null }), point(0, { cpu_percent: null })] },
+    });
+    await show(<CpuWidget {...props()} />);
+    expect(screen.getByText("Not available on this server: the agent cannot read the CPU usage here.")).toBeInTheDocument();
+    expect(screen.queryByText("0%")).not.toBeInTheDocument();
+  });
+
   // An agent that cannot read part of its server says so (#230): the widgets
   // say "not available" instead of showing zeros or an empty chart.
   it("a basic-collector agent shows what is not available instead of zeros", async () => {
