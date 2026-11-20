@@ -161,6 +161,9 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.widget.notAvailable": "Non disponibile su questo server: l'agente non riesce a leggere {part}.",
   "servers.widget.containerNote": "Questo server è un container ({name}): CPU e memoria possono essere quelle dell'host.",
 
+  "servers.chart.range": "Intervallo di tempo",
+  "servers.chart.range10": "10 minuti",
+  "servers.chart.range60": "1 ora",
   "servers.chart.collecting": "Raccolta dei dati…",
   "servers.chart.lastMinutes": "ultimi {minutes} min",
 

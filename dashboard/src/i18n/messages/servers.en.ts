@@ -175,6 +175,9 @@ export const servers = {
   "servers.widget.containerNote": "This server is a container ({name}): CPU and memory may be the host's figures.",
 
   // Charts.
+  "servers.chart.range": "Time range",
+  "servers.chart.range10": "10 minutes",
+  "servers.chart.range60": "1 hour",
   "servers.chart.collecting": "Collecting data…",
   "servers.chart.lastMinutes": "last {minutes} min",
 

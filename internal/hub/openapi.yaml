@@ -1674,7 +1674,15 @@ components:
             `reauth_required` (403: confirm the password with
             `POST /api/account/reauth`, then retry),
             `invalid_code` and `login_expired` (401 from
-            `/api/auth/login/two-factor`).
+            `/api/auth/login/two-factor`). The refusals of the user, role, account
+            and two-factor endpoints carry a code the dashboard translates:
+            `user_not_found`, `session_not_found`, `role_not_found`, `user_exists`,
+            `last_admin`, `role_exists`, `builtin_role`, `role_in_use`,
+            `wrong_password`, `forbidden`, `unauthenticated`, `rate_limited`,
+            `busy`, `invalid_reset`, `two_factor_on`, `two_factor_off`,
+            `two_factor_not_started`, `two_factor_mandatory` and
+            `two_factor_unavailable`. New codes may be added; a client shows the
+            English `error` for one it does not know.
     User:
       type: object
       required: [username, role, created_at, disabled]

@@ -1,4 +1,4 @@
-import { Chart } from "../Chart";
+import { RangedChart } from "./RangedChart";
 import { useT } from "../i18n";
 import { formatBytes, formatDuration, formatPercent, formatRate } from "../format";
 import type { MetricsPoint } from "../api";
@@ -103,10 +103,11 @@ export function CpuWidget(props: WidgetProps) {
                     })
               }
             />
-            <Chart
+            <RangedChart
+              agentId={agent.id}
+              live={{ points, times }}
               title={t("servers.widget.cpuChart")}
-              times={times}
-              series={[{ label: t("servers.widget.cpuSeries"), values: derive(points, "cpu", () => points.map((p) => p.cpu_percent)) }]}
+              series={(pts) => [{ label: t("servers.widget.cpuSeries"), values: derive(pts, "cpu", () => pts.map((p) => p.cpu_percent)) }]}
               max={100}
               formatValue={(v) => `${v}%`}
             />
@@ -138,13 +139,14 @@ export function MemoryWidget(props: WidgetProps) {
                 swapTotal: formatBytes(latest.swap_total_bytes),
               })}
             />
-            <Chart
+            <RangedChart
+              agentId={agent.id}
+              live={{ points, times }}
               title={t("servers.widget.memoryChart")}
-              times={times}
-              series={[
+              series={(pts) => [
                 {
                   label: t("servers.fact.memory"),
-                  values: derive(points, "memory", () => points.map((p) => percent(p.memory_used_bytes, p.memory_total_bytes))),
+                  values: derive(pts, "memory", () => pts.map((p) => percent(p.memory_used_bytes, p.memory_total_bytes))),
                 },
               ]}
               max={100}
@@ -204,6 +206,18 @@ export function DiskWidget(props: WidgetProps) {
 const total = (rates: (number | null)[]) =>
   rates.some((r) => r !== null) ? rates.reduce<number>((sum, r) => sum + (r ?? 0), 0) : null;
 
+// networkRates are the total received and sent rates of each report of a
+// window; the total leaves out bridges, container ports and tunnels, whose
+// bytes are already counted on the physical interface.
+const networkRates = (points: MetricsPoint[]) =>
+  derive(points, "network", () => {
+    const counted = points.map((p) => countedInterfaces(p.networks));
+    return {
+      down: counted.map((nics) => total(nics.map((n) => n.rx_bytes_per_sec))),
+      up: counted.map((nics) => total(nics.map((n) => n.tx_bytes_per_sec))),
+    };
+  });
+
 // NetworkWidget shows the traffic of all interfaces, now and over time.
 export function NetworkWidget(props: WidgetProps) {
   const t = useT();
@@ -212,28 +226,25 @@ export function NetworkWidget(props: WidgetProps) {
       {({ agent, points, times, latest }) => {
         if (!latest) return <Waiting />;
         if (missing("network", agent, latest)) return <NotAvailable part="network" />;
-        // The total leaves out bridges, container ports and tunnels, whose bytes
-        // are already counted on the physical interface; the table lists all.
-        const { down, up } = derive(points, "network", () => {
-          const counted = points.map((p) => countedInterfaces(p.networks));
-          return {
-            down: counted.map((nics) => total(nics.map((n) => n.rx_bytes_per_sec))),
-            up: counted.map((nics) => total(nics.map((n) => n.tx_bytes_per_sec))),
-          };
-        });
+        // The table lists every interface; the total counts only the physical ones.
+        const { down, up } = networkRates(points);
         return (
           <>
             <Stat
               value={`↓ ${formatRate(down.at(-1) ?? 0)}`}
               caption={`↑ ${formatRate(up.at(-1) ?? 0)}`}
             />
-            <Chart
+            <RangedChart
+              agentId={agent.id}
+              live={{ points, times }}
               title={t("servers.widget.networkChart")}
-              times={times}
-              series={[
-                { label: t("servers.widget.received"), values: down },
-                { label: t("servers.widget.sent"), values: up },
-              ]}
+              series={(pts) => {
+                const rates = networkRates(pts);
+                return [
+                  { label: t("servers.widget.received"), values: rates.down },
+                  { label: t("servers.widget.sent"), values: rates.up },
+                ];
+              }}
               minTop={1024}
               formatValue={formatRate}
             />

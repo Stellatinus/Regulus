@@ -131,6 +131,39 @@ export function apiErrorText(
   return err instanceof Error ? err.message : String(err);
 }
 
+// HUB_ERROR_CODES are the codes of the hub's answers (internal/auth,
+// errorCodes) that have a text of their own in the catalogs, "hub.error.<code>"
+// (#330). Any other answer shows the hub's English text.
+const HUB_ERROR_CODES = new Set([
+  "user_not_found",
+  "session_not_found",
+  "role_not_found",
+  "user_exists",
+  "last_admin",
+  "role_exists",
+  "builtin_role",
+  "role_in_use",
+  "wrong_password",
+  "forbidden",
+  "unauthenticated",
+  "rate_limited",
+  "busy",
+  "invalid_reset",
+  "invalid_code",
+  "two_factor_on",
+  "two_factor_off",
+  "two_factor_not_started",
+  "two_factor_mandatory",
+  "two_factor_unavailable",
+  "reauth_required",
+]);
+
+// hubErrorKey is the catalog key of the text of a hub error code, if it has
+// one.
+export function hubErrorKey(code: string | undefined): MessageKey | undefined {
+  return code !== undefined && HUB_ERROR_CODES.has(code) ? (`hub.error.${code}` as MessageKey) : undefined;
+}
+
 // parseRetryAfter reads a Retry-After header: a number of seconds, or an HTTP
 // date (turned into the seconds left from now). Anything else is undefined.
 export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
@@ -213,6 +246,8 @@ async function request<T>(
     if (res.status === 403 && code === REAUTH_REQUIRED && !retried && reauthHandler && !signal?.aborted) {
       if (await reauthHandler()) return request<T>(method, path, body, signal, true);
     }
+    const key = hubErrorKey(code);
+    if (key !== undefined) throw genericError(res.status, key, {}, code, retryAfter);
     if (hubMessage !== undefined) throw new ApiError(res.status, hubMessage, code, retryAfter);
     throw genericError(res.status, "request.failed", { method, path, status: res.status }, code, retryAfter);
   }
@@ -451,15 +486,18 @@ export interface NetworkUsage {
 
 // fetchMetrics returns the recent metrics of an agent, oldest first; with
 // since only the points received after that time, with limit only the newest
-// that many.
+// that many, with step (a duration such as "8s") one averaged point per bucket
+// of that length instead of every report (#330).
 export async function fetchMetrics(
   id: string,
   since?: string,
   signal?: AbortSignal,
   limit?: number,
+  step?: string,
 ): Promise<MetricsPoint[]> {
   const params = new URLSearchParams();
   if (since) params.set("since", since);
+  if (step) params.set("step", step);
   if (limit !== undefined) params.set("limit", String(limit));
   const query = params.toString() === "" ? "" : `?${params.toString()}`;
   const res = await request<{ agent: string; points: unknown } | null>(

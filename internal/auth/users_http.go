@@ -30,7 +30,7 @@ func RequireAnyPermission(permissions []string, next http.Handler) http.Handler 
 				}
 			}
 		}
-		writeError(w, http.StatusForbidden, ErrForbidden.Error())
+		writeFail(w, http.StatusForbidden, ErrForbidden)
 	})
 }
 
@@ -95,23 +95,23 @@ func (s *Service) fail(w http.ResponseWriter, err error) {
 	}
 	switch {
 	case isInputError(err):
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFail(w, http.StatusBadRequest, err)
 	case errors.Is(err, ErrUserNotFound), errors.Is(err, ErrSessionNotFound), errors.Is(err, ErrRoleNotFound):
-		writeError(w, http.StatusNotFound, err.Error())
+		writeFail(w, http.StatusNotFound, err)
 	case errors.Is(err, ErrUserExists), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrRoleExists), errors.Is(err, ErrBuiltinRole), errors.Is(err, ErrRoleInUse):
-		writeError(w, http.StatusConflict, err.Error())
+		writeFail(w, http.StatusConflict, err)
 	case errors.Is(err, ErrInvalidReset):
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFail(w, http.StatusBadRequest, err)
 	case errors.Is(err, ErrUnauthenticated):
-		writeError(w, http.StatusUnauthorized, err.Error())
+		writeFail(w, http.StatusUnauthorized, err)
 	case errors.Is(err, ErrWrongPassword), errors.Is(err, ErrForbidden):
-		writeError(w, http.StatusForbidden, err.Error())
+		writeFail(w, http.StatusForbidden, err)
 	case errors.Is(err, ErrRateLimited):
 		w.Header().Set("Retry-After", "900")
-		writeError(w, http.StatusTooManyRequests, err.Error())
+		writeFail(w, http.StatusTooManyRequests, err)
 	case errors.Is(err, ErrBusy):
 		w.Header().Set("Retry-After", "5")
-		writeError(w, http.StatusServiceUnavailable, err.Error())
+		writeFail(w, http.StatusServiceUnavailable, err)
 	default:
 		s.log.Error("request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "internal error")

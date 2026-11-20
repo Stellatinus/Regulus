@@ -36,6 +36,34 @@ describe("request", () => {
   });
 });
 
+// #330: the hub's answers that carry a code are shown in the page's language;
+// an answer without a known code keeps the hub's English text.
+describe("the hub's coded errors", () => {
+  afterEach(() => {
+    window.localStorage.removeItem("regulus.language");
+  });
+
+  it("are translated in English and Italian, with the code kept", async () => {
+    answer(JSON.stringify({ error: "a user with this name already exists", code: "user_exists" }), 409, "application/json");
+    window.localStorage.setItem("regulus.language", "en");
+    const en: unknown = await fetchMe().catch((e: unknown) => e);
+    expect(en).toMatchObject({ status: 409, code: "user_exists", message: "A user with this name already exists." });
+
+    window.localStorage.setItem("regulus.language", "it");
+    const it: unknown = await fetchMe().catch((e: unknown) => e);
+    expect((it as Error).message).toBe("Esiste già un utente con questo nome.");
+    // Shown again later in another language, from the catalog key.
+    expect(apiErrorText((key, params) => translate("en", key, params), it)).toBe("A user with this name already exists.");
+  });
+
+  it("leave an unknown code or no code as the hub wrote it", async () => {
+    answer(JSON.stringify({ error: "something new", code: "brand_new_code" }), 409, "application/json");
+    await expect(fetchMe()).rejects.toMatchObject({ status: 409, code: "brand_new_code", message: "something new" });
+    answer(JSON.stringify({ error: "limit must be a positive number" }), 400, "application/json");
+    await expect(fetchMe()).rejects.toMatchObject({ status: 400, message: "limit must be a positive number" });
+  });
+});
+
 describe("generic request errors", () => {
   afterEach(() => {
     window.localStorage.removeItem("regulus.language");

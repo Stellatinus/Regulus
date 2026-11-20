@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -463,5 +464,48 @@ func TestHTTPOwnAccount(t *testing.T) {
 	}
 	if rec := c.do("GET", "/api/secret", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("after revoking the current session: status = %d, want 401", rec.Code)
+	}
+}
+
+// TestHTTPErrorsCarryACode is #330: the main refusals of the user, role,
+// account and two-factor endpoints carry a code the dashboard translates; the
+// English text stays in the answer.
+func TestHTTPErrorsCarryACode(t *testing.T) {
+	s := newService(t)
+	c := newClient(t, s)
+	admin, _ := setup(t, s)
+	addUser(t, s, admin, "viewer1", RoleViewer)
+	loginAs(t, c, "admin", goodPassword)
+
+	code := func(rec *httptest.ResponseRecorder) string {
+		var body struct{ Error, Code string }
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Error == "" {
+			t.Fatalf("answer %d %s is not an error with a text (%v)", rec.Code, rec.Body, err)
+		}
+		return body.Code
+	}
+	for _, tc := range []struct {
+		name         string
+		method, path string
+		body         any
+		status       int
+		want         string
+	}{
+		{"duplicate user", "POST", "/api/users", map[string]string{"username": "viewer1", "password": otherPassword, "role": "viewer"}, http.StatusConflict, "user_exists"},
+		{"unknown user", "PATCH", "/api/users/ghost", map[string]any{"disabled": true}, http.StatusNotFound, "user_not_found"},
+		{"last admin", "PATCH", "/api/users/admin", map[string]any{"role": "viewer"}, http.StatusConflict, "last_admin"},
+		{"two-factor not on", "POST", "/api/account/two-factor/disable", map[string]string{"password": goodPassword, "code": "123456"}, http.StatusConflict, "two_factor_off"},
+	} {
+		rec := c.do(tc.method, tc.path, tc.body)
+		if rec.Code != tc.status || code(rec) != tc.want {
+			t.Errorf("%s: status %d code %q, want %d %q (%s)", tc.name, rec.Code, code(rec), tc.status, tc.want, rec.Body)
+		}
+	}
+
+	// A refusal because of the role.
+	c.cookie = nil
+	loginAs(t, c, "viewer1", otherPassword)
+	if rec := c.do("GET", "/api/users", nil); rec.Code != http.StatusForbidden || code(rec) != "forbidden" {
+		t.Errorf("viewer lists users: status %d code %q (%s), want 403 forbidden", rec.Code, code(rec), rec.Body)
 	}
 }
