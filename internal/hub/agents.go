@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -106,6 +107,47 @@ type agentServer struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	rejected map[string]Rejection // by agent id, only for agents with a certificate
+	// watchers get every connection and disconnection of an agent (watch).
+	watchers map[string][]chan connEvent
+}
+
+// connEvent is a connection (Connected) or a disconnection of an agent.
+type connEvent struct {
+	Info      AgentInfo
+	Connected bool
+}
+
+// watch reports every connection and disconnection of agent id from now on,
+// until stop is called. A rollout uses it so that a short session (an agent
+// that connects with the new version and is rolled back a moment later) is
+// not missed between two looks at the registry (#211). An event is dropped
+// when the watcher is far behind; the registry is still there to look at.
+func (s *agentServer) watch(id string) (events <-chan connEvent, stop func()) {
+	ch := make(chan connEvent, 32)
+	s.mu.Lock()
+	if s.watchers == nil {
+		s.watchers = map[string][]chan connEvent{}
+	}
+	s.watchers[id] = append(s.watchers[id], ch)
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.watchers[id] = slices.DeleteFunc(s.watchers[id], func(c chan connEvent) bool { return c == ch })
+		if len(s.watchers[id]) == 0 {
+			delete(s.watchers, id)
+		}
+	}
+}
+
+// notifyLocked tells the watchers of an agent; the caller holds mu.
+func (s *agentServer) notifyLocked(ev connEvent) {
+	for _, ch := range s.watchers[ev.Info.ID] {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
 }
 
 // updateFiles opens the files of a cached release; *update.Stager implements it.
@@ -347,8 +389,12 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		p.Metrics.Plugins, p.Metrics.PluginsEnabled = nil, false
 		s.mu.Lock()
 		sess.info.LastMetrics = p.Metrics
+		same := samePlugins(sess.info.PluginsEnabled, sess.info.Plugins, enabled, plugins)
 		sess.info.PluginsEnabled, sess.info.Plugins = enabled, plugins
 		s.mu.Unlock()
+		if !same {
+			s.events.publish(pluginsEvent{Type: "plugins.changed", Source: "agent", ID: sess.info.ID})
+		}
 		if sample, prev := s.metrics.add(sess.info.ID, p.Metrics); sample.Report != nil {
 			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: toPoint(sample, prev)})
 		}
@@ -395,6 +441,7 @@ func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint3
 	old := s.sessions[id]
 	s.sessions[id] = sess
 	delete(s.rejected, id)
+	s.notifyLocked(connEvent{Info: sess.info, Connected: true})
 	s.mu.Unlock()
 
 	if old != nil {
@@ -429,6 +476,7 @@ func (s *agentServer) unregister(sess *session) {
 	gone := s.sessions[sess.info.ID] == sess
 	if gone {
 		delete(s.sessions, sess.info.ID)
+		s.notifyLocked(connEvent{Info: sess.info})
 	}
 	s.mu.Unlock()
 	s.log.Info("agent disconnected", "agent", sess.info.ID)

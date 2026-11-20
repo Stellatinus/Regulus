@@ -27,9 +27,9 @@ The hub runs its plugins beside its servers (`Hub.Serve`, `internal/hub/plugins.
     bin/docker-agent
 ```
 
-- A directory whose `plugin.yaml` is missing or invalid, or whose name is not the plugin's `id`, is logged as a problem and skipped.
+- A directory whose `plugin.yaml` is missing or invalid, or whose name is not the plugin's `id`, is logged as a problem, never started, and listed with the state **`invalid`**: its directory name as id, no version, and the reason as its last error. Its manifest cannot say which role it is for, so every host reading the directory lists it.
 - Hidden entries (starting with `.`) and plain files are ignored.
-- A **symbolic link** in place of a plugin directory is refused: a plugin must be a real directory.
+- A **symbolic link** in place of a plugin directory is refused (and listed as `invalid`): a plugin must be a real directory.
 - Only plugins with a component for the role are started: an agent starts `components.agent`.
 - A plugin whose `api` or `requires` does not match this Regulus is **incompatible**: logged and never started.
 
@@ -70,14 +70,15 @@ What a plugin prints goes to the host's log (agent or hub), one entry per line, 
 
 ### States
 
-`starting`, `running`, `restarting`, `failed`, `incompatible`, `stopped`, with the number of restarts, the last error, when the plugin entered the state and the process id (`Supervisor.Status`).
+`starting`, `running`, `restarting`, `failed`, `incompatible`, `stopped`, and `invalid` for a directory that is not a usable plugin, with the number of restarts, the last error, when the plugin entered the state and the process id (`Supervisor.Status`).
 
 Where they are shown:
 
 - **`GET /api/plugins`** (permission `servers.read`): the hub's plugins and, for each connected agent with a plugins directory, the plugins it reported with its last metrics (every metrics interval, 10 s by default). See [HTTP API](../http-api.md) and `internal/hub/openapi.yaml`.
-- **The console** (Status tab) and **`regulus status`** (text, `--plain` as `plugin.<id>=<state> <version> restarts=<n>`, `--json`): the hub's plugins, when the hub has a plugins directory.
+- **`/api/stream`**: a `plugins.changed` event (`source` `hub`, or `agent` with its `id`) when a plugin of the hub changes state, restart count or last error, or when an agent's report differs from its last one. It carries no state; the client reads `GET /api/plugins` again.
+- **The console** (Status tab) and **`regulus status`** (text, `--plain` as `plugin.<id>=<state> <version> restarts=<n>`, `--json`): the hub's plugins, when the hub has a plugins directory. The **Health** tab has a `plugins` check that warns when one is `failed`, `incompatible` or `invalid`, or when the directory cannot be read.
 - **The agent protocol**: `MetricsReport.plugins` and `plugins_enabled` (see [Versioning](../versioning.md)). An agent older than these fields reports none.
-- The dashboard has the types and texts (`fetchPlugins` in `dashboard/src/api.ts`, the `plugins` catalog); the page itself is not built yet.
+- **The dashboard's Plugins page** ([Dashboard](../dashboard.md)): the same as the API, read again when the live stream says something changed.
 
 ## Why a crash cannot take the agent down
 

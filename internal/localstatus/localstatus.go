@@ -84,15 +84,19 @@ type Agent struct {
 	LastHeartbeat time.Time `json:"last_heartbeat,omitzero"`
 }
 
-// Handler serves the status as JSON at /status.
-func Handler(get func() Status) http.Handler {
+// Handler serves the status as JSON at /status. get receives the context of
+// the request and must answer well within the client's timeout (FetchTimeout).
+func Handler(get func(context.Context) Status) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /status", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(get())
+		_ = json.NewEncoder(w).Encode(get(r.Context()))
 	})
 	return mux
 }
+
+// FetchTimeout is how long Fetch waits for the whole answer.
+const FetchTimeout = 3 * time.Second
 
 // Fetch asks the hub of dataDir for its status. The error is not nil when no
 // hub is listening there.
@@ -104,7 +108,7 @@ func Fetch(ctx context.Context, dataDir string) (Status, error) {
 				return d.DialContext(ctx, "unix", SocketPath(dataDir))
 			},
 		},
-		Timeout: 3 * time.Second,
+		Timeout: FetchTimeout,
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://hub/status", nil)
 	if err != nil {

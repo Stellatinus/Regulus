@@ -438,3 +438,64 @@ func TestStageFetchedChecksWhatTheHubSends(t *testing.T) {
 		t.Error("a release with a bad signature was kept")
 	}
 }
+
+// Two stagings at once (#314): the hub downloads a new release while a rollout
+// fetches the release the agents need. The one that ends first must not prune
+// the work directory of the other.
+func TestConcurrentStagingsBothSucceed(t *testing.T) {
+	slow := newFakeRelease(t, "0.3.0")
+	fast := newFakeRelease(t, "0.2.0")
+	started, release := make(chan struct{}), make(chan struct{})
+	archive := "regulus_0.3.0_linux_amd64.tar.gz"
+	body := slow.files[archive]
+	slow.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if name == archive {
+			close(started)
+			<-release
+			_, _ = w.Write(body)
+			return
+		}
+		data, ok := slow.files[name]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+	s := newStager(t)
+	s.Keep = "0.2.0" // the version the hub runs, which the rollout stages
+
+	slowErr := make(chan error, 1)
+	go func() {
+		_, err := s.Stage(t.Context(), slow.release(), "linux", "amd64")
+		slowErr <- err
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the slow download did not start")
+	}
+	if _, err := s.Stage(t.Context(), fast.release(), "linux", "amd64"); err != nil {
+		t.Fatalf("fast staging: %v", err)
+	}
+	close(release)
+	if err := <-slowErr; err != nil {
+		t.Fatalf("slow staging lost its work directory: %v", err)
+	}
+	for _, v := range []string{"0.2.0", "0.3.0"} {
+		if _, err := os.Stat(filepath.Join(s.Dir, v, metaName)); err != nil {
+			t.Errorf("version %s is not staged: %v", v, err)
+		}
+	}
+	if cur, ok := s.Current(); !ok || cur.Version != "0.3.0" {
+		t.Errorf("Current() = %+v, %v", cur, ok)
+	}
+	// Nothing is left of either work directory.
+	entries, _ := os.ReadDir(s.Dir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".stage-") {
+			t.Errorf("left behind: %s", e.Name())
+		}
+	}
+}

@@ -194,4 +194,36 @@ var it = strs{
 	PluginIncompatible: "incompatibile",
 	PluginStopped:      "fermato",
 	// --- end of the plugins block.
+
+	// --- Plugins in the Health tab (#319).
+	PluginInvalid: "non valido",
+	ChkPlugins:    "Plugin",
+	PlgOK:         "%d plugin dell'hub, nessuno fallito o non valido",
+	PlgProblem:    "nessun plugin è in esecuzione: %s",
+	PlgBad:        "da controllare (vedi la scheda Stato): %s",
+	// --- end of the plugin health block.
+
+	// --- Setting errors (#318).
+	SettingErrors: map[string]string{
+		"unknown_setting":  "impostazione sconosciuta %s (note: %s)",
+		"empty":            "non può essere vuoto",
+		"address":          "usa host:porta, come :8080 o 127.0.0.1:8080, oppure solo la porta",
+		"port":             "la porta deve essere un numero da 1 a 65535",
+		"schema":           "usa lettere, cifre e trattino basso, senza iniziare con una cifra",
+		"password_in_file": "la password non viene mai salvata nel file di configurazione: scrivi REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (permessi 0640, root:regulus) e riavvia il servizio",
+		"bool":             "usa true o false",
+		"duration":         "usa una durata come 10s o 1m",
+		"too_short":        "troppo breve (minimo %s)",
+		"choice":           "usa uno tra: %s",
+		"read_file":        "impossibile leggere il file di configurazione: %s",
+		"data_dir_move":    "%s contiene i dati dell'hub e %s non ne contiene. Cambiare l'impostazione non li sposta: l'hub partirebbe con un database vuoto, una nuova chiave segreta e una nuova CA. Ferma l'hub, copia la directory nel nuovo posto, poi cambia l'impostazione. Per ripartire da zero di proposito, esegui: sudo regulus config set data_dir PERCORSO --force",
+		"unusual_line":     "impossibile cambiare questa riga in automatico (%s): modifica il file a mano",
+		"unreadable":       "la modifica renderebbe %s illeggibile: %s",
+		"hand_edit":        "l'impostazione è scritta in %s in una forma che la console non cambia: modifica il file a mano",
+		"postgres_host":    "imposta prima database.host: PostgreSQL ha bisogno di un host",
+		"invalid":          "la configurazione non sarebbe valida: %s",
+		"write_permission": "il file di configurazione appartiene a un altro utente: apri la console con sudo (%s)",
+		"write_file":       "impossibile scrivere il file di configurazione: %s",
+	},
+	// --- end of the setting errors block.
 }

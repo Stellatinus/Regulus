@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -78,6 +79,35 @@ type Stager struct {
 	// Keep, if set, is a version that is never pruned: the one this server runs,
 	// whose files the hub serves to the agents it manages.
 	Keep string
+
+	// mu guards active and makes install (the move into place and the prune)
+	// one step: two stagings can run at once (the hub's own download and a
+	// rollout that fetches the release the agents need, #314), and the prune
+	// of one must not remove the work directory of the other.
+	mu     sync.Mutex
+	active map[string]bool // names of the work directories of stagings in progress
+}
+
+// begin makes the work directory of a staging and marks it in progress, so
+// prune leaves it alone; the returned function removes it.
+func (s *Stager) begin() (string, func(), error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	work, err := os.MkdirTemp(s.Dir, ".stage-")
+	if err != nil {
+		return "", nil, err
+	}
+	if s.active == nil {
+		s.active = map[string]bool{}
+	}
+	name := filepath.Base(work)
+	s.active[name] = true
+	return work, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.active, name)
+		_ = os.RemoveAll(work)
+	}, nil
 }
 
 func (s *Stager) client() *http.Client {
@@ -139,11 +169,11 @@ func (s *Stager) StagePlatforms(ctx context.Context, rel Release, plats ...Platf
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return Staged{}, err
 	}
-	work, err := os.MkdirTemp(s.Dir, ".stage-")
+	work, done, err := s.begin()
 	if err != nil {
 		return Staged{}, err
 	}
-	defer func() { _ = os.RemoveAll(work) }()
+	defer done()
 
 	sumsData, err := s.fetchSmall(ctx, sums.URL)
 	if err != nil {
@@ -218,8 +248,11 @@ func (s *Stager) StagePlatforms(ctx context.Context, rel Release, plats ...Platf
 }
 
 // install moves a finished work directory to its place and removes the other
-// versions.
+// versions. It holds mu, so a concurrent staging neither sees half of it nor
+// loses its work directory to the prune.
 func (s *Stager) install(work string, st Staged) (Staged, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	final := filepath.Join(s.Dir, st.Version)
 	if err := os.RemoveAll(final); err != nil {
 		return Staged{}, err
@@ -241,14 +274,15 @@ func (s *Stager) install(work string, st Staged) (Staged, error) {
 }
 
 // prune removes every staged version except the ones to keep, and leftovers of
-// downloads that were interrupted.
+// downloads that were interrupted. The work directory of a staging still in
+// progress is not a leftover. The caller holds mu.
 func (s *Stager) prune(keep ...string) {
 	entries, err := os.ReadDir(s.Dir)
 	if err != nil {
 		return
 	}
 	for _, e := range entries {
-		if !slices.Contains(keep, e.Name()) {
+		if !slices.Contains(keep, e.Name()) && !s.active[e.Name()] {
 			_ = os.RemoveAll(filepath.Join(s.Dir, e.Name()))
 		}
 	}

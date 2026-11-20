@@ -27,7 +27,9 @@ export const plugins = {
   "plugins.state.failed": "failed",
   "plugins.state.incompatible": "incompatible",
   "plugins.state.stopped": "stopped",
+  "plugins.state.invalid": "invalid",
 
   "plugins.state.failedHint": "It stopped too often and is not started again until Regulus restarts.",
   "plugins.state.incompatibleHint": "It does not work with this version of Regulus and is never started.",
+  "plugins.state.invalidHint": "This directory is not a usable plugin and is never started: fix or remove it, then restart Regulus.",
 } as const;

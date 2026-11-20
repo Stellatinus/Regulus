@@ -46,6 +46,12 @@ const (
 	StateIncompatible = "incompatible"
 	// StateStopped: the host stopped it.
 	StateStopped = "stopped"
+	// StateInvalid: a directory in the plugins directory that is not a
+	// usable plugin (no plugin.yaml, an invalid one, a directory not named
+	// after the id, a symbolic link). Its ID is the directory's name, its
+	// Version is empty and LastError says why. It is never started, and it is
+	// listed by every role, since its manifest cannot say which it is for.
+	StateInvalid = "invalid"
 )
 
 // Status is the state of one plugin.
@@ -89,6 +95,10 @@ type Supervisor struct {
 	RestartWindow time.Duration
 	// Grace is how long a plugin gets to exit after SIGTERM before SIGKILL.
 	Grace time.Duration
+	// OnChange, if set, is called after the state, the restart count or the
+	// last error of a plugin changed, outside the supervisor's lock (the
+	// hub pushes it on its live stream). It must not block.
+	OnChange func()
 
 	mu     sync.Mutex
 	status map[string]*Status
@@ -135,6 +145,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	}
 	for _, p := range problems {
 		s.Log.Error("a plugin cannot be used", "dir", p.Dir, "err", p.Err)
+		s.set(Manifest{ID: filepath.Base(p.Dir)}, func(st *Status) { st.State, st.LastError = StateInvalid, p.Err.Error() })
 	}
 	if err := os.MkdirAll(s.RunDir, 0o700); err != nil {
 		return err
@@ -174,7 +185,6 @@ func (s *Supervisor) Status() []Status {
 
 func (s *Supervisor) set(m Manifest, fn func(*Status)) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.status == nil {
 		s.status = map[string]*Status{}
 	}
@@ -183,10 +193,15 @@ func (s *Supervisor) set(m Manifest, fn func(*Status)) {
 		st = &Status{ID: m.ID, Version: m.Version}
 		s.status[m.ID] = st
 	}
-	old := st.State
+	old := *st
 	fn(st)
-	if st.State != old {
+	if st.State != old.State {
 		st.Since = time.Now()
+	}
+	changed := st.State != old.State || st.Restarts != old.Restarts || st.LastError != old.LastError
+	s.mu.Unlock()
+	if changed && s.OnChange != nil {
+		s.OnChange()
 	}
 }
 

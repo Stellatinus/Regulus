@@ -178,6 +178,22 @@ jobs:
       - name: Smoke test
         run: make smoke
 
+  e2e:
+    name: End-to-end (hub and remote agent binaries over mTLS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: make e2e
+        run: |
+          set -o pipefail
+          make e2e 2>&1 | tee e2e.log
+          # A skipped test would pass without proving anything.
+          if grep -q -e '--- SKIP' e2e.log; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+
   proto:
     name: Protobuf (generated code up to date)
     runs-on: ubuntu-latest

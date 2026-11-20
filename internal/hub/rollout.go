@@ -48,6 +48,9 @@ const (
 	AgentUpdated    = "updated"
 	AgentFailed     = "failed"
 	AgentSkipped    = "skipped" // an earlier failure stopped the rollout
+	// AgentUnknown: the hub restarted while it waited for this server, so it
+	// never saw the result (#211).
+	AgentUnknown = "unknown"
 )
 
 // State of a rollout.
@@ -105,25 +108,41 @@ type RolloutControl interface {
 type rolloutRun struct {
 	status RolloutStatus
 	cancel context.CancelFunc
+	// done is closed when the goroutine that runs the rollout returns. Each run
+	// has its own, so waiting for one never races with the start of the next
+	// (a shared WaitGroup did: Wait in StopRollout against Add in
+	// StartRollout).
+	done chan struct{}
 }
 
 type rolloutState struct {
 	mu   sync.Mutex
 	run  *rolloutRun
-	wg   sync.WaitGroup
 	base context.Context
+	// persistMu orders the writes of the run's state to the database.
+	persistMu sync.Mutex
 
-	// failedTarget is the version for which an automatic rollout failed; the
-	// automatic mode does not try that again by itself.
+	// failedTarget is the version for which a rollout failed; the automatic
+	// mode does not try that again by itself. It is kept in the database, so
+	// a restart of the hub does not forget it (#211).
 	failedTarget string
 
 	// How long a server gets to fetch the update, and then to come back with
 	// the new version. Replaced in tests.
 	offerTimeout, returnTimeout time.Duration
+	// settle is how long a server must stay connected with the new version
+	// before it counts as updated: the helper on the server keeps watching the
+	// new agent for its Stable period (15 s, polled every 2 s) after it
+	// connects, and rolls it back if it does not stay up (#211).
+	settle time.Duration
 }
 
+// defaultSettle is the helper's Stable period with a margin for its polling
+// and for the agent's reconnection.
+const defaultSettle = 30 * time.Second
+
 func newRolloutState() *rolloutState {
-	return &rolloutState{base: context.Background(), offerTimeout: 10 * time.Minute, returnTimeout: 10 * time.Minute}
+	return &rolloutState{base: context.Background(), offerTimeout: 10 * time.Minute, returnTimeout: 10 * time.Minute, settle: defaultSettle}
 }
 
 func (h *Hub) candidates() []AgentInfo {
@@ -231,14 +250,14 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 	}
 	now := time.Now().UTC()
 	runCtx, cancel := context.WithCancel(h.rollout.base)
-	run := &rolloutRun{cancel: cancel, status: RolloutStatus{State: RolloutRunning, WaveSize: opts.WaveSize, StartedBy: by, StartedAt: &now}}
+	run := &rolloutRun{cancel: cancel, done: make(chan struct{}), status: RolloutStatus{Target: h.version, State: RolloutRunning, WaveSize: opts.WaveSize, StartedBy: by, StartedAt: &now}}
 	for _, a := range chosen {
 		run.status.Agents = append(run.status.Agents, rolloutAgent(a, AgentPending))
 	}
 	h.rollout.run = run
-	// Counted before the lock is released: a stop that comes in now waits for
-	// the run (and writes its event after it), so the events stay in order.
-	h.rollout.wg.Add(1)
+	// run.done exists before the lock is released: a stop that comes in now
+	// waits for the run (and writes its event after it), so the events stay in
+	// order.
 	snapshot := h.snapshotLocked()
 	h.rollout.mu.Unlock()
 
@@ -247,7 +266,7 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 	h.audit(ctx, by, EventRolloutStarted, h.version, fmt.Sprintf("%d servers, %d at a time", len(chosen), opts.WaveSize))
 	h.log.Info("updating the servers", "target", h.version, "servers", len(chosen), "wave", opts.WaveSize, "by", by)
 	go func() {
-		defer h.rollout.wg.Done()
+		defer close(run.done)
 		h.runRollout(runCtx, run, by)
 	}()
 	return snapshot, nil
@@ -267,7 +286,7 @@ func (h *Hub) StopRollout(ctx context.Context, by string) (RolloutStatus, error)
 	run.cancel()
 	// After the run has ended, so "stopped" follows its "started" and the
 	// events of the servers it updated.
-	h.rollout.wg.Wait()
+	<-run.done
 	h.audit(ctx, by, EventRolloutFinished, h.version, "stopped")
 	return h.RolloutStatus(ctx)
 }
@@ -278,15 +297,17 @@ func (h *Hub) audit(ctx context.Context, actor, event, target, detail string) {
 
 func (h *Hub) setAgent(run *rolloutRun, id, status, message string) {
 	h.rollout.mu.Lock()
-	defer h.rollout.mu.Unlock()
 	for i := range run.status.Agents {
 		if run.status.Agents[i].ID == id {
 			run.status.Agents[i].Status, run.status.Agents[i].Message = status, message
 		}
 	}
+	h.rollout.mu.Unlock()
+	h.persistRollout(run)
 }
 
 func (h *Hub) runRollout(ctx context.Context, run *rolloutRun, by string) {
+	h.persistRollout(run)
 	h.rollout.mu.Lock()
 	ids := make([]string, len(run.status.Agents))
 	for i, a := range run.status.Agents {
@@ -340,12 +361,18 @@ func (h *Hub) runRollout(ctx context.Context, run *rolloutRun, by string) {
 	// A stop that arrived while the event was written wins: it has its own.
 	if run.status.State != RolloutStopped {
 		run.status.State = final
-		if final == RolloutFailed && by == update.SystemActor {
-			h.rollout.failedTarget = h.version
-		}
 	}
 	state := run.status.State
 	h.rollout.mu.Unlock()
+	// The automatic mode does not try again a version that failed, whoever
+	// started the rollout; one that ended well clears that.
+	switch state {
+	case RolloutFailed:
+		h.setFailedTarget(h.version)
+	case RolloutDone:
+		h.setFailedTarget("")
+	}
+	h.persistRollout(run)
 	h.log.Info("updating the servers finished", "target", h.version, "state", state)
 }
 
@@ -369,6 +396,9 @@ func (h *Hub) updateAgent(ctx context.Context, run *rolloutRun, id, by string) b
 	}
 	h.setAgent(run, id, AgentOffered, "")
 
+	// Watched from before the command: the server cannot restart earlier.
+	events, unwatch := h.agents.watch(id)
+	defer unwatch()
 	cctx, cancel := context.WithTimeout(ctx, h.rollout.offerTimeout)
 	res, err := h.agents.sendCommand(cctx, id, &agentv1.Command{Kind: &agentv1.Command_ApplyUpdate{ApplyUpdate: &agentv1.ApplyUpdate{
 		Version: h.version, Archive: name, Sha256: sha, Size: uint64(size),
@@ -385,28 +415,110 @@ func (h *Hub) updateAgent(ctx context.Context, run *rolloutRun, id, by string) b
 		return fail(res.GetError())
 	}
 	h.setAgent(run, id, AgentInstalling, "")
+	return h.awaitReturn(ctx, run, info, by, events, fail)
+}
 
-	// The server restarts. It is updated when it connects again with the new
-	// version, and rolled back when it connects with the old one.
+// awaitReturn waits for a server that handed the update to its installer, and
+// judges the result (#211). events are the server's connections and
+// disconnections since before the command.
+//
+//   - updated: it is connected with the new version, in the same session, for
+//     settle. The installer on the server keeps watching the new agent for a
+//     while after it connects, and can still roll it back.
+//   - failed: it connected with the new version and then came back with
+//     another one (the installer rolled it back); or, when returnTimeout ends,
+//     it is not connected with the new version.
+//   - a connection with the old version alone proves nothing until then: a
+//     network blip can reconnect the old agent before the installer even ran.
+func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo, by string, events <-chan connEvent, fail func(string) bool) bool {
 	deadline := time.NewTimer(h.rollout.returnTimeout)
 	defer deadline.Stop()
-	tick := time.NewTicker(500 * time.Millisecond)
+	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
-	for {
-		if now, ok := h.agentInfo(id); ok && now.ConnectedAt != info.ConnectedAt {
-			if now.Version == h.version {
-				h.setAgent(run, id, AgentUpdated, "")
-				h.audit(context.Background(), by, EventAgentUpdated, id, fmt.Sprintf("%s to %s", info.Version, h.version))
-				return true
+	timedOut := false
+	var newSession time.Time // ConnectedAt of the session with the new version
+	var newSince time.Time   // when that session was first seen
+	sawNew := false
+	lastOther := "" // the version of the last session since the command that was not the new one
+
+	// see takes in what is known of the server: a connection or the registry
+	// (connected), or a disconnection. It returns a message when the server
+	// came back rolled back.
+	see := func(a AgentInfo, connected bool) string {
+		switch {
+		case !connected:
+			if a.ConnectedAt.Equal(newSession) {
+				newSession = time.Time{}
 			}
-			return fail(fmt.Sprintf("the server came back with version %s: the update did not take and was rolled back", now.Version))
+		case a.ConnectedAt.Equal(before.ConnectedAt):
+			// still the session from before the update
+		case a.Version == h.version:
+			if !a.ConnectedAt.Equal(newSession) {
+				newSession, newSince, sawNew = a.ConnectedAt, time.Now(), true
+			}
+		default:
+			newSession = time.Time{}
+			if sawNew {
+				return fmt.Sprintf("the server connected with version %s, then came back with version %s: the installer rolled the update back", h.version, a.Version)
+			}
+			lastOther = a.Version
 		}
+		return ""
+	}
+	for {
 		select {
 		case <-ctx.Done():
-			return fail("stopped")
+			// The server has the update; what it makes of it is not known.
+			msg := "the update of the servers was stopped before this server's result was known"
+			h.setAgent(run, before.ID, AgentUnknown, msg)
+			h.log.Warn("server result unknown", "agent", before.ID, "why", msg)
+			return false
+		case ev := <-events:
+			if msg := see(ev.Info, ev.Connected); msg != "" {
+				return fail(msg)
+			}
+			continue
 		case <-deadline.C:
-			return fail(fmt.Sprintf("the server did not connect again within %s", h.rollout.returnTimeout))
+			timedOut = true
 		case <-tick.C:
+		}
+		// The events still queued come first: they are older than what the
+		// registry shows now, and taken after it they would read as a return
+		// to an older version.
+	drain:
+		for {
+			select {
+			case ev := <-events:
+				if msg := see(ev.Info, ev.Connected); msg != "" {
+					return fail(msg)
+				}
+			default:
+				break drain
+			}
+		}
+		// The registry, in case an event was dropped.
+		now, ok := h.agentInfo(before.ID)
+		if !ok {
+			newSession = time.Time{}
+		} else if msg := see(now, true); msg != "" {
+			return fail(msg)
+		}
+		if !newSession.IsZero() && ok && now.ConnectedAt.Equal(newSession) && time.Since(newSince) >= h.rollout.settle {
+			h.setAgent(run, before.ID, AgentUpdated, "")
+			h.audit(context.Background(), by, EventAgentUpdated, before.ID, fmt.Sprintf("%s to %s", before.Version, h.version))
+			return true
+		}
+		// After returnTimeout only a session with the new version that is
+		// still settling is waited for.
+		if timedOut && newSession.IsZero() {
+			switch {
+			case lastOther != "":
+				return fail(fmt.Sprintf("the server came back with version %s and not %s within %s: the update did not take or was rolled back", lastOther, h.version, h.rollout.returnTimeout))
+			case sawNew:
+				return fail(fmt.Sprintf("the server connected with version %s but did not stay connected", h.version))
+			default:
+				return fail(fmt.Sprintf("the server did not connect again within %s", h.rollout.returnTimeout))
+			}
 		}
 	}
 }
@@ -437,9 +549,7 @@ func (h *Hub) autoRollout(ctx context.Context) {
 	if _, err := h.StartRollout(ctx, update.SystemActor, RolloutOptions{WaveSize: 1}); err != nil &&
 		!errors.Is(err, ErrRolloutRunning) && !errors.Is(err, ErrNothingToRoll) {
 		h.log.Warn("updating the servers automatically", "err", err)
-		h.rollout.mu.Lock()
-		h.rollout.failedTarget = h.version
-		h.rollout.mu.Unlock()
+		h.setFailedTarget(h.version)
 	}
 }
 
@@ -504,10 +614,13 @@ func (s *agentServer) FetchUpdate(req *agentv1.FetchUpdateRequest, stream grpc.S
 // stop ends a rollout in progress and waits for it.
 func (r *rolloutState) stop() {
 	r.mu.Lock()
-	if r.run != nil && r.run.status.State == RolloutRunning {
-		r.run.status.State = RolloutStopped
-		r.run.cancel()
+	run := r.run
+	if run != nil && run.status.State == RolloutRunning {
+		run.status.State = RolloutStopped
+		run.cancel()
 	}
 	r.mu.Unlock()
-	r.wg.Wait()
+	if run != nil {
+		<-run.done
+	}
 }
