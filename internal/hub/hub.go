@@ -55,7 +55,12 @@ type Hub struct {
 	closeErr  error
 
 	dbState dbHealth
-	ui      fs.FS
+	// demoted is set when another hub took the active-hub lock of the
+	// database (#344); stopTimers ends the timers that must run in one place.
+	demoted    atomic.Bool
+	timersMu   sync.Mutex
+	stopTimers context.CancelFunc
+	ui         fs.FS
 
 	version   string
 	startedAt time.Time
@@ -355,18 +360,29 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	h.watchDatabase(ctx)
 	h.watchCertificates(ctx)
 
+	// The update checks and the automatic rollouts must run in one hub only;
+	// a hub that loses the database lock to another one ends them (#344).
+	tctx, stopTimers := context.WithCancel(ctx)
+	defer stopTimers()
+	h.timersMu.Lock()
+	h.stopTimers = stopTimers
+	h.timersMu.Unlock()
+	if h.demoted.Load() {
+		stopTimers()
+	}
+
 	h.rollout.mu.Lock()
-	h.rollout.base = ctx
+	h.rollout.base = tctx
 	h.rollout.mu.Unlock()
 	rolloutTick := time.NewTicker(5 * time.Minute)
 	defer rolloutTick.Stop()
 	go func() {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-tctx.Done():
 				return
 			case <-rolloutTick.C:
-				h.autoRollout(ctx)
+				h.autoRollout(tctx)
 			}
 		}
 	}()
@@ -374,7 +390,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	updatesDone := make(chan struct{})
 	go func() {
 		defer close(updatesDone)
-		h.updates.Run(ctx)
+		h.updates.Run(tctx)
 	}()
 	defer func() { <-updatesDone }()
 

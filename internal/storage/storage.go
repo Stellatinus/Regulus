@@ -50,12 +50,12 @@ type HubDB struct {
 	// PostgreSQL, whose pool already has several connections, it is Write.
 	Read *sql.DB
 
-	unlock func()
+	active *activeLock
 }
 
 // Close releases the lock of the active hub and closes the pools.
 func (d *HubDB) Close() error {
-	d.unlock()
+	d.active.release()
 	var err error
 	if d.Read != d.Write {
 		err = d.Read.Close()
@@ -69,22 +69,22 @@ func (d *HubDB) Close() error {
 // a newer one, does not migrate the schema under the first. On SQLite that
 // guarantee comes from the lock the hub holds on the data directory.
 func OpenHub(ctx context.Context, cfg Config) (*HubDB, error) {
-	db, unlock, err := open(ctx, cfg, true)
+	db, lock, err := open(ctx, cfg, true)
 	if err != nil {
 		return nil, err
 	}
 	read := db
 	if !cfg.IsPostgres() && cfg.ReadConns >= 0 {
 		if read, err = openSQLiteReader(cfg); err != nil {
-			unlock()
+			lock.release()
 			_ = db.Close()
 			return nil, err
 		}
 	}
-	return &HubDB{Write: db, Read: read, unlock: unlock}, nil
+	return &HubDB{Write: db, Read: read, active: lock}, nil
 }
 
-func open(ctx context.Context, cfg Config, active bool) (*sql.DB, func(), error) {
+func open(ctx context.Context, cfg Config, active bool) (*sql.DB, *activeLock, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, nil, err
 	}
@@ -105,19 +105,19 @@ func open(ctx context.Context, cfg Config, active bool) (*sql.DB, func(), error)
 			return nil, nil, err
 		}
 	}
-	unlock := func() {}
+	var lock *activeLock
 	if active {
-		if unlock, err = lockActiveHub(ctx, db, cfg); err != nil {
+		if lock, err = lockActiveHub(ctx, db, cfg); err != nil {
 			_ = db.Close()
 			return nil, nil, err
 		}
 	}
 	if err := Migrate(ctx, db, cfg.Type); err != nil {
-		unlock()
+		lock.release()
 		_ = db.Close()
 		return nil, nil, err
 	}
-	return db, unlock, nil
+	return db, lock, nil
 }
 
 // OpenSQLite opens the SQLite database in dataDir. It is shorthand for the
