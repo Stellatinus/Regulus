@@ -10,6 +10,7 @@ The hub reads, in increasing priority: defaults, a YAML file (`--config` or `REG
 | `data_dir` | `--data-dir` | `REGULUS_DATA_DIR` | `data` |
 | `builtin_agent` (`true`, `false`) | `--builtin-agent` | `REGULUS_BUILTIN_AGENT` | `true` |
 | `metrics_interval` (for example `10s`, minimum `1s`) | `--metrics-interval` | `REGULUS_METRICS_INTERVAL` | `10s` |
+| `metrics_budget` (a size such as `256MiB`, minimum `4MiB`) | - | `REGULUS_METRICS_BUDGET` | `256MiB` |
 | `plugins_dir` | `--plugins-dir` | `REGULUS_PLUGINS_DIR` | empty: the hub runs no plugin |
 | `log.level` (`debug`, `info`, `warn`, `error`) | `--log-level` | `REGULUS_LOG_LEVEL` | `info` |
 | `log.format` (`text`, `json`) | `--log-format` | `REGULUS_LOG_FORMAT` | `text` |
@@ -20,6 +21,8 @@ The hub reads, in increasing priority: defaults, a YAML file (`--config` or `REG
 `listen` is the address of the dashboard and the API. The default, `127.0.0.1:8080`, answers on the loopback interface only (#197): the port speaks plain HTTP unless `tls_cert` and `tls_key` are set, and a login, a session cookie or an enrollment token must not cross a network in the clear by default. A port alone (`:8080`) or `0.0.0.0:8080` listens on every interface; the hub then logs a warning at every start unless TLS is on. How to reach the dashboard from other machines (an SSH tunnel, a reverse proxy, or TLS here) is in [Installation](installation.md#reaching-the-dashboard). The agent port (`agent_listen`) is not affected: it is always mutual TLS.
 
 `tls_cert` and `tls_key` make the dashboard port serve **HTTPS only** (TLS 1.2 or later, HTTP/1.1) with that certificate and key; set both or neither, or the hub refuses to start. The certificate file holds the server certificate followed by its chain. The key must be readable by the hub's user (`regulus`), for example `/etc/regulus/tls/key.pem` owned by `root:regulus` with mode `0640`; the service unit can read `/etc` but not write it. The files are looked at again at most once a minute, and a renewed pair is used without a restart; a pair that cannot be loaded keeps the previous certificate and logs a warning. The session cookie is then `Secure` and HSTS is sent. They are a pair of paths, so they are set in the file or the environment, not with `regulus config set` (like `trusted_proxies`).
+
+`metrics_budget` bounds the memory of the hub's in-memory metrics history for all agents together (#333). A typical report costs about 1.3 KB, so the default keeps a full hour at the 10 s interval for about 500 agents; when the estimate goes over the budget the oldest samples of any agent are dropped first, and every agent keeps at least its newest sample. Raise it for a large fleet, lower it on a small VPS. Units are binary (`MB` means MiB). It is read at start.
 
 With `builtin_agent` enabled (the default) the hub runs an agent for its own server, which connects through the same contract as any other agent (agent id `local`).
 

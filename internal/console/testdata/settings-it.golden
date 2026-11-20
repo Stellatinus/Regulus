@@ -17,6 +17,7 @@ Regulus v0.3.0  Hub ● in esecuzione
    database.schema        (vuoto)                    predefinito
    builtin_agent          true                       file
    metrics_interval       10s                        file
+   metrics_budget         256MiB                     predefinito
    plugins_dir            (vuoto)                    predefinito
    log.level              info                       file
    log.format             text                       file
@@ -24,7 +25,6 @@ Regulus v0.3.0  Hub ● in esecuzione
    updates.apply          false                      predefinito
    console.tui            true                       predefinito
 
- listen  predefinito: 127.0.0.1:8080
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

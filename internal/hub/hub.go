@@ -201,6 +201,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
+	if cfg.MetricsBudget > 0 {
+		h.agents.metrics.budget = int64(cfg.MetricsBudget)
+	}
 	for _, opt := range opts {
 		opt(h)
 	}

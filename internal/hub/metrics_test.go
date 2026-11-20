@@ -396,3 +396,34 @@ func TestMetricsEndpointStepAveragesIntoBuckets(t *testing.T) {
 		t.Errorf("one bucket for the hour: %+v", out.Points)
 	}
 }
+
+// TestHubUsesTheConfiguredMetricsBudget is #333: metrics_budget reaches the
+// store, and the store keeps to the configured value, not to the default.
+func TestHubUsesTheConfiguredMetricsBudget(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	cfg.MetricsBudget = config.MinMetricsBudget
+	useTestDatabase(t, &cfg)
+	h, err := New(ctx, cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), fstest.MapFS{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = h.Close() }()
+
+	store := h.agents.metrics
+	if store.budget != int64(config.MinMetricsBudget) {
+		t.Fatalf("store budget = %d, want the configured %d", store.budget, config.MinMetricsBudget)
+	}
+	// Far more samples than the budget holds (about 3000 of them).
+	for i := range 8000 {
+		store.add("agent-"+strconv.Itoa(i%4), typicalReport(uint64(1000+i)))
+		if used := store.size(); used > store.budget {
+			t.Fatalf("sample %d: the store uses %d, over the configured budget of %d", i, used, store.budget)
+		}
+	}
+	if store.size() < store.budget/2 {
+		t.Fatalf("the store uses %d, far under its budget of %d: nothing was kept", store.size(), store.budget)
+	}
+}

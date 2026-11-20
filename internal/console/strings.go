@@ -310,6 +310,7 @@ var en = strs{
 		"password_in_file": "the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
 		"bool":             "use true or false",
 		"duration":         "use a duration such as 10s or 1m",
+		"size":             "use a size such as 256MiB or 1GiB",
 		"too_short":        "too short (minimum %s)",
 		"choice":           "use one of: %s",
 		"read_file":        "cannot read the configuration file: %s",
