@@ -43,3 +43,25 @@ It skips, saying why, when there is no release to download (no network, GitHub's
 Every process log is printed when the test fails, and a `DATA RACE` in any of them fails it. Breaking the pinning (`verifyPinned` accepting anything), the revocation of the live stream (`agentServer.disconnect`) or the revocation check at connection (`requireAgent` without `fleet.Authorize`) makes it fail; this was checked by hand when the test was written.
 
 **Not covered:** an update sent over the stream (`ApplyUpdate` needs a hub that trusts a signed release, and a hub binary trusts only the project's Sigstore identity, so a test cannot make one; #341 stays open for it), a hub CA that has expired, PostgreSQL as the hub database, and anything that needs systemd (the restart policy on status 3 is only asserted as the exit status). Nothing here replaces a run on a real machine (#81).
+
+## Load test (hub under 200 agents and 20 dashboards)
+
+`internal/hub/load_test.go` (`TestHubUnderLoad`, #234) is skipped unless `REGULUS_LOAD=1`:
+
+```sh
+REGULUS_LOAD=1 go test -run TestHubUnderLoad -v -count=1 ./internal/hub/
+# knobs: REGULUS_LOAD_AGENTS=200 REGULUS_LOAD_DASHBOARDS=20 REGULUS_LOAD_INTERVAL=1s REGULUS_LOAD_SECONDS=20
+```
+
+It starts a hub (SQLite, built-in agent off, the real 10 s agent intervals), connects N simulated agents that send a heartbeat and a metrics report (2 disks, 1 interface) each interval, and runs M dashboards that poll `GET /api/agents` and one agent's metrics once a second. It prints the hub's CPU time, the metrics history the hub holds, goroutines and p50, p95 and maximum latency of the two calls, and fails if a call is not answered with 200 or an agent is dropped.
+
+**One run** (a 4-vCPU Intel Xeon @ 2.10 GHz virtual machine with 16 GB, Go 1.27, 22 November 2026), 200 agents and 20 dashboards:
+
+| Reports per agent | Hub CPU (of one CPU) | `GET /api/agents` p50 / p95 / max | `GET …/metrics` p50 / p95 / max | Metrics history |
+|---|---|---|---|---|
+| every 10 s (the real default, 20 reports/s) for 60 s | 1.4% | 2.3 / 5.8 / 69 ms | 0.19 / 0.64 / 30 ms | 4.2 KiB per agent after 60 s |
+| every 1 s (ten times the real load, 200 reports/s) for 30 s | 4.4% | 2.4 / 5.1 / 7.3 ms | 0.22 / 0.55 / 2.1 ms | 4.2 KiB per agent after 30 s |
+
+The CPU figure includes the simulated agents and dashboards, so the hub's own share is lower. Nothing was dropped and every call answered 200.
+
+**What this does not measure**, and so what must not be claimed from it: a real network and TLS between agents and hub (the agents use the in-process transport); the WebSocket stream the dashboard really uses (its fan-out to 20 browsers); the database (the metrics history is in memory, and only the Servers and settings data touch it); the browser, where the cost of redrawing 200 servers is: the React profile with 50 or more agents is not done; and memory per connected agent: the process heap in the run is dominated by the 2 MiB of buffers the in-process transport allocates per connection, so it says nothing about a real connection. What the run does support is that the hub's own CPU and the latency of the two API calls are small at 200 agents, ten times the real report rate included. "Tested with" in the documents means this run only. A load run over real TLS connections (several machines, or a loopback listener with the agent binary) and the browser measurements stay open in #234.

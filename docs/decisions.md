@@ -516,6 +516,12 @@ Proposed on 2026-11-19, **waiting for the maintainer's agreement**; nothing is i
 - **Not done, because it is a repository setting and not a file** (a maintainer does it; it cannot be checked from here): a tag ruleset (only maintainers create `v*`, nobody moves or deletes one), required reviewers and a `v*`-only deployment rule on the `release` environment, and two-factor authentication or a hardware key for those accounts. Described in `docs/releases.md`; a `[Test]` issue asks for the settings and for the demonstration the issue wants (a tag on a commit that is not on main, or without green CI, produces no release). The issue stays open until then.
 - **Kept the push-tag trigger**, because the documents say a tag pushed by hand works and the new checks make it safe against a mistake; dropping it would not remove the real risk (the ruleset does).
 
+## Load test of the hub (#234, partly done)
+
+- **A repeatable run exists** (`TestHubUnderLoad`, `docs/development.md`): N simulated agents, M polling dashboards, CPU, latency and the metrics history, with the hardware and one result written down. At 200 agents and 20 dashboards the hub used about 1.4% of one CPU at the real report rate and 4.4% at ten times it, and the two API calls answered in single-digit milliseconds at p95.
+- **A finding about the measurement, not the hub:** the in-process transport (`internal/inproc`, 1 MiB buffer per direction per connection) makes memory per agent look like 2 MiB. That is the transport of the built-in agent, which only one agent uses; it says nothing about the 200 remote connections, so the test reports the hub's own estimate of the history (about 4 KiB per agent for 30 reports) and says why the heap is not the hub's share.
+- **Not done, and left open on #234:** the same run over real TLS connections, the WebSocket fan-out, the SQLite and PostgreSQL write paths under many dashboards and users, and the browser profile with 50 agents. The documents do not claim a supported scale beyond "this run".
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
