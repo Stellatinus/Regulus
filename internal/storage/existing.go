@@ -73,7 +73,7 @@ func checkExisting(ctx context.Context, db *sql.DB, cfg Config) error {
 	if !exists {
 		return fmt.Errorf("%w in %s: check the database settings", ErrNoDatabase, cfg.Describe())
 	}
-	applied, err := appliedVersions(ctx, db)
+	applied, err := appliedVersions(ctx, db, d)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func checkExisting(ctx context.Context, db *sql.DB, cfg Config) error {
 		return err
 	}
 	for _, m := range migrations {
-		if !applied[m.version] {
+		if _, ok := applied[m.version]; !ok {
 			return fmt.Errorf("%w (migration %04d_%s is missing): restart the hub (systemctl restart regulus), which applies it, then run this again", ErrSchemaOlder, m.version, m.name)
 		}
 	}

@@ -204,3 +204,15 @@ func TestOtherModesNeverInstallByThemselves(t *testing.T) {
 		t.Error("download mode installed an update")
 	}
 }
+
+// A hub on PostgreSQL says so in its status, so the Updates page can tell the
+// administrator what a rollback does not restore (#247).
+func TestStatusSaysWhenTheHubUsesPostgres(t *testing.T) {
+	if st := newApplyRig(t).status(t); st.Postgres {
+		t.Error("a SQLite hub reports postgres")
+	}
+	r := newApplyRig(t, func(o *Options) { o.Postgres = true })
+	if st := r.status(t); !st.Postgres {
+		t.Error("a PostgreSQL hub does not report postgres")
+	}
+}

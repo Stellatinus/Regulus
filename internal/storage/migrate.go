@@ -23,12 +23,25 @@ type migration struct {
 	version int
 	name    string
 	sql     string
+	// readerMin is the lowest migration version a binary must know to keep
+	// working on a database that has this migration applied (#247). It is the
+	// migration's own version unless the file declares otherwise with
+	// readerMinDirective: that is the strict default, and a release that
+	// only expands the schema lowers it.
+	readerMin int
 }
+
+// readerMinDirective, on a line of its own in the leading comments of a
+// migration file, declares an expand-only migration: `-- regulus:reader-min 15`
+// says a binary that knows migrations up to 15 still works on a database that
+// has this one. See docs/updates.md ("Rollback and the schema range").
+const readerMinDirective = "-- regulus:reader-min "
 
 // Migrate applies, in order and each in its own transaction, the embedded
 // migrations that are not yet recorded in schema_migrations. It refuses to
-// run on a database that has migrations this binary does not know, which
-// means the database was written by a newer version of Regulus.
+// run on a database that has a migration this binary does not know and that
+// needs a newer binary (see readerMin); a database whose unknown migrations
+// are all expand-only is accepted, so a rolled-back release still starts.
 //
 // typ is TypeSQLite (also when empty) or TypePostgres. On PostgreSQL the whole
 // run holds an advisory lock, so two hubs that start together on one database
@@ -89,7 +102,11 @@ func loadMigrations(fsys fs.FS, dir string) ([]migration, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read migration %q: %w", file, err)
 		}
-		list = append(list, migration{version: version, name: rest, sql: string(body)})
+		readerMin, err := parseReaderMin(file, string(body), version)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, migration{version: version, name: rest, sql: string(body), readerMin: readerMin})
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].version < list[j].version })
 	for i := 1; i < len(list); i++ {
@@ -98,6 +115,29 @@ func loadMigrations(fsys fs.FS, dir string) ([]migration, error) {
 		}
 	}
 	return list, nil
+}
+
+// parseReaderMin reads readerMinDirective from the leading comment lines of a
+// migration. The value must be a version below the migration's own: a larger
+// one would claim the migration needs a newer binary than itself.
+func parseReaderMin(file, body string, version int) (int, error) {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !strings.HasPrefix(line, "--") {
+			break
+		}
+		if v, ok := strings.CutPrefix(line, readerMinDirective); ok {
+			n, err := strconv.Atoi(strings.TrimSpace(v))
+			if err != nil || n <= 0 || n >= version {
+				return 0, fmt.Errorf("migration %q: %s must be a version between 1 and %d", file, strings.TrimSpace(readerMinDirective), version-1)
+			}
+			return n, nil
+		}
+	}
+	return version, nil
 }
 
 func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) error {
@@ -112,7 +152,10 @@ func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) e
 		return fmt.Errorf("create schema_migrations: %w", err)
 	}
 
-	applied, err := appliedVersions(ctx, db)
+	if err := ensureReaderMin(ctx, db, d); err != nil {
+		return err
+	}
+	applied, err := appliedVersions(ctx, db, d)
 	if err != nil {
 		return err
 	}
@@ -121,7 +164,7 @@ func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) e
 	}
 
 	for _, m := range migrations {
-		if applied[m.version] {
+		if _, done := applied[m.version]; done {
 			continue
 		}
 		if err := applyOne(ctx, db, d, m); err != nil {
@@ -131,20 +174,67 @@ func apply(ctx context.Context, db *sql.DB, d dialect, migrations []migration) e
 	return nil
 }
 
-// appliedVersions reads the versions recorded in schema_migrations.
-func appliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) {
-	applied := map[int]bool{}
-	rows, err := db.QueryContext(ctx, `SELECT version FROM schema_migrations`)
+// ensureReaderMin adds the reader_min column to schema_migrations when the
+// table predates it. It is not a numbered migration because it belongs to the
+// runner itself, which has to read it before it can judge any migration.
+func ensureReaderMin(ctx context.Context, db *sql.DB, d dialect) error {
+	if d.postgres {
+		_, err := db.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS reader_min BIGINT NOT NULL DEFAULT 0`)
+		if err != nil {
+			return fmt.Errorf("add schema_migrations.reader_min: %w", err)
+		}
+		return nil
+	}
+	has, err := hasReaderMin(ctx, db, d)
+	if err != nil || has {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `ALTER TABLE schema_migrations ADD COLUMN reader_min INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return fmt.Errorf("add schema_migrations.reader_min: %w", err)
+	}
+	return nil
+}
+
+func hasReaderMin(ctx context.Context, db *sql.DB, d dialect) (bool, error) {
+	q := `SELECT COUNT(*) FROM pragma_table_info('schema_migrations') WHERE name = 'reader_min'`
+	if d.postgres {
+		q = `SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'schema_migrations' AND column_name = 'reader_min'`
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, q).Scan(&n); err != nil {
+		return false, fmt.Errorf("read schema_migrations: %w", err)
+	}
+	return n > 0, nil
+}
+
+// appliedVersions reads the versions recorded in schema_migrations, each with
+// the reader_min the migration was recorded with (0 for a row written before
+// the column existed, or by a release that did not know it: the migration's
+// own version then).
+func appliedVersions(ctx context.Context, db *sql.DB, d dialect) (map[int]int, error) {
+	has, err := hasReaderMin(ctx, db, d)
+	if err != nil {
+		return nil, err
+	}
+	q := `SELECT version, 0 FROM schema_migrations`
+	if has {
+		q = `SELECT version, reader_min FROM schema_migrations`
+	}
+	applied := map[int]int{}
+	rows, err := db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("read schema_migrations: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var v int
-		if err := rows.Scan(&v); err != nil {
+		var v, min int
+		if err := rows.Scan(&v, &min); err != nil {
 			return nil, fmt.Errorf("read schema_migrations: %w", err)
 		}
-		applied[v] = true
+		if min <= 0 || min > v {
+			min = v
+		}
+		applied[v] = min
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read schema_migrations: %w", err)
@@ -153,15 +243,20 @@ func appliedVersions(ctx context.Context, db *sql.DB) (map[int]bool, error) {
 }
 
 // refuseUnknown fails when the database has a migration this binary does not
-// know: it was written by a newer version of Regulus.
-func refuseUnknown(applied map[int]bool, migrations []migration) error {
+// know AND that migration needs a binary that knows more than this one does.
+// A migration that declares reader_min at or below the newest migration this
+// binary knows (an expand-only one) is tolerated: this binary, started again
+// after a rollback, works on the newer schema (#247).
+func refuseUnknown(applied map[int]int, migrations []migration) error {
 	known := map[int]bool{}
+	newest := 0
 	for _, m := range migrations {
 		known[m.version] = true
+		newest = max(newest, m.version)
 	}
-	for v := range applied {
-		if !known[v] {
-			return fmt.Errorf("database has migration %d that this version of Regulus does not know: %w", v, ErrSchemaNewer)
+	for v, readerMin := range applied {
+		if !known[v] && readerMin > newest {
+			return fmt.Errorf("database has migration %d that this version of Regulus does not know (it needs a version that knows migration %d, this one knows up to %d): %w", v, readerMin, newest, ErrSchemaNewer)
 		}
 	}
 	return nil
@@ -230,7 +325,7 @@ func applyOne(ctx context.Context, db *sql.DB, d dialect, m migration) (err erro
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name) VALUES (?, ?)`, m.version, m.name); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, name, reader_min) VALUES (?, ?, ?)`, m.version, m.name, m.readerMin); err != nil {
 		return err
 	}
 	return tx.Commit()

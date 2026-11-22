@@ -59,6 +59,8 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.staged.applyOn": ".",
   "updates.staged.applyOff":
     ": questo hub non è configurato per installare da solo gli aggiornamenti (updates.apply e l'unità regulus-update.path dell'installer).",
+  "updates.postgres.note":
+    "Questo hub usa PostgreSQL. Se un aggiornamento fallisce e Regulus rimette la versione precedente, rimette solo il programma, non il database: l'helper di aggiornamento non può copiare un server di database. Se la nuova versione ha modificato il database, la versione precedente può rifiutarsi di partire finché non ripristini un backup. Fai un backup (pg_dump) prima di aggiornare.",
   "updates.staged.checksumNote":
     "L'elenco dei checksum arriva dallo stesso posto del file: individua un download danneggiato ma non dimostra chi lo ha pubblicato.",
 

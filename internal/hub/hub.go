@@ -242,6 +242,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h.agents.files = stager
 	h.updates = update.New(update.Options{
 		ApplyDir: applyDir,
+		Postgres: cfg.Storage().IsPostgres(),
 		DB:       db,
 		ReadDB:   store.Read,
 		Log:      log.With("component", "updates"),

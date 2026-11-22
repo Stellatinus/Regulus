@@ -57,6 +57,8 @@ export const updates = {
   "updates.staged.applyOn": ".",
   "updates.staged.applyOff":
     ": this hub was not set up to install updates itself (updates.apply, and the regulus-update.path unit of the installer).",
+  "updates.postgres.note":
+    "This hub uses PostgreSQL. If an update fails and Regulus puts the previous version back, it puts back the program only, not the database: the update helper cannot copy a database server. If the new version changed the database, the previous version may refuse to start until you restore a backup. Make a backup (pg_dump) before you update.",
   "updates.staged.checksumNote":
     "The checksum list comes from the same place as the file, so it catches a damaged download but does not prove who published it.",
 
