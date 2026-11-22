@@ -254,7 +254,7 @@ func TestCollectorReportsTheContainersCPUUsage(t *testing.T) {
 	// An interval that is too short does not move the reading.
 	clock = clock.Add(100 * time.Millisecond)
 	lim.CPUUsageUsec += 90_000
-	c.Collect(context.Background())
+	_, _ = c.Collect(context.Background())
 	clock = clock.Add(10 * time.Second)
 	lim.CPUUsageUsec += 4_000_000
 	r, _ = c.Collect(context.Background())

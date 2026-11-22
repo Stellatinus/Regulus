@@ -27,7 +27,7 @@ func verifyReleaseCmd(args []string, v update.Verifier, stdout, stderr io.Writer
 	fs.SetOutput(stderr)
 	tag := fs.String("tag", "", "the release tag the files belong to, for example v0.2.0 (required)")
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: regulus verify-release --tag vX.Y.Z checksums.txt checksums.txt.sigstore.json\n\n"+
+		_, _ = fmt.Fprint(stderr, "Usage: regulus verify-release --tag vX.Y.Z checksums.txt checksums.txt.sigstore.json\n\n"+
 			"Checks that the Sigstore bundle is a valid signature of checksums.txt made by the\n"+
 			"release workflow of this repository at exactly that tag.\n\nFlags:\n")
 		fs.PrintDefaults()
@@ -41,20 +41,20 @@ func verifyReleaseCmd(args []string, v update.Verifier, stdout, stderr io.Writer
 	}
 	checksums, err := os.ReadFile(fs.Arg(0))
 	if err != nil {
-		fmt.Fprintf(stderr, "regulus: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "regulus: %v\n", err)
 		return 1
 	}
 	bundle, err := os.ReadFile(fs.Arg(1))
 	if err != nil {
-		fmt.Fprintf(stderr, "regulus: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "regulus: %v\n", err)
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if err := v.Verify(ctx, *tag, checksums, bundle); err != nil {
-		fmt.Fprintf(stderr, "regulus: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "regulus: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Signature of %s verified for the release workflow at %s.\n", fs.Arg(0), *tag)
+	_, _ = fmt.Fprintf(stdout, "Signature of %s verified for the release workflow at %s.\n", fs.Arg(0), *tag)
 	return 0
 }

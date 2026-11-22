@@ -267,7 +267,7 @@ func startLoadHub(t *testing.T) *Hub {
 	go func() { done <- h.Serve(ctx, ln) }()
 	t.Cleanup(func() {
 		cancel()
-		<-done
+		<-done //nolint:errcheck // the error of Serve is not what this run measures
 		_ = h.Close()
 	})
 	return h
