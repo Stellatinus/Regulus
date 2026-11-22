@@ -18,8 +18,8 @@ const dbWatchInterval = 15 * time.Second
 type dbHealth struct {
 	mu      sync.Mutex
 	problem string
-	// lost is set when another hub took over the database (#344); it does not
-	// go away until this hub is restarted, whatever the pings say.
+	// lost is set when another hub took over the database (#344); it goes
+	// away when this hub holds the lock again (#356), whatever the pings say.
 	lost string
 }
 
@@ -78,11 +78,14 @@ func (h *Hub) checkDatabase(ctx context.Context) {
 func (h *Hub) checkActiveLock(ctx context.Context) {
 	retaken, err := h.store.EnsureActive(ctx)
 	switch {
+	case err == nil && h.demoted.Load():
+		h.promote()
+		h.log.Warn("the other hub is gone: this hub holds the active-hub lock again and started its update and rollout timers", "backend", h.cfg.Storage().Describe())
 	case err == nil && retaken:
 		h.log.Warn("the database session that holds the active-hub lock was lost; the lock was taken again", "backend", h.cfg.Storage().Describe())
 	case errors.Is(err, storage.ErrHubActive):
 		if h.demote() {
-			h.log.Error("another hub holds the active-hub lock of this database; this hub stopped its update and rollout timers. Stop one of the two hubs and restart this one", "backend", h.cfg.Storage().Describe())
+			h.log.Error("another hub holds the active-hub lock of this database; this hub stopped its update and rollout timers and starts them again when the other hub is gone", "backend", h.cfg.Storage().Describe())
 		}
 	case err != nil && ctx.Err() == nil:
 		h.log.Warn("checking the active-hub lock", "err", storage.Explain(err))
@@ -96,14 +99,27 @@ func (h *Hub) demote() bool {
 	if h.demoted.Swap(true) {
 		return false
 	}
-	h.dbState.setLost("another hub took over this database: this hub stopped its update and rollout timers; restart it after stopping the other hub")
+	h.dbState.setLost("another hub took over this database: this hub stopped its update and rollout timers; it starts them again by itself when the other hub is stopped")
 	h.timersMu.Lock()
 	stop := h.stopTimers
+	h.timersRunning = false
 	h.timersMu.Unlock()
 	if stop != nil {
 		stop()
 	}
 	return true
+}
+
+// promote undoes demote when the other hub is gone and this one holds the lock
+// again (#356): the problem is cleared and the timers start again. The lock is
+// the only authority, so there is no approval step; a redundant hub (#103)
+// will decide who is active by the term of #108, and this check goes there.
+func (h *Hub) promote() {
+	if !h.demoted.Swap(false) {
+		return
+	}
+	h.dbState.setLost("")
+	h.startTimers()
 }
 
 // watchDatabase checks the database until ctx ends, once at the start and

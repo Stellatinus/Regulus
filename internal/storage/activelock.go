@@ -28,8 +28,11 @@ type activeLock struct {
 	desc string // the database, for messages
 
 	mu   sync.Mutex
-	conn *sql.Conn // nil after release
-	pid  int       // the PostgreSQL backend of conn, to find our own stale session
+	conn *sql.Conn // nil after release, or while another hub holds the lock (lost)
+	// lost is set when another hub took the lock: ensure keeps trying to take
+	// it back, so a hub whose rival was stopped can become active again (#356).
+	lost bool
+	pid  int // the PostgreSQL backend of conn, to find our own stale session
 }
 
 // lockActiveHub makes the caller the one hub that runs on the database. On
@@ -94,8 +97,20 @@ func (l *activeLock) ensure(ctx context.Context) (retaken bool, err error) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.conn == nil {
+	if l.conn == nil && !l.lost {
 		return false, nil
+	}
+	if l.conn == nil {
+		// Another hub took the lock earlier (#356): take it if it is free now.
+		conn, pid, got, err := l.take(ctx)
+		if err != nil {
+			return false, err
+		}
+		if !got {
+			return false, fmt.Errorf("%w (%s)", ErrHubActive, l.desc)
+		}
+		l.conn, l.pid, l.lost = conn, pid, false
+		return true, nil
 	}
 	if held, err := l.holds(ctx, l.conn); err == nil && held {
 		return false, nil
@@ -122,6 +137,7 @@ func (l *activeLock) ensure(ctx context.Context) (retaken bool, err error) {
 		}
 	}
 	if !got {
+		l.lost = true
 		return false, fmt.Errorf("%w (%s)", ErrHubActive, l.desc)
 	}
 	l.conn, l.pid = conn, pid
@@ -165,6 +181,7 @@ func (l *activeLock) release() {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.lost = false
 	if l.conn == nil {
 		return
 	}
