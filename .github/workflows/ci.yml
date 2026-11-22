@@ -19,11 +19,11 @@ jobs:
     name: Go (lint, vet, test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
       - run: go vet ./...
@@ -63,8 +63,8 @@ jobs:
       # The same tests as the Go job, with each test in a schema of its own.
       REGULUS_TEST_DATABASE_URL: postgres://regulus:regulus-ci@localhost:5432/regulus_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - run: go test -race ./internal/storage/... ./internal/auth/... ./internal/fleet/... ./internal/hub/... ./internal/update/... ./cmd/...
@@ -79,8 +79,8 @@ jobs:
       REGULUS_TEST_TLS_URL: postgres://regulus:regulus-ci@localhost:5432/regulus_test
       REGULUS_TEST_TLS_CA: ${{ github.workspace }}/.pgtls/ca.crt
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Create a CA and a server certificate for localhost
@@ -127,8 +127,8 @@ jobs:
     name: Release configuration (goreleaser check)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: actions/checkout@v7
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: check
@@ -137,7 +137,7 @@ jobs:
     name: Scripts (install and release)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sh scripts/test-install.sh
       - run: sh scripts/test-next-version.sh
       - run: sh scripts/test-update-recover.sh
@@ -149,8 +149,8 @@ jobs:
       run:
         working-directory: dashboard
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -165,11 +165,11 @@ jobs:
     name: Build binary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -183,8 +183,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: make e2e
@@ -206,9 +206,9 @@ jobs:
     name: Protobuf (generated code up to date)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Only runs once the repository has a proto/ directory.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         if: hashFiles('proto/buf.yaml') != ''
         with:
           go-version-file: go.mod
