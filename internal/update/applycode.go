@@ -38,6 +38,9 @@ const (
 	ApplyBootUnusable        = "boot_unusable"          // from, note
 	ApplyBootUnusableBad     = "boot_unusable_bad"      // from, error
 	ApplyBootDatabaseBad     = "boot_database_bad"      // from, error
+	ApplyPolicyChannel       = "policy_channel"         // version, channel, max
+	ApplyPolicyMajor         = "policy_major"           // version, max
+	ApplyPolicyUnreadable    = "policy_unreadable"      // error
 	ApplyBootDatabaseBack    = "boot_database_back"     // from, note
 )
 

@@ -110,6 +110,7 @@ jobs:
     permissions:
       contents: write # create the release and upload assets
       id-token: write # keyless signing with Sigstore
+      attestations: write # build provenance of the archives and packages (#215)
     steps:
       # The download is checked against the digest of the upload (the action
       # fails on a mismatch). No checkout and no install in this job.
@@ -136,6 +137,21 @@ jobs:
           # The hub verifies this file in-process and reads the Sigstore bundle
           # format; cosign 2 writes an older layout unless asked.
           cosign sign-blob --yes --new-bundle-format --bundle checksums.txt.sigstore.json checksums.txt
+      # Provenance (SLSA) for the archives and packages, made by this workflow
+      # at this tag, from the files the build job produced and checksums.txt
+      # vouches for. Verify with: gh attestation verify <file> --repo <owner>/<repo>
+      - name: Attest the build provenance
+        id: attest
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            release/*.tar.gz
+            release/*.deb
+            release/*.rpm
+      - name: Add the provenance to the release files
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: cp "$BUNDLE" release/provenance.sigstore.json
       - name: Publish the release
         working-directory: release
         env:

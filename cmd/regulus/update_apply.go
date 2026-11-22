@@ -28,6 +28,7 @@ func runUpdateApply(args []string) int {
 	isAgent := fs.Bool("agent", false, "this server runs the agent: healthy means the agent connected to the hub again")
 	recoverOnly := fs.Bool("recover", false, "only settle an update that an earlier run left unfinished (the marker in the state directory), then exit")
 	beforeStart := fs.Bool("before-start", false, "with --recover, when the machine starts and before the service does: only what needs no running service (see regulus-update-recover.service)")
+	policyFile := fs.String("policy", update.PolicyFile, "file with the local limits on what is installed (max_channel, max_major); read only here, as root")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -63,13 +64,16 @@ func runUpdateApply(args []string) int {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 
+	policy, policyErr := update.LoadPolicy(*policyFile, true)
 	in := &update.Installer{
-		DataDir:  *dataDir,
-		StateDir: *stateDir,
-		Binary:   *binary,
-		Unit:     *unit,
-		Agent:    *isAgent,
-		Verifier: &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(*stateDir, "tuf"))},
+		Policy:    policy,
+		PolicyErr: policyErr,
+		DataDir:   *dataDir,
+		StateDir:  *stateDir,
+		Binary:    *binary,
+		Unit:      *unit,
+		Agent:     *isAgent,
+		Verifier:  &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(*stateDir, "tuf"))},
 	}
 	// One helper at a time: an update that was asked for and the confirm step
 	// after a start of the machine must not work on the executable together.

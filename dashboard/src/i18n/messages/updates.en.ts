@@ -164,6 +164,9 @@ export const updates = {
   "updates.applyMsg.boot_unusable_bad": "The update was interrupted and the program left in place cannot be used, and putting {from} back failed: {error}",
   "updates.applyMsg.boot_database_bad": "The update was interrupted. {from} is in place, but the database could not be restored: {error}",
   "updates.applyMsg.boot_database_back": "The update was interrupted. Version {from} is in place.{note}",
+  "updates.applyMsg.policy_channel": "Version {version} is on the {channel} channel, and this server's update policy allows at most {max}.",
+  "updates.applyMsg.policy_major": "Version {version} is a new major version, and this server's update policy allows at most {max}.",
+  "updates.applyMsg.policy_unreadable": "The local update policy cannot be used, so nothing is installed: {error}",
 
   // #368: the message of a server's step in an update of the servers
   // (internal/hub/rollout.go).

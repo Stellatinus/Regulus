@@ -60,6 +60,11 @@ type Installer struct {
 	// Unit is the service to restart, for example regulus.service.
 	Unit string
 
+	// Policy is the local policy of what may be installed (#215), and
+	// PolicyErr why it could not be read: an installation is then refused.
+	Policy    Policy
+	PolicyErr error
+
 	Verifier Verifier
 	Run      Runner
 	// Agent is true on a server that runs the agent: its health is that it
@@ -182,6 +187,12 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	res.From = from.String()
 	if want.Compare(from) <= 0 {
 		return finish(OutcomeFailed, coded(fmt.Errorf("version %s is not newer than the installed %s; updates never go backwards", want, from), ApplyNotNewer, "version", want.String(), "installed", from.String()))
+	}
+	if in.PolicyErr != nil {
+		return finish(OutcomeFailed, coded(fmt.Errorf("the local update policy cannot be used, so nothing is installed: %w", in.PolicyErr), ApplyPolicyUnreadable, "error", in.PolicyErr.Error()))
+	}
+	if err := in.Policy.Check(want); err != nil {
+		return finish(OutcomeFailed, err)
 	}
 	res.Outcome = OutcomeInstalling
 	_ = WriteResult(dir, res)

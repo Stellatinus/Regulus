@@ -168,6 +168,9 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.applyMsg.boot_unusable_bad": "L'aggiornamento è stato interrotto e il programma rimasto non è utilizzabile, e rimettere la {from} non è riuscito: {error}",
   "updates.applyMsg.boot_database_bad": "L'aggiornamento è stato interrotto. Resta la {from}, ma il database non si è potuto ripristinare: {error}",
   "updates.applyMsg.boot_database_back": "L'aggiornamento è stato interrotto. Resta la versione {from}.{note}",
+  "updates.applyMsg.policy_channel": "La versione {version} è sul canale {channel}, e la politica di aggiornamento di questo server ammette al massimo {max}.",
+  "updates.applyMsg.policy_major": "La versione {version} è una nuova versione maggiore, e la politica di aggiornamento di questo server ammette al massimo la {max}.",
+  "updates.applyMsg.policy_unreadable": "La politica di aggiornamento locale non è utilizzabile, quindi non viene installato nulla: {error}",
 
   // #368: the message of a server's step in an update of the servers
   // (internal/hub/rollout.go).
