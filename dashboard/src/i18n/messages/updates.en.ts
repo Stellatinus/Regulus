@@ -134,4 +134,27 @@ export const updates = {
   "updates.agent.unknown": "result unknown",
   "updates.agent.row": "{name} ({from}): {status}",
   "updates.agent.rowMessage": "{name} ({from}): {status} — {message}",
+
+  // #368: what the installer on a server wrote (internal/update/applycode.go).
+  "updates.applyMsg.request_unreadable": "The update request could not be read (it was not a request, was too large or was not a regular file). It was removed.",
+  "updates.applyMsg.invalid_version": "The request names an invalid version: {error}",
+  "updates.applyMsg.not_newer": "Version {version} is not newer than the installed {installed}. Updates never go backwards.",
+  "updates.applyMsg.rolled_back": "{error}. Version {version} was put back.{note}",
+  "updates.applyMsg.rollback_failed": "{error}. Putting {version} back failed: {rollback_error}",
+  "updates.applyMsg.interrupted_stands": "The installer was interrupted. The new version was checked afterwards and stands.",
+  "updates.applyMsg.interrupted_not_installed": "The installer was interrupted before the new version was installed. {version} is still in place.",
+  "updates.applyMsg.interrupted_rolled_back": "The installer was interrupted. Version {version} was put back.{note}",
+  "updates.applyMsg.interrupted_rollback_fail": "The installer was interrupted and putting {version} back failed: {error}",
+
+  // #368: the message of a server's step in an update of the servers
+  // (internal/hub/rollout.go).
+  "updates.rolloutMsg.not_connected": "The server is not connected.",
+  "updates.rolloutMsg.no_archive": "The hub has no archive for this server: {error}",
+  "updates.rolloutMsg.stopped": "Stopped.",
+  "updates.rolloutMsg.agent_too_old": "This agent is too old to update itself: update it once with install.sh.",
+  "updates.rolloutMsg.result_unknown": "The update of the servers was stopped before this server's result was known.",
+  "updates.rolloutMsg.rolled_back": "The server connected with version {version}, then came back with version {back}: the installer rolled the update back.",
+  "updates.rolloutMsg.did_not_take": "The server came back with version {back} and not {version} within {wait}: the update did not take or was rolled back.",
+  "updates.rolloutMsg.did_not_stay": "The server connected with version {version} but did not stay connected.",
+  "updates.rolloutMsg.did_not_return": "The server did not connect again within {wait}.",
 } as const;

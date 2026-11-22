@@ -33,6 +33,6 @@ func CreateFirstAdmin(ctx context.Context, db *sql.DB, username, password string
 		return User{}, err
 	}
 	s.log.Info("admin account created", "user", user.Username)
-	s.audit(ctx, ConsoleActor, EventSetup, user.Username, "first admin (create-admin command)")
+	s.RecordCode(ctx, ConsoleActor, EventSetup, user.Username, "first admin (create-admin command)", CodeCreateAdminCommand)
 	return user, nil
 }

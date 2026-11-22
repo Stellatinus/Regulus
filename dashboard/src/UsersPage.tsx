@@ -20,7 +20,7 @@ import {
   type User,
 } from "./api";
 import { formatAgo } from "./format";
-import { auditDetailText, eventText } from "./hubTexts";
+import { auditEntryDetail, eventText } from "./hubTexts";
 import { RolesPanel } from "./RolesPanel";
 import { useT } from "./i18n";
 import { useSession } from "./session";
@@ -367,7 +367,7 @@ function Audit() {
                 <td data-label={t("users.audit.event")}>{eventText(t, a.event)}</td>
                 <td data-label={t("users.audit.target")}>{a.target || "–"}</td>
                 <td data-label={t("users.audit.from")} className="mono">{a.remote || "–"}</td>
-                <td data-label={t("users.audit.detail")} className="wrap">{a.detail ? auditDetailText(t, a.event, a.detail) : "–"}</td>
+                <td data-label={t("users.audit.detail")} className="wrap">{a.detail ? auditEntryDetail(t, a) : "–"}</td>
               </tr>
             ))}
           </tbody>

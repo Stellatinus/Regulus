@@ -157,7 +157,7 @@ func (h *Hub) EnableAgents(ctx context.Context, by string, port int) (AgentListe
 	if err := h.saveAgentListen(ctx, addr); err != nil {
 		h.log.Error("saving the agent listener", "err", err)
 	}
-	h.auth.Record(ctx, by, EventAgentsListenerOn, "agents", "port "+strconv.Itoa(port))
+	h.auth.RecordCode(ctx, by, EventAgentsListenerOn, "agents", "port "+strconv.Itoa(port), auth.CodePort, "port", strconv.Itoa(port))
 	return h.AgentListener(ctx)
 }
 

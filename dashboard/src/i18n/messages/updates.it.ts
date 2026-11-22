@@ -138,4 +138,27 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.agent.unknown": "esito sconosciuto",
   "updates.agent.row": "{name} ({from}): {status}",
   "updates.agent.rowMessage": "{name} ({from}): {status} — {message}",
+
+  // #368: what the installer on a server wrote (internal/update/applycode.go).
+  "updates.applyMsg.request_unreadable": "La richiesta di aggiornamento non si poteva leggere (non era una richiesta, era troppo grande o non era un file normale). È stata rimossa.",
+  "updates.applyMsg.invalid_version": "La richiesta indica una versione non valida: {error}",
+  "updates.applyMsg.not_newer": "La versione {version} non è più recente di quella installata ({installed}). Gli aggiornamenti non tornano mai indietro.",
+  "updates.applyMsg.rolled_back": "{error}. È stata rimessa la versione {version}.{note}",
+  "updates.applyMsg.rollback_failed": "{error}. Rimettere la {version} non è riuscito: {rollback_error}",
+  "updates.applyMsg.interrupted_stands": "L'installazione è stata interrotta. La nuova versione è stata controllata dopo e resta installata.",
+  "updates.applyMsg.interrupted_not_installed": "L'installazione è stata interrotta prima che la nuova versione fosse installata. Resta la {version}.",
+  "updates.applyMsg.interrupted_rolled_back": "L'installazione è stata interrotta. È stata rimessa la versione {version}.{note}",
+  "updates.applyMsg.interrupted_rollback_fail": "L'installazione è stata interrotta e rimettere la {version} non è riuscito: {error}",
+
+  // #368: the message of a server's step in an update of the servers
+  // (internal/hub/rollout.go).
+  "updates.rolloutMsg.not_connected": "Il server non è collegato.",
+  "updates.rolloutMsg.no_archive": "L'hub non ha un archivio per questo server: {error}",
+  "updates.rolloutMsg.stopped": "Fermato.",
+  "updates.rolloutMsg.agent_too_old": "Questo agente è troppo vecchio per aggiornarsi da solo: aggiornalo una volta con install.sh.",
+  "updates.rolloutMsg.result_unknown": "L'aggiornamento dei server è stato fermato prima di conoscere il risultato di questo server.",
+  "updates.rolloutMsg.rolled_back": "Il server si è collegato con la versione {version}, poi è tornato con la versione {back}: l'installazione ha annullato l'aggiornamento.",
+  "updates.rolloutMsg.did_not_take": "Il server è tornato con la versione {back} e non con la {version} entro {wait}: l'aggiornamento non ha avuto effetto o è stato annullato.",
+  "updates.rolloutMsg.did_not_stay": "Il server si è collegato con la versione {version} ma non è rimasto collegato.",
+  "updates.rolloutMsg.did_not_return": "Il server non si è ricollegato entro {wait}.",
 };

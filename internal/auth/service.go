@@ -162,7 +162,7 @@ func (s *Service) Setup(ctx context.Context, setupToken, username, password stri
 	s.setupToken = ""
 	s.mu.Unlock()
 	s.log.Info("admin account created", "user", user.Username)
-	s.audit(ctx, user.Username, EventSetup, user.Username, "first admin")
+	s.RecordCode(ctx, user.Username, EventSetup, user.Username, "first admin", CodeFirstAdmin)
 
 	token, expires, err := s.newSession(ctx, user.ID, now)
 	return user, token, expires, err
@@ -193,11 +193,11 @@ func (s *Service) Login(ctx context.Context, remote, username, password string) 
 	}
 	if !known || !ok || user.Disabled {
 		att.failed()
-		detail := ""
 		if known && ok && user.Disabled {
-			detail = "account disabled"
+			s.RecordCode(ctx, usernameForAudit(username), EventLoginFailed, "", "account disabled", CodeAccountDisabled)
+		} else {
+			s.audit(ctx, usernameForAudit(username), EventLoginFailed, "", "")
 		}
-		s.audit(ctx, usernameForAudit(username), EventLoginFailed, "", detail)
 		return User{}, "", time.Time{}, ErrInvalidCredentials
 	}
 	if user.TwoFactor {

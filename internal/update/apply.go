@@ -45,12 +45,18 @@ type ApplyRequest struct {
 
 // ApplyResult is what the helper reports.
 type ApplyResult struct {
-	Version     string    `json:"version"`
-	From        string    `json:"from,omitempty"`
-	Outcome     string    `json:"outcome"`
-	Message     string    `json:"message,omitempty"`
-	RequestedBy string    `json:"requested_by,omitempty"`
-	At          time.Time `json:"at"`
+	Version string `json:"version"`
+	From    string `json:"from,omitempty"`
+	Outcome string `json:"outcome"`
+	Message string `json:"message,omitempty"`
+	// Code and Args say what Message says, for a translation (#368): a code
+	// from the Apply* list below and its arguments. Both are add-only fields
+	// of result.json (docs/versioning.md): an older helper writes none, and
+	// then Message, in English, is all there is.
+	Code        string            `json:"code,omitempty"`
+	Args        map[string]string `json:"args,omitempty"`
+	RequestedBy string            `json:"requested_by,omitempty"`
+	At          time.Time         `json:"at"`
 }
 
 // ApplyDir is the directory, inside the hub's data directory, that the hub and

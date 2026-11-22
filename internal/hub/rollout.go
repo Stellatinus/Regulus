@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/CodexCircle/Regulus/internal/auth"
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
@@ -69,7 +71,49 @@ type RolloutAgent struct {
 	From     string `json:"from"`
 	Status   string `json:"status"`
 	Message  string `json:"message,omitempty"`
+	// Code and Args say what Message says, for a translation in the
+	// dashboard (#368); both are empty when Message has no code, and then
+	// Message is all there is (for example the error a server's agent
+	// reported). The codes are the rollout* ones below.
+	Code string            `json:"code,omitempty"`
+	Args map[string]string `json:"args,omitempty"`
 }
+
+// The codes of a rollout step's message. The dashboard has a text for each in
+// `updates.rolloutMsg.<code>`; a test there fails when one is missing.
+const (
+	CodeNotConnected  = "not_connected"  //
+	CodeNoArchive     = "no_archive"     // error
+	CodeStopped       = "stopped"        //
+	CodeAgentTooOld   = "agent_too_old"  //
+	CodeResultUnknown = "result_unknown" //
+	CodeRolledBack    = "rolled_back"    // version, back
+	CodeNoTake        = "did_not_take"   // back, version, wait
+	CodeNotStayed     = "did_not_stay"   // version
+	CodeNotReturned   = "did_not_return" // wait
+)
+
+// rolloutMsg is the message of a rollout step: the English text, and a code
+// with arguments (key, value, ...) for the dashboard.
+type rolloutMsg struct {
+	Text string
+	Code string
+	Args map[string]string
+}
+
+func msg(text, code string, kv ...string) rolloutMsg {
+	m := rolloutMsg{Text: text, Code: code}
+	if len(kv) > 0 {
+		m.Args = map[string]string{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m.Args[kv[i]] = kv[i+1]
+		}
+	}
+	return m
+}
+
+// plain is a message with no code (the text of an error from elsewhere).
+func plain(text string) rolloutMsg { return rolloutMsg{Text: text} }
 
 // RolloutStatus is the state of updating the servers to the version of this
 // hub.
@@ -263,7 +307,7 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 
 	// The audit event is a database write: never under rollout.mu, or the
 	// status endpoint would wait for a slow database.
-	h.audit(ctx, by, EventRolloutStarted, h.version, fmt.Sprintf("%d servers, %d at a time", len(chosen), opts.WaveSize))
+	h.audit(auth.WithCode(ctx, auth.CodeRolloutStarted, "servers", strconv.Itoa(len(chosen)), "wave", strconv.Itoa(opts.WaveSize)), by, EventRolloutStarted, h.version, fmt.Sprintf("%d servers, %d at a time", len(chosen), opts.WaveSize))
 	h.log.Info("updating the servers", "target", h.version, "servers", len(chosen), "wave", opts.WaveSize, "by", by)
 	go func() {
 		defer close(run.done)
@@ -287,19 +331,28 @@ func (h *Hub) StopRollout(ctx context.Context, by string) (RolloutStatus, error)
 	// After the run has ended, so "stopped" follows its "started" and the
 	// events of the servers it updated.
 	<-run.done
-	h.audit(ctx, by, EventRolloutFinished, h.version, "stopped")
+	h.audit(auth.WithCode(ctx, auth.CodeRolloutState, "state", "stopped"), by, EventRolloutFinished, h.version, "stopped")
 	return h.RolloutStatus(ctx)
+}
+
+// auditMsg records an event whose detail is a rollout message, with its code.
+func (h *Hub) auditMsg(ctx context.Context, actor, event, target string, m rolloutMsg) {
+	if m.Code != "" {
+		ctx = auth.WithCodeArgs(ctx, m.Code, m.Args)
+	}
+	h.audit(ctx, actor, event, target, m.Text)
 }
 
 func (h *Hub) audit(ctx context.Context, actor, event, target, detail string) {
 	h.auth.Record(ctx, actor, event, target, detail)
 }
 
-func (h *Hub) setAgent(run *rolloutRun, id, status, message string) {
+func (h *Hub) setAgent(run *rolloutRun, id, status string, m rolloutMsg) {
 	h.rollout.mu.Lock()
 	for i := range run.status.Agents {
 		if run.status.Agents[i].ID == id {
-			run.status.Agents[i].Status, run.status.Agents[i].Message = status, message
+			a := &run.status.Agents[i]
+			a.Status, a.Message, a.Code, a.Args = status, m.Text, m.Code, m.Args
 		}
 	}
 	h.rollout.mu.Unlock()
@@ -347,7 +400,7 @@ func (h *Hub) runRollout(ctx context.Context, run *rolloutRun, by string) {
 	stopped := run.status.State == RolloutStopped
 	h.rollout.mu.Unlock()
 	if !stopped {
-		h.audit(context.Background(), by, EventRolloutFinished, h.version, final)
+		h.audit(auth.WithCode(context.Background(), auth.CodeRolloutState, "state", final), by, EventRolloutFinished, h.version, final)
 	}
 
 	h.rollout.mu.Lock()
@@ -379,22 +432,22 @@ func (h *Hub) runRollout(ctx context.Context, run *rolloutRun, by string) {
 // updateAgent hands the update to one server and waits for it to come back
 // with the new version. It reports whether that worked.
 func (h *Hub) updateAgent(ctx context.Context, run *rolloutRun, id, by string) bool {
-	fail := func(msg string) bool {
-		h.setAgent(run, id, AgentFailed, msg)
-		h.audit(context.Background(), by, EventAgentFailed, id, msg)
-		h.log.Warn("server not updated", "agent", id, "err", msg)
+	fail := func(m rolloutMsg) bool {
+		h.setAgent(run, id, AgentFailed, m)
+		h.auditMsg(context.Background(), by, EventAgentFailed, id, m)
+		h.log.Warn("server not updated", "agent", id, "err", m.Text)
 		return false
 	}
 	info, ok := h.agentInfo(id)
 	if !ok {
-		return fail("the server is not connected")
+		return fail(msg("the server is not connected", CodeNotConnected))
 	}
 	plat := update.Platform{OS: info.System.GetOs(), Arch: info.System.GetArch()}
 	name, sha, size, err := h.updates.Files().Offer(h.version, plat)
 	if err != nil {
-		return fail("the hub has no archive for this server: " + err.Error())
+		return fail(msg("the hub has no archive for this server: "+err.Error(), CodeNoArchive, "error", err.Error()))
 	}
-	h.setAgent(run, id, AgentOffered, "")
+	h.setAgent(run, id, AgentOffered, rolloutMsg{})
 
 	// Watched from before the command: the server cannot restart earlier.
 	events, unwatch := h.agents.watch(id)
@@ -406,15 +459,15 @@ func (h *Hub) updateAgent(ctx context.Context, run *rolloutRun, id, by string) b
 	cancel()
 	switch {
 	case ctx.Err() != nil:
-		return fail("stopped")
+		return fail(msg("stopped", CodeStopped))
 	case err != nil:
-		return fail(err.Error())
+		return fail(plain(err.Error()))
 	case !res.GetSuccess() && res.GetError() == "unsupported command":
-		return fail("this agent is too old to update itself: update it once with install.sh")
+		return fail(msg("this agent is too old to update itself: update it once with install.sh", CodeAgentTooOld))
 	case !res.GetSuccess():
-		return fail(res.GetError())
+		return fail(plain(res.GetError()))
 	}
-	h.setAgent(run, id, AgentInstalling, "")
+	h.setAgent(run, id, AgentInstalling, rolloutMsg{})
 	return h.awaitReturn(ctx, run, info, by, events, fail)
 }
 
@@ -430,7 +483,7 @@ func (h *Hub) updateAgent(ctx context.Context, run *rolloutRun, id, by string) b
 //     it is not connected with the new version.
 //   - a connection with the old version alone proves nothing until then: a
 //     network blip can reconnect the old agent before the installer even ran.
-func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo, by string, events <-chan connEvent, fail func(string) bool) bool {
+func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo, by string, events <-chan connEvent, fail func(rolloutMsg) bool) bool {
 	deadline := time.NewTimer(h.rollout.returnTimeout)
 	defer deadline.Stop()
 	tick := time.NewTicker(100 * time.Millisecond)
@@ -444,7 +497,7 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 	// see takes in what is known of the server: a connection or the registry
 	// (connected), or a disconnection. It returns a message when the server
 	// came back rolled back.
-	see := func(a AgentInfo, connected bool) string {
+	see := func(a AgentInfo, connected bool) rolloutMsg {
 		switch {
 		case !connected:
 			if a.ConnectedAt.Equal(newSession) {
@@ -459,23 +512,23 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 		default:
 			newSession = time.Time{}
 			if sawNew {
-				return fmt.Sprintf("the server connected with version %s, then came back with version %s: the installer rolled the update back", h.version, a.Version)
+				return msg(fmt.Sprintf("the server connected with version %s, then came back with version %s: the installer rolled the update back", h.version, a.Version), CodeRolledBack, "version", h.version, "back", a.Version)
 			}
 			lastOther = a.Version
 		}
-		return ""
+		return rolloutMsg{}
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			// The server has the update; what it makes of it is not known.
-			msg := "the update of the servers was stopped before this server's result was known"
-			h.setAgent(run, before.ID, AgentUnknown, msg)
-			h.log.Warn("server result unknown", "agent", before.ID, "why", msg)
+			m := msg("the update of the servers was stopped before this server's result was known", CodeResultUnknown)
+			h.setAgent(run, before.ID, AgentUnknown, m)
+			h.log.Warn("server result unknown", "agent", before.ID, "why", m.Text)
 			return false
 		case ev := <-events:
-			if msg := see(ev.Info, ev.Connected); msg != "" {
-				return fail(msg)
+			if m := see(ev.Info, ev.Connected); m.Text != "" {
+				return fail(m)
 			}
 			continue
 		case <-deadline.C:
@@ -489,8 +542,8 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 		for {
 			select {
 			case ev := <-events:
-				if msg := see(ev.Info, ev.Connected); msg != "" {
-					return fail(msg)
+				if m := see(ev.Info, ev.Connected); m.Text != "" {
+					return fail(m)
 				}
 			default:
 				break drain
@@ -500,12 +553,12 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 		now, ok := h.agentInfo(before.ID)
 		if !ok {
 			newSession = time.Time{}
-		} else if msg := see(now, true); msg != "" {
-			return fail(msg)
+		} else if m := see(now, true); m.Text != "" {
+			return fail(m)
 		}
 		if !newSession.IsZero() && ok && now.ConnectedAt.Equal(newSession) && time.Since(newSince) >= h.rollout.settle {
-			h.setAgent(run, before.ID, AgentUpdated, "")
-			h.audit(context.Background(), by, EventAgentUpdated, before.ID, fmt.Sprintf("%s to %s", before.Version, h.version))
+			h.setAgent(run, before.ID, AgentUpdated, rolloutMsg{})
+			h.audit(auth.WithCode(context.Background(), auth.CodeFromTo, "from", before.Version, "to", h.version), by, EventAgentUpdated, before.ID, fmt.Sprintf("%s to %s", before.Version, h.version))
 			return true
 		}
 		// After returnTimeout only a session with the new version that is
@@ -513,11 +566,11 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 		if timedOut && newSession.IsZero() {
 			switch {
 			case lastOther != "":
-				return fail(fmt.Sprintf("the server came back with version %s and not %s within %s: the update did not take or was rolled back", lastOther, h.version, h.rollout.returnTimeout))
+				return fail(msg(fmt.Sprintf("the server came back with version %s and not %s within %s: the update did not take or was rolled back", lastOther, h.version, h.rollout.returnTimeout), CodeNoTake, "back", lastOther, "version", h.version, "wait", h.rollout.returnTimeout.String()))
 			case sawNew:
-				return fail(fmt.Sprintf("the server connected with version %s but did not stay connected", h.version))
+				return fail(msg(fmt.Sprintf("the server connected with version %s but did not stay connected", h.version), CodeNotStayed, "version", h.version))
 			default:
-				return fail(fmt.Sprintf("the server did not connect again within %s", h.rollout.returnTimeout))
+				return fail(msg(fmt.Sprintf("the server did not connect again within %s", h.rollout.returnTimeout), CodeNotReturned, "wait", h.rollout.returnTimeout.String()))
 			}
 		}
 	}

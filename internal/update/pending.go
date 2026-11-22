@@ -152,7 +152,7 @@ func (in *Installer) Recover(ctx context.Context) (ApplyResult, bool, error) {
 		in.clearPending()
 		res.Outcome, res.At = outcome, in.Now().UTC()
 		if err != nil {
-			res.Message = err.Error()
+			res.setMessage(err)
 		}
 		if p.DataDir != "" {
 			if werr := WriteResult(dir, res); werr != nil {
@@ -167,21 +167,21 @@ func (in *Installer) Recover(ctx context.Context) (ApplyResult, bool, error) {
 	if v, verr := in.installedVersion(ctx); verr == nil && v.String() == p.To {
 		werr := in.restartAndWatch(ctx, p.To)
 		if werr == nil {
-			res.Message = "the helper was interrupted; the new version was checked afterwards and stands"
+			res.Message, res.Code = "the helper was interrupted; the new version was checked afterwards and stands", ApplyInterruptedStands
 			return finish(OutcomeApplied, nil)
 		}
 		in.Log.Error("the interrupted update is not healthy; rolling back", "err", werr)
 	} else if verr == nil && v.String() == p.From {
 		// The swap never happened (or was undone): nothing to put back.
-		return finish(OutcomeFailed, fmt.Errorf("the helper was interrupted before the new version was installed; %s is still in place", p.From))
+		return finish(OutcomeFailed, coded(fmt.Errorf("the helper was interrupted before the new version was installed; %s is still in place", p.From), ApplyInterruptedNotInstalled, "version", p.From))
 	}
 	rctx, cancel := in.rollbackContext(ctx)
 	defer cancel()
 	note, rerr := in.rollback(rctx, p.Backup, p.From, p.Snapshot, p.SchemaBefore)
 	if rerr != nil {
-		return finish(OutcomeFailed, fmt.Errorf("the helper was interrupted and putting %s back failed: %v", p.From, rerr))
+		return finish(OutcomeFailed, coded(fmt.Errorf("the helper was interrupted and putting %s back failed: %v", p.From, rerr), ApplyInterruptedRollbackFails, "version", p.From, "error", rerr.Error()))
 	}
-	return finish(OutcomeRolledBack, fmt.Errorf("the helper was interrupted; version %s was put back%s", p.From, note))
+	return finish(OutcomeRolledBack, coded(fmt.Errorf("the helper was interrupted; version %s was put back%s", p.From, note), ApplyInterruptedRolledBack, "version", p.From, "note", note))
 }
 
 // readPending reads the marker. found is false when there is none. A marker
@@ -250,7 +250,7 @@ func (in *Installer) RecoverBeforeStart(ctx context.Context) (res ApplyResult, s
 		in.clearPending()
 		res.Outcome, res.At = outcome, in.Now().UTC()
 		if err != nil {
-			res.Message = err.Error()
+			res.setMessage(err)
 		}
 		if p.DataDir != "" {
 			if werr := WriteResult(ApplyDir(p.DataDir), res); werr != nil {

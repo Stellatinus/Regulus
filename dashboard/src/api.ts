@@ -587,6 +587,10 @@ export interface AuditEntry {
   target: string;
   remote: string;
   detail: string;
+  // What detail says, for a translation (#368); absent for an entry with no
+  // code, whose detail is all there is.
+  code?: string;
+  args?: Record<string, string>;
 }
 
 export const fetchUsers = (signal?: AbortSignal) =>
@@ -834,6 +838,8 @@ export interface UpdateApplyResult {
   from?: string;
   outcome: "applied" | "rolled_back" | "failed";
   message?: string;
+  code?: string;
+  args?: Record<string, string>;
   requested_by?: string;
   at: string;
 }
@@ -879,6 +885,8 @@ export interface RolloutAgent {
   from: string;
   status: RolloutAgentStatus;
   message?: string;
+  code?: string;
+  args?: Record<string, string>;
 }
 
 export interface RolloutStatus {
