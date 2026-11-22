@@ -507,6 +507,13 @@ Proposed on 2026-11-19, **waiting for the maintainer's agreement**; nothing is i
 - **Not done: the hub serving its current root to agents.** An agent that needs no internet today waits for the TUF fetch (up to 20 s) the first time it verifies and then uses its snapshot, whose cache never updates. The fix is a new RPC (or a field of the update offer) that carries the hub's root over the mTLS channel, which touches `proto/` and `docs/versioning.md`; it is its own issue, so #214 stays open for it.
 - The fallback still applies when TUF is blocked by an attacker: it is shown now, not prevented. Refusing to verify with a snapshot older than some age is possible and was not chosen: a hub with no internet would then never update at all.
 
+## Who can make a trusted release (#207, partly done)
+
+- **The risk.** Hubs and agents install, as root, anything signed by `release.yml@refs/tags/<tag>`. The workflow that runs is the file at the tagged commit. So "who can push a `v*` tag" (or tag a commit of a branch whose `release.yml` was changed) equals "root on the fleet". The checks for "on main" and "CI passed" were only in `publish-release.yml`, which a hand-pushed tag skips.
+- **Done in the repository:** `release.yml` now fails before it builds unless the tagged commit is an ancestor of `origin/main` and CI succeeded on that exact commit; the publish job runs in the `release` environment. These checks stop a mistake and an unreviewed commit. They do **not** stop someone who can push a tag, because that person can also remove the checks from the workflow at that tag.
+- **Not done, because it is a repository setting and not a file** (a maintainer does it; it cannot be checked from here): a tag ruleset (only maintainers create `v*`, nobody moves or deletes one), required reviewers and a `v*`-only deployment rule on the `release` environment, and two-factor authentication or a hardware key for those accounts. Described in `docs/releases.md`; a `[Test]` issue asks for the settings and for the demonstration the issue wants (a tag on a commit that is not on main, or without green CI, produces no release). The issue stays open until then.
+- **Kept the push-tag trigger**, because the documents say a tag pushed by hand works and the new checks make it safe against a mistake; dropping it would not remove the real risk (the ruleset does).
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
