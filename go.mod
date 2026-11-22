@@ -6,13 +6,13 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/coder/websocket v1.8.15
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/muesli/termenv v0.16.0
 	github.com/sigstore/sigstore-go v1.4.0
 	golang.org/x/crypto v0.59.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/term v0.48.0
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
