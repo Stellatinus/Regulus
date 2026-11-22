@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, fetchPlugins, type PluginsStatus, type PluginStatus } from "./api";
+import {
+  ApiError,
+  fetchPlugins,
+  type PluginsStatus,
+  type PluginStatus,
+} from "./api";
 import { formatAgo } from "./format";
 import { useT, type MessageKey } from "./i18n";
 import { usePluginsVersion } from "./LiveProvider";
@@ -10,7 +15,10 @@ import { errorMessage } from "./useApiList";
 // the page waits this long after a change before asking the hub.
 export const RELOAD_DELAY_MS = 250;
 
-type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "ready"; data: PluginsStatus };
+type State =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; data: PluginsStatus };
 
 const STATE_LABEL: Record<string, MessageKey> = {
   starting: "plugins.state.starting",
@@ -68,7 +76,10 @@ export function PluginsPage() {
       );
     // The first load is at once; a reload waits for the burst to end. A newer
     // change cancels a reload that has not answered yet.
-    const timer = setTimeout(() => void load(), loadedOnce.current ? RELOAD_DELAY_MS : 0);
+    const timer = setTimeout(
+      () => void load(),
+      loadedOnce.current ? RELOAD_DELAY_MS : 0,
+    );
     return () => {
       clearTimeout(timer);
       controller.abort();
@@ -79,7 +90,9 @@ export function PluginsPage() {
     <section aria-labelledby="plugins-heading">
       <h2 id="plugins-heading">{t("plugins.title")}</h2>
       {state.kind === "loading" && <p>{t("plugins.loading")}</p>}
-      {state.kind === "error" && <p role="alert">{t("plugins.loadError", { message: state.message })}</p>}
+      {state.kind === "error" && (
+        <p role="alert">{t("plugins.loadError", { message: state.message })}</p>
+      )}
       {state.kind === "ready" && (
         <>
           <section className="panel" aria-labelledby="plugins-hub-heading">
@@ -87,7 +100,9 @@ export function PluginsPage() {
             {!state.data.hub.enabled ? (
               <p>{t("plugins.hub.off")}</p>
             ) : state.data.hub.problem ? (
-              <p className="notice error">{t("plugins.hub.problem", { problem: state.data.hub.problem })}</p>
+              <p className="notice error">
+                {t("plugins.hub.problem", { problem: state.data.hub.problem })}
+              </p>
             ) : state.data.hub.plugins.length === 0 ? (
               <p>{t("plugins.hub.none")}</p>
             ) : (
@@ -141,14 +156,22 @@ function PluginTable({ plugins }: { plugins: PluginStatus[] }) {
                 {p.version}
               </td>
               <td data-label={t("plugins.column.state")}>
-                <span className={`status ${STATE_CLASS[p.state] ?? "off"}`} title={hint || undefined}>
+                <span
+                  className={`status ${STATE_CLASS[p.state] ?? "off"}`}
+                  title={hint || undefined}
+                >
                   {label ? t(label) : p.state}
                 </span>
               </td>
               <td data-label={t("plugins.column.restarts")}>{p.restarts}</td>
-              <td data-label={t("plugins.column.since")}>{p.since ? formatAgo(p.since, undefined, t) : "–"}</td>
+              <td data-label={t("plugins.column.since")}>
+                {p.since ? formatAgo(p.since, undefined, t) : "–"}
+              </td>
               <td data-label={t("plugins.column.lastError")} className="wrap">
                 {p.last_error || "–"}
+                {p.last_error && (
+                  <div className="hint">{t("plugins.ownWords")}</div>
+                )}
                 {hint && <div className="hint">{hint}</div>}
               </td>
             </tr>

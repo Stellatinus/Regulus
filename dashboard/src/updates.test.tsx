@@ -207,6 +207,64 @@ describe("UpdatesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // #263: a stale, replayed or incomplete signed release index warns.
+  it.each([
+    [
+      "expired",
+      "2026-10-01T00:00:00Z",
+      /signed list of releases that this hub last verified expired/,
+    ],
+    [
+      "replayed",
+      "2026-09-01T00:00:00Z",
+      /older than one this hub already verified/,
+    ],
+    [
+      "hidden",
+      "0.3.0",
+      /names version 0\.3\.0, but the release server does not list it/,
+    ],
+    ["missing", undefined, /no longer offers the signed list/],
+    ["invalid", "bad signature", /could not be verified: bad signature/],
+  ] as const)(
+    "warns about the release index: %s",
+    async (problem, detail, text) => {
+      mockHub({
+        "GET /api/updates": [
+          {
+            data: {
+              ...base,
+              succeeded_at: now,
+              index_problem: problem,
+              index_detail: detail,
+            },
+          },
+        ],
+      });
+      renderPage();
+      expect(await screen.findByText(text)).toBeInTheDocument();
+    },
+  );
+
+  it("does not warn when the release index is fine", async () => {
+    mockHub({
+      "GET /api/updates": [
+        {
+          data: {
+            ...base,
+            succeeded_at: now,
+            index: { tag: "v0.4.0", issued_at: now, expires: now },
+          },
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText(/Checked/);
+    expect(
+      screen.queryByText(/signed list of releases/),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not warn after a recent successful check", async () => {
     mockHub({ "GET /api/updates": [{ data: { ...base, succeeded_at: now } }] });
     renderPage();
@@ -597,17 +655,29 @@ describe("UpdatesPage", () => {
   // #338: a hub without its local status socket says why, and what it means for an update.
   it("tells the administrator when the hub has no local status socket", async () => {
     mockHub({
-      "GET /api/updates": [{ data: { ...base, status_socket: "the path of the socket is 120 bytes, longer than the 107 a Unix socket allows" } }],
+      "GET /api/updates": [
+        {
+          data: {
+            ...base,
+            status_socket:
+              "the path of the socket is 120 bytes, longer than the 107 a Unix socket allows",
+          },
+        },
+      ],
     });
     renderPage();
-    expect(await screen.findByText(/This hub has no local status socket/)).toHaveTextContent(/longer than the 107/);
+    expect(
+      await screen.findByText(/This hub has no local status socket/),
+    ).toHaveTextContent(/longer than the 107/);
   });
 
   it("says nothing about the status socket when the hub has one", async () => {
     mockHub({ "GET /api/updates": [{ data: base }] });
     renderPage();
     await screen.findByText(/0\.1\.0/);
-    expect(screen.queryByText(/no local status socket/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/no local status socket/),
+    ).not.toBeInTheDocument();
   });
 
   it("saves the automatic mode with its maintenance window", async () => {
@@ -799,9 +869,9 @@ describe("UpdatesPage", () => {
     expect(
       await screen.findByText(/Last update of the servers: stopped/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("list", { name: "Last update" }),
-    ).toHaveTextContent("web1 (0.1.0): result unknown — the update");
+    expect(screen.getByRole("list", { name: "Last update" })).toHaveTextContent(
+      "web1 (0.1.0): result unknown — the update",
+    );
   });
 
   it("says when no server is behind", async () => {

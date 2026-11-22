@@ -124,6 +124,14 @@ type strs struct {
 	ChkUpdates, UpdPending, UpdNone string
 	// --- end of the updates health block.
 
+	// --- Reachability from the network in the Health tab (#369).
+	// LANLocalOnly takes the listen address and the setting to use;
+	// LANTry, LANLater and LANOK a dashboard URL; LANFail the addresses that
+	// did not answer.
+	ChkLAN                                                    string
+	LANLocalOnly, LANTry, LANNoAddr, LANLater, LANOK, LANFail string
+	// --- end of the network reachability block.
+
 	// --- Setting errors (#318): why config.Normalize or config.SetFile
 	// refused a value, by config.ErrorCode. Each %s takes the arguments of
 	// config.SettingError.Args, in order (documented in internal/config).
@@ -303,10 +311,20 @@ var en = strs{
 	ChkUpdates:    "Updates",
 	UpdPending:    "Version %s is available: install it from the Updates page of the dashboard",
 	UpdNone:       "no newer release was found at the last check",
-	ChkPlugins:    "Plugins",
-	PlgOK:         "%d plugins of the hub, none failed or invalid",
-	PlgProblem:    "no plugin runs: %s",
-	PlgBad:        "need a look (see the Status tab): %s",
+
+	// --- Reachability from the network (#369).
+	ChkLAN:       "Network access",
+	LANLocalOnly: "the dashboard listens on %s: only this machine can open it; to reach it from the network set listen to \"0.0.0.0:%s\"",
+	LANTry:       "listens on a single address: from another host open %s (if it does not load, check the firewall)",
+	LANNoAddr:    "no network address of this machine was found; check the network and the listen setting",
+	LANLater:     "start the hub, then from another host open %s",
+	LANOK:        "the hub answers on this machine's network addresses; the firewall is not checked: from another host open %s",
+	LANFail:      "the hub does not answer on %s: check the listen setting and that the service runs",
+	// --- end of the network reachability block.
+	ChkPlugins: "Plugins",
+	PlgOK:      "%d plugins of the hub, none failed or invalid",
+	PlgProblem: "no plugin runs: %s",
+	PlgBad:     "need a look (see the Status tab): %s",
 	// --- end of the plugin health block.
 
 	// --- Setting errors (#318).

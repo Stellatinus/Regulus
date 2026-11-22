@@ -31,6 +31,14 @@ const (
 	CodeRoleRenamed            = "role_renamed"           // name, permissions
 	CodePermissions            = "permissions"            // permissions: ids separated by commas
 	CodeCreateAdminCommand     = "create_admin_command"   //
+
+	// Details that were English only (#372).
+	CodeUpdateSettings       = "update_settings"        // mode, channel
+	CodeUpdateSettingsWindow = "update_settings_window" // mode, channel, from, to
+	CodeDownloaded           = "update_downloaded"      // archive, sha256, verified
+	CodeDownloadFailed       = "update_download_failed" // error: the system's own text, English
+	CodeTwoFactorSettings    = "two_factor_settings"    // the password check of the two-factor settings failed
+	CodeReauthentication     = "reauthentication"       // the password check of a re-authentication failed
 )
 
 type codeKey struct{}

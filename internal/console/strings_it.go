@@ -202,10 +202,20 @@ var it = strs{
 	ChkUpdates:    "Aggiornamenti",
 	UpdPending:    "È disponibile la versione %s: installala dalla pagina Aggiornamenti della dashboard",
 	UpdNone:       "nessuna release più recente trovata all'ultimo controllo",
-	ChkPlugins:    "Plugin",
-	PlgOK:         "%d plugin dell'hub, nessuno fallito o non valido",
-	PlgProblem:    "nessun plugin è in esecuzione: %s",
-	PlgBad:        "da controllare (vedi la scheda Stato): %s",
+
+	// --- Raggiungibilità dalla rete (#369).
+	ChkLAN:       "Accesso dalla rete",
+	LANLocalOnly: "la dashboard ascolta su %s: solo questa macchina può aprirla; per raggiungerla dalla rete imposta listen su \"0.0.0.0:%s\"",
+	LANTry:       "ascolta su un solo indirizzo: da un altro host apri %s (se non si carica, controlla il firewall)",
+	LANNoAddr:    "non è stato trovato nessun indirizzo di rete di questa macchina; controlla la rete e l'impostazione listen",
+	LANLater:     "avvia l'hub, poi da un altro host apri %s",
+	LANOK:        "l'hub risponde sugli indirizzi di rete di questa macchina; il firewall non è controllato: da un altro host apri %s",
+	LANFail:      "l'hub non risponde su %s: controlla l'impostazione listen e che il servizio sia in esecuzione",
+	// --- fine del blocco sulla rete.
+	ChkPlugins: "Plugin",
+	PlgOK:      "%d plugin dell'hub, nessuno fallito o non valido",
+	PlgProblem: "nessun plugin è in esecuzione: %s",
+	PlgBad:     "da controllare (vedi la scheda Stato): %s",
 	// --- end of the plugin health block.
 
 	// --- Setting errors (#318).

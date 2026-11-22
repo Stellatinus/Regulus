@@ -8,7 +8,7 @@ Regulus v0.3.0  Hub ● in esecuzione
  !  Directory dei dati      testdata/no-such-dir non esiste ancora (viene creata al primo avvio)
  ·  Database                ancora nessuno
  ✓  Aggiornamenti           nessuna release più recente trovata all'ultimo controllo
-
+ ·  Accesso dalla rete      avvia l'hub, poi da un altro host apri http://192.168.1.20:8080
 
 
 

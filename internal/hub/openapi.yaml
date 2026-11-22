@@ -1597,6 +1597,28 @@ components:
             The last successful check is older than three days (or checks have
             failed for that long without ever succeeding): the hub may not know
             about a new release, a security fix included. Only with checks on.
+        index:
+          description: |
+            The signed release index (`latest.json`) verified at the last check:
+            the release it is attached to, when it was issued and when it stops
+            being believed (#263). Absent until one was verified.
+          type: object
+          required: [tag, issued_at, expires]
+          properties:
+            tag: { type: string }
+            issued_at: { type: string, format: date-time }
+            expires: { type: string, format: date-time }
+        index_problem:
+          type: string
+          enum: [expired, replayed, hidden, missing, invalid]
+          description: |
+            What is wrong with the signed release index or with the list of
+            releases compared with it: `expired`, `replayed` (older than one
+            already verified), `hidden` (it names a newer release than the list
+            holds; `index_detail` is that version), `missing` (one was verified
+            before and none is offered now) or `invalid` (`index_detail` is why).
+            The hub may not know about a release that exists.
+        index_detail: { type: string }
         check_error: { type: string }
         checking: { type: boolean }
         latest:

@@ -52,3 +52,23 @@ func TestAuditRowWithoutCodeStillReads(t *testing.T) {
 		t.Errorf("entry = %+v", all[0])
 	}
 }
+
+// #372: a wrong password in a re-authentication is recorded with its code.
+func TestFailedPasswordCheckIsRecordedWithACode(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	admin, _ := setup(t, s)
+	if err := s.checkPasswordFor(ctx, admin, "definitely not the password", "re-authentication", CodeReauthentication); err == nil {
+		t.Fatal("a wrong password was accepted")
+	}
+	all, err := s.store.listAudit(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range all {
+		if e.Event == EventPasswordFailed && e.Code == CodeReauthentication && e.Detail == "re-authentication" {
+			return
+		}
+	}
+	t.Errorf("no coded password failure in %+v", all)
+}

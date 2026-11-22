@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -192,6 +193,15 @@ type Status struct {
 	// root is a current one, or before the first verification. A stale
 	// snapshot does not know about keys Sigstore has revoked.
 	TrustFallback string `json:"trust_fallback,omitempty"`
+
+	// Index is the signed index of releases the hub verified at the last
+	// check, and IndexProblem (with IndexDetail) what is wrong with it or with
+	// the list of releases it was compared with: expired, replayed, hidden,
+	// missing or invalid (#263). A problem means the hub may not know about a
+	// release that exists.
+	Index        *IndexInfo `json:"index,omitempty"`
+	IndexProblem string     `json:"index_problem,omitempty"`
+	IndexDetail  string     `json:"index_detail,omitempty"`
 }
 
 // Auditor records events; *auth.Service implements it.
@@ -250,7 +260,11 @@ type Options struct {
 	Log    *slog.Logger
 	Source Source
 	Stager *Stager
-	Audit  Auditor
+	// Verifier checks the signature of the release index (#263); nil turns
+	// the index off. Client fetches its files (nil: http.DefaultClient).
+	Verifier Verifier
+	Client   *http.Client
+	Audit    Auditor
 	// Version is the version the binary was built with.
 	Version      string
 	GOOS, GOARCH string
@@ -279,6 +293,15 @@ type persisted struct {
 	// stale.
 	Channel Channel `json:"channel"`
 	Latest  *Info   `json:"latest,omitempty"`
+
+	// The signed release index (#263). IndexIssuedAt is the newest issue time
+	// verified so far and survives every check, so an older index is refused
+	// as a replay; Index is the one verified at the last check, and
+	// IndexProblem and IndexDetail what that check found wrong.
+	IndexIssuedAt time.Time  `json:"index_issued_at,omitzero"`
+	Index         *IndexInfo `json:"index,omitempty"`
+	IndexProblem  string     `json:"index_problem,omitempty"`
+	IndexDetail   string     `json:"index_detail,omitempty"`
 }
 
 // Manager looks for new releases and keeps the newest one downloaded. It does
@@ -500,10 +523,12 @@ func (m *Manager) SetSettings(ctx context.Context, by string, s Settings) (Statu
 	}
 	if old != s {
 		detail := fmt.Sprintf("mode %s, channel %s", s.Mode, s.Channel)
+		actx := auth.WithCode(ctx, auth.CodeUpdateSettings, "mode", string(s.Mode), "channel", string(s.Channel))
 		if s.Mode == ModeAutomatic {
 			detail += fmt.Sprintf(", window %s-%s", s.WindowStart, s.WindowEnd)
+			actx = auth.WithCode(ctx, auth.CodeUpdateSettingsWindow, "mode", string(s.Mode), "channel", string(s.Channel), "from", s.WindowStart, "to", s.WindowEnd)
 		}
-		m.audit(ctx, by, EventSettings, "updates", detail)
+		m.audit(actx, by, EventSettings, "updates", detail)
 	}
 	if old.Channel != s.Channel {
 		select {
@@ -540,10 +565,17 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		DownloadError:  m.stageErr,
 		StatusSocket:   m.statusSocket,
 		TrustFallback:  m.trustFallback,
+		Index:          m.state.Index,
+		IndexProblem:   m.state.IndexProblem,
+		IndexDetail:    m.state.IndexDetail,
 	}
 	if !m.state.CheckedAt.IsZero() {
 		t := m.state.CheckedAt
 		st.CheckedAt = &t
+	}
+	// An index that was fine at the last check can run out before the next.
+	if st.Index != nil && st.IndexProblem == "" && !m.opts.Now().Before(st.Index.Expires) {
+		st.IndexProblem, st.IndexDetail = IndexExpired, st.Index.Expires.UTC().Format(time.RFC3339)
 	}
 	succeeded := m.state.SucceededAt
 	if succeeded.IsZero() && m.state.CheckError == "" {
@@ -639,9 +671,16 @@ func (m *Manager) check(ctx context.Context) (Status, error) {
 	set, serr := m.Settings(ctx)
 	var releases []Release
 	var err error
+	var index indexResult
 	if serr == nil {
 		cctx, cancel := context.WithTimeout(ctx, checkTimeout)
 		releases, err = m.opts.Source.Releases(cctx)
+		if err == nil && m.opts.Verifier != nil {
+			m.mu.Lock()
+			seen := m.state.IndexIssuedAt
+			m.mu.Unlock()
+			index = m.checkIndex(cctx, releases, set.Channel, seen)
+		}
 		cancel()
 	}
 
@@ -660,7 +699,8 @@ func (m *Manager) check(ctx context.Context) (Status, error) {
 		}
 	default:
 		now := m.opts.Now().UTC()
-		m.state = persisted{CheckedAt: now, SucceededAt: now, Channel: set.Channel}
+		m.state = persisted{CheckedAt: now, SucceededAt: now, Channel: set.Channel,
+			IndexIssuedAt: index.issuedAt, Index: index.info, IndexProblem: index.problem, IndexDetail: index.detail}
 		if best, ok := Latest(releases, set.Channel); ok {
 			m.state.Latest = infoOf(best)
 		}
@@ -763,13 +803,13 @@ func (m *Manager) doStage(ctx context.Context, by string) error {
 	if err != nil {
 		return m.failed(ctx, by, best.Version.String(), err)
 	}
-	m.audit(ctx, by, EventDownloaded, staged.Version, fmt.Sprintf("%s, sha256 %s, verified by %s", staged.Archive, staged.SHA256, staged.Verified))
+	m.audit(auth.WithCode(ctx, auth.CodeDownloaded, "archive", staged.Archive, "sha256", staged.SHA256, "verified", staged.Verified), by, EventDownloaded, staged.Version, fmt.Sprintf("%s, sha256 %s, verified by %s", staged.Archive, staged.SHA256, staged.Verified))
 	m.opts.Log.Info("update downloaded", "version", staged.Version, "verified", staged.Verified)
 	return nil
 }
 
 func (m *Manager) failed(ctx context.Context, by, version string, err error) error {
-	m.audit(ctx, by, EventDownloadFailed, version, err.Error())
+	m.audit(auth.WithCode(ctx, auth.CodeDownloadFailed, "error", err.Error()), by, EventDownloadFailed, version, err.Error())
 	return err
 }
 
@@ -911,7 +951,17 @@ func (m *Manager) syncApply(ctx context.Context) {
 	detail := "from " + res.From
 	if res.Message != "" {
 		detail += ": " + res.Message
-		ctx = auth.WithCode(ctx, auth.CodeFromVersionMessage, "version", res.From, "message", res.Message)
+		kv := []string{"version", res.From, "message", res.Message}
+		if res.Code != "" {
+			// The dashboard shows the helper's message from its own catalog
+			// (updates.applyMsg.<code>): the code and arguments go along, the
+			// arguments with the prefix "a_" (#372).
+			kv = append(kv, "apply_code", res.Code)
+			for k, v := range res.Args {
+				kv = append(kv, "a_"+k, v)
+			}
+		}
+		ctx = auth.WithCode(ctx, auth.CodeFromVersionMessage, kv...)
 	} else {
 		ctx = auth.WithCode(ctx, auth.CodeFromVersion, "version", res.From)
 	}

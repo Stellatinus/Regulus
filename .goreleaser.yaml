@@ -16,6 +16,9 @@ builds:
     goos: [linux]
     goarch: [amd64, arm64]
     flags: [-trimpath]
+    # The time of the commit, not of the build, so that two builds of a tag
+    # give the same bytes (#215).
+    mod_timestamp: "{{ .CommitTimestamp }}"
     ldflags:
       - -s -w -X main.version={{ .Version }}
 
@@ -23,6 +26,9 @@ archives:
   - id: regulus
     formats: [tar.gz]
     name_template: "regulus_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Files added to the archive carry the commit time too (#215).
+    builds_info:
+      mtime: "{{ .CommitDate }}"
     files:
       - LICENSE
       - README.md
@@ -37,6 +43,7 @@ nfpms:
     license: Apache-2.0
     formats: [deb, rpm]
     bindir: /usr/bin
+    mtime: "{{ .CommitDate }}"
     # Ubuntu Server is the reference platform. The package runs the hub as the
     # unprivileged system user "regulus"; see packaging/ and docs/installation.md.
     contents:

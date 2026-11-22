@@ -117,7 +117,13 @@ function genericError(
   code?: string,
   retryAfter?: number,
 ): ApiError {
-  return new ApiError(status, translate(detectLanguage(), key, params), code, retryAfter, { key, params });
+  return new ApiError(
+    status,
+    translate(detectLanguage(), key, params),
+    code,
+    retryAfter,
+    { key, params },
+  );
 }
 
 // apiErrorText is the text of an error in the language of t: a catalog text
@@ -127,7 +133,8 @@ export function apiErrorText(
   t: (key: MessageKey, params?: Record<string, string | number>) => string,
   err: unknown,
 ): string {
-  if (err instanceof ApiError && err.messageKey) return t(err.messageKey, err.messageParams);
+  if (err instanceof ApiError && err.messageKey)
+    return t(err.messageKey, err.messageParams);
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -216,12 +223,17 @@ const HUB_ERROR_CODES = new Set([
 // hubErrorKey is the catalog key of the text of a hub error code, if it has
 // one.
 export function hubErrorKey(code: string | undefined): MessageKey | undefined {
-  return code !== undefined && HUB_ERROR_CODES.has(code) ? (`hub.error.${code}` as MessageKey) : undefined;
+  return code !== undefined && HUB_ERROR_CODES.has(code)
+    ? (`hub.error.${code}` as MessageKey)
+    : undefined;
 }
 
 // parseRetryAfter reads a Retry-After header: a number of seconds, or an HTTP
 // date (turned into the seconds left from now). Anything else is undefined.
-export function parseRetryAfter(value: string | null | undefined, now = Date.now()): number | undefined {
+export function parseRetryAfter(
+  value: string | null | undefined,
+  now = Date.now(),
+): number | undefined {
   if (!value) return undefined;
   const v = value.trim();
   if (/^\d+$/.test(v)) return Number(v);
@@ -281,16 +293,24 @@ async function request<T>(
     });
   } catch (err) {
     // An abort is the caller's doing, not a failure to report.
-    if (signal?.aborted || (err instanceof Error && err.name === "AbortError")) throw err;
+    if (signal?.aborted || (err instanceof Error && err.name === "AbortError"))
+      throw err;
     throw genericError(0, "request.network", { method, path }, NETWORK_ERROR);
   }
-  const retryAfter = typeof res.headers?.get === "function" ? parseRetryAfter(res.headers.get("Retry-After")) : undefined;
+  const retryAfter =
+    typeof res.headers?.get === "function"
+      ? parseRetryAfter(res.headers.get("Retry-After"))
+      : undefined;
   if (!res.ok) {
     let hubMessage: string | undefined;
     let code: string | undefined;
     let args: Record<string, string | number> | undefined;
     try {
-      const data = (await res.json()) as { error?: string; code?: string; args?: Record<string, string | number> };
+      const data = (await res.json()) as {
+        error?: string;
+        code?: string;
+        args?: Record<string, string | number>;
+      };
       if (data.error) hubMessage = data.error;
       code = data.code;
       args = data.args;
@@ -300,20 +320,38 @@ async function request<T>(
     if (res.status === 403 && code === "two_factor_setup_required") {
       window.dispatchEvent(new Event(TWO_FACTOR_REQUIRED_EVENT));
     }
-    if (res.status === 403 && code === REAUTH_REQUIRED && !retried && reauthHandler && !signal?.aborted) {
-      if (await reauthHandler()) return request<T>(method, path, body, signal, true);
+    if (
+      res.status === 403 &&
+      code === REAUTH_REQUIRED &&
+      !retried &&
+      reauthHandler &&
+      !signal?.aborted
+    ) {
+      if (await reauthHandler())
+        return request<T>(method, path, body, signal, true);
     }
     const key = hubErrorKey(code);
-    if (key !== undefined) throw genericError(res.status, key, args ?? {}, code, retryAfter);
-    if (hubMessage !== undefined) throw new ApiError(res.status, hubMessage, code, retryAfter);
-    throw genericError(res.status, "request.failed", { method, path, status: res.status }, code, retryAfter);
+    if (key !== undefined)
+      throw genericError(res.status, key, args ?? {}, code, retryAfter);
+    if (hubMessage !== undefined)
+      throw new ApiError(res.status, hubMessage, code, retryAfter);
+    throw genericError(
+      res.status,
+      "request.failed",
+      { method, path, status: res.status },
+      code,
+      retryAfter,
+    );
   }
   if (res.status === 204) return undefined as T;
   // The hub answers JSON. Anything else with a 2xx status comes from
   // something in between (a proxy error page, a captive portal, a login
   // page of a single sign-on gateway): say so with an ApiError instead of
   // letting the JSON parser throw a bare SyntaxError.
-  const type = typeof res.headers?.get === "function" ? res.headers.get("Content-Type") : null;
+  const type =
+    typeof res.headers?.get === "function"
+      ? res.headers.get("Content-Type")
+      : null;
   if (type !== null && !/json/i.test(type)) {
     throw notJSON(res.status, method, path, type);
   }
@@ -334,10 +372,25 @@ export const INVALID_RESPONSE = "invalid_response";
 // the request.
 export const NETWORK_ERROR = "network_error";
 
-const notJSON = (status: number, method: string, path: string, type: string | null) =>
+const notJSON = (
+  status: number,
+  method: string,
+  path: string,
+  type: string | null,
+) =>
   type
-    ? genericError(status, "request.notJson", { method, path, type }, INVALID_RESPONSE)
-    : genericError(status, "request.notJsonNoType", { method, path }, INVALID_RESPONSE);
+    ? genericError(
+        status,
+        "request.notJson",
+        { method, path, type },
+        INVALID_RESPONSE,
+      )
+    : genericError(
+        status,
+        "request.notJsonNoType",
+        { method, path },
+        INVALID_RESPONSE,
+      );
 
 // fetchAgents lists the connected agents, or with all every enrolled agent.
 export const fetchAgents = (signal?: AbortSignal, all = false) =>
@@ -377,15 +430,21 @@ export interface AgentListener {
   editable: boolean;
 }
 
-export const fetchAgentListener = () => request<AgentListener>("GET", "/api/agents/listener");
+export const fetchAgentListener = () =>
+  request<AgentListener>("GET", "/api/agents/listener");
 
-export const enableRemoteAgents = (port: number) => request<AgentListener>("PUT", "/api/agents/listener", { port });
+export const enableRemoteAgents = (port: number) =>
+  request<AgentListener>("PUT", "/api/agents/listener", { port });
 
 // createEnrollment makes a token; ttl is how long it can be used, a Go
 // duration such as "15m" or "24h" (1 minute to 7 days; the hub's default, one
 // hour, when empty).
 export const createEnrollment = (name: string, ttl = "") =>
-  request<Enrollment>("POST", "/api/enrollment-tokens", ttl ? { name, ttl } : { name });
+  request<Enrollment>(
+    "POST",
+    "/api/enrollment-tokens",
+    ttl ? { name, ttl } : { name },
+  );
 
 // A token that can still be used (see GET /api/enrollment-tokens). The secret
 // was shown once, when the token was made, and is not part of it.
@@ -398,10 +457,19 @@ export interface PendingEnrollment {
 }
 
 export const fetchEnrollmentTokens = (signal?: AbortSignal) =>
-  request<PendingEnrollment[]>("GET", "/api/enrollment-tokens", undefined, signal);
+  request<PendingEnrollment[]>(
+    "GET",
+    "/api/enrollment-tokens",
+    undefined,
+    signal,
+  );
 
 export const revokeEnrollmentToken = (id: string) =>
-  request<void>("DELETE", `/api/enrollment-tokens/${encodeURIComponent(id)}`, {});
+  request<void>(
+    "DELETE",
+    `/api/enrollment-tokens/${encodeURIComponent(id)}`,
+    {},
+  );
 
 export const renameAgent = (id: string, name: string) =>
   request<void>("PATCH", `/api/agents/${encodeURIComponent(id)}`, { name });
@@ -807,6 +875,13 @@ export interface UpdateStatus {
   // The last successful check is older than three days: the hub may not
   // know about a new release, a security fix included.
   check_stale?: boolean;
+  // The signed release index verified at the last check (#263).
+  index?: { tag: string; issued_at: string; expires: string };
+  // What is wrong with it, or with the list of releases compared with it: the
+  // hub may not know about a release that exists. index_detail is the version
+  // that is hidden, the time of a replayed index, or the reason it was refused.
+  index_problem?: "expired" | "replayed" | "hidden" | "missing" | "invalid";
+  index_detail?: string;
   check_error?: string;
   checking: boolean;
   latest: UpdateInfo | null;

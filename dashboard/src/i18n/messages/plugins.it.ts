@@ -30,6 +30,7 @@ export const pluginsIt: Record<keyof typeof plugins, string> = {
   "plugins.state.stopped": "fermato",
   "plugins.state.invalid": "non valido",
 
+  "plugins.ownWords": "Non tradotto: sono le parole del plugin o del suo ambiente di esecuzione.",
   "plugins.state.failedHint": "Si è fermato troppe volte e non viene riavviato finché Regulus non si riavvia.",
   "plugins.state.incompatibleHint": "Non funziona con questa versione di Regulus e non viene mai avviato.",
   "plugins.state.invalidHint": "Questa directory non è un plugin utilizzabile e non viene mai avviata: correggila o rimuovila, poi riavvia Regulus.",

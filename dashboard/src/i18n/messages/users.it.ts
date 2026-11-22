@@ -182,4 +182,12 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.detail.code.rollout_state": "{state}",
   "users.detail.code.role_renamed": "rinominato da {name}; {permissions}",
   "users.detail.code.permissions": "{permissions}",
+
+  // #372: dettagli che erano solo in inglese.
+  "users.detail.code.update_settings": "modalità {mode}, canale {channel}",
+  "users.detail.code.update_settings_window": "modalità {mode}, canale {channel}, finestra {from}-{to}",
+  "users.detail.code.update_downloaded": "{archive}, sha256 {sha256}, verificato da {verified}",
+  "users.detail.code.update_download_failed": "{error}",
+  "users.detail.code.two_factor_settings": "impostazioni della verifica in due passaggi",
+  "users.detail.code.reauthentication": "nuova autenticazione",
 };

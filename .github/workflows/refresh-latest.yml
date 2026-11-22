@@ -1,0 +1,45 @@
+name: Refresh latest.json
+
+# The signed index of releases (latest.json, #263) says when it expires, so
+# that a server that hides new releases is noticed. An index that is never
+# renewed would warn on every hub once it expires, so this workflow asks the
+# release workflow to make a new one for the newest stable release every week.
+#
+# The release workflow has to run at a release tag, because the signature names
+# the workflow at that tag (the identity of checksums.txt), so this workflow only
+# starts it (workflow_dispatch with refresh_only on the tag). The run waits for
+# the approval of the `release` environment, like a release. A release made
+# before refresh_only existed cannot be refreshed; see docs/releases.md.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # start the release workflow
+    steps:
+      - name: Start the refresh on the newest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # "latest" is the newest release that is not a pre-release.
+          tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "::notice::There is no stable release yet: nothing to refresh."
+            exit 0
+          fi
+          workflow=$(gh api "repos/$GITHUB_REPOSITORY/contents/.github/workflows/release.yml?ref=$tag" --jq .content | base64 -d)
+          if ! printf '%s' "$workflow" | grep -q 'refresh_only'; then
+            echo "::notice::$tag was released before the index existed, so its workflow cannot refresh it. The next release publishes latest.json."
+            exit 0
+          fi
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$tag" -f refresh_only=true
+          echo "Started the refresh of latest.json on $tag."

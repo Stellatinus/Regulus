@@ -21,6 +21,14 @@ import { formatAgo, formatBytes } from "./format";
 import { applyMessageText, rolloutMessageText } from "./hubTexts";
 import { useT, type MessageKey } from "./i18n";
 import { useSession } from "./session";
+
+// The detail of an index problem is a version or a time (RFC 3339): a time is
+// shown in the viewer's own format.
+function formatIndexDetail(detail?: string): string {
+  if (!detail) return "";
+  const ms = /^\d{4}-\d\d-\d\dT/.test(detail) ? Date.parse(detail) : NaN;
+  return Number.isNaN(ms) ? detail : new Date(ms).toLocaleString();
+}
 import { errorMessage } from "./useApiList";
 
 const POLL_MS = 2000;
@@ -211,6 +219,16 @@ function Version({
             <p className="muted">
               {t("updates.version.lastSuccess", {
                 ago: formatAgo(status.succeeded_at, undefined, t),
+              })}
+            </p>
+          )}
+          {status.index_problem && (
+            <p role="alert" className="note warn">
+              {t(`updates.index.${status.index_problem}` as MessageKey, {
+                detail:
+                  status.index_problem === "invalid"
+                    ? (status.index_detail ?? "")
+                    : formatIndexDetail(status.index_detail),
               })}
             </p>
           )}
@@ -546,7 +564,11 @@ function Servers() {
   // agent without the update helper, or not managed by an agent that can be
   // updated): listed as exceptions under "all up to date".
   const exceptions = (Array.isArray(agents) ? agents : []).filter(
-    (a) => a.version && a.version !== rollout.target && !behind.some((b) => b.id === a.id) && a.status !== "revoked",
+    (a) =>
+      a.version &&
+      a.version !== rollout.target &&
+      !behind.some((b) => b.id === a.id) &&
+      a.status !== "revoked",
   );
   const finished = rollout.state !== "idle" && rollout.state !== "running";
   return (
