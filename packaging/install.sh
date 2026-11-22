@@ -21,6 +21,9 @@ set -eu
 REPO=Stellatinus/Regulus
 DEFAULT_BASE_URL="https://github.com/$REPO/releases/download"
 LATEST_URL="https://github.com/$REPO/releases/latest"
+# The protocols curl and wget may use for a download: https only, unless
+# --insecure-base-url asks for a test server (#208).
+fetch_proto='=https'
 API_URL="https://api.github.com/repos/$REPO/releases"
 CONFIG_DIR=/etc/regulus
 DATA_DIR=/var/lib/regulus
@@ -72,7 +75,12 @@ Usage: install.sh [options]
                          from the environment, or asks on the terminal without echo. It is
                          written only to /etc/regulus/regulus.env (0640, root:regulus)
   --yes, -y              do not ask anything: the defaults are the built-in agent and SQLite
-  --require-signature    fail if the signature cannot be verified (needs cosign)
+  --allow-unsigned       go on when the signature cannot be verified (a missing or invalid
+                         signature stops the installation otherwise). Only the checksum is
+                         checked then, which proves nothing about who built the package.
+                         --require-signature is accepted and does nothing: it is the default
+  --insecure-base-url    allow an http:// address with --base-url (a test server). Without it
+                         every download uses https only
   --base-url URL         download from URL/v<version>/ instead of GitHub Releases
   -h, --help             show this help
 
@@ -126,9 +134,13 @@ check_platform() {
 # fetch URL FILE downloads a file, failing on HTTP errors.
 fetch() {
 	if have curl; then
-		curl -fsSL --retry 3 -o "$2" "$1"
+		curl -fsSL --proto "$fetch_proto" --tlsv1.2 --retry 3 -o "$2" "$1"
 	elif have wget; then
-		wget -q -O "$2" "$1"
+		if [ "$fetch_proto" = "=https" ]; then
+			wget -q --https-only -O "$2" "$1"
+		else
+			wget -q -O "$2" "$1"
+		fi
 	else
 		die "curl or wget is needed"
 	fi
@@ -175,11 +187,11 @@ newest_on_channel() {
 latest_version() {
 	if [ "$channel" != stable ]; then
 		have curl || die "curl is needed to look up the latest $channel release"
-		tag=$(curl -fsSL "$API_URL?per_page=100" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | newest_on_channel "$channel")
+		tag=$(curl -fsSL --proto '=https' --tlsv1.2 "$API_URL?per_page=100" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | newest_on_channel "$channel")
 	else
 		have curl || die "curl is needed to look up the latest release"
 		# /releases/latest redirects to /releases/tag/<tag>.
-		tag=$(curl -fsSIL -o /dev/null -w '%{url_effective}' "$LATEST_URL" | sed -n 's|.*/tag/||p')
+		tag=$(curl -fsSIL --proto '=https' --tlsv1.2 -o /dev/null -w '%{url_effective}' "$LATEST_URL" | sed -n 's|.*/tag/||p')
 	fi
 	[ -n "$tag" ] || die "could not find a $channel release; use --version, or --channel beta or alpha if only pre-releases exist"
 	echo "${tag#v}"
@@ -205,25 +217,43 @@ verify_checksum() {
 }
 
 # verify_signature DIR checks checksums.txt against its Sigstore signature,
-# made by the release workflow of this repository.
+# made by the release workflow of this repository at exactly the tag of this
+# version (#208). A release that cannot be verified stops the installation;
+# --allow-unsigned (REGULUS_ALLOW_UNSIGNED=1) is the explicit way to go on
+# with the checksum only, which proves nothing about who built the files.
+#
+# Who checks: cosign when it is installed, with the exact identity. Otherwise
+# `regulus verify-release` from the package itself, which the installer
+# extracts without installing (dpkg-deb -x) and which checks with the same
+# code as the hub. That second way trusts the package to verify itself: a
+# package from a hijacked origin could say yes. It still stops a mistake, a
+# stale mirror and a signature of another tag; for independence from the
+# origin use cosign, or verify by hand (docs/releases.md). The first install
+# trusts GitHub and TLS either way.
 verify_signature() {
-	if ! have cosign; then
-		if [ "$require_signature" = 1 ]; then
-			die "cosign is not installed, so the signature cannot be verified (--require-signature)"
-		fi
-		warn "cosign is not installed: only the checksum was verified, not the signature (https://docs.sigstore.dev/cosign/)"
+	if [ "$allow_unsigned" = 1 ]; then
+		warn "--allow-unsigned: the signature is NOT verified; only the checksum was, and it proves nothing about who built the package"
 		return 0
 	fi
-	if ! fetch "$base_url/v$version/checksums.txt.sigstore.json" "$1/checksums.txt.sigstore.json" 2>/dev/null; then
-		[ "$require_signature" = 1 ] && die "the release has no signature (--require-signature)"
-		warn "the release has no signature file: only the checksum was verified"
+	tag="v$version"
+	if ! fetch "$base_url/$tag/checksums.txt.sigstore.json" "$1/checksums.txt.sigstore.json" 2>/dev/null; then
+		die "the release has no signature file (checksums.txt.sigstore.json); to install it anyway, run again with --allow-unsigned"
+	fi
+	if have cosign; then
+		cosign verify-blob \
+			--bundle "$1/checksums.txt.sigstore.json" \
+			--certificate-identity "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/$tag" \
+			--certificate-oidc-issuer https://token.actions.githubusercontent.com \
+			"$1/checksums.txt" >/dev/null 2>&1 || die "the signature of checksums.txt is not valid for the release workflow at $tag"
+		say "Signature verified (cosign)."
 		return 0
 	fi
-	cosign verify-blob \
-		--bundle "$1/checksums.txt.sigstore.json" \
-		--certificate-identity-regexp "https://github.com/$REPO/.github/workflows/release.yml@.*" \
-		--certificate-oidc-issuer https://token.actions.githubusercontent.com \
-		"$1/checksums.txt" >/dev/null 2>&1 || die "the signature of checksums.txt is not valid"
+	have dpkg-deb || die "cannot verify the signature: install cosign (https://docs.sigstore.dev/cosign/), or run again with --allow-unsigned"
+	mkdir -p "$1/verify" || die "cannot create a directory to verify the signature"
+	dpkg-deb -x "$1/$file" "$1/verify" >/dev/null 2>&1 || die "cannot open $file to verify the signature"
+	[ -x "$1/verify/usr/bin/regulus" ] || die "$file has no usr/bin/regulus to verify the signature with; install cosign, or run again with --allow-unsigned"
+	"$1/verify/usr/bin/regulus" verify-release --tag "$tag" "$1/checksums.txt" "$1/checksums.txt.sigstore.json" >/dev/null 2>&1 \
+		|| die "the signature of checksums.txt is not valid for the release workflow at $tag"
 	say "Signature verified."
 }
 
@@ -970,7 +1000,8 @@ main() {
 	db_local_new=0
 	assume_yes=0
 	self_update=1
-	require_signature=${REGULUS_REQUIRE_SIGNATURE:-0}
+	allow_unsigned=${REGULUS_ALLOW_UNSIGNED:-0}
+	insecure_base_url=0
 	base_url=$DEFAULT_BASE_URL
 
 	while [ $# -gt 0 ]; do
@@ -1053,7 +1084,9 @@ main() {
 			--no-builtin-agent) builtin_agent=false ;;
 			--no-self-update) self_update=0 ;;
 			--yes | -y) assume_yes=1 ;;
-			--require-signature) require_signature=1 ;;
+			--require-signature) ;; # the default since #208
+			--allow-unsigned) allow_unsigned=1 ;;
+			--insecure-base-url) insecure_base_url=1 ;;
 			--base-url)
 				[ $# -ge 2 ] || die "--base-url needs a value"
 				base_url=${2%/}
@@ -1075,6 +1108,12 @@ main() {
 		stable | beta | alpha) ;;
 		*) die "invalid --channel $channel: use stable, beta or alpha" ;;
 	esac
+
+	case "$base_url" in
+		https://*) ;;
+		*) [ "$insecure_base_url" = 1 ] || die "--base-url must start with https:// (--insecure-base-url allows http for a test server)" ;;
+	esac
+	[ "$insecure_base_url" = 1 ] && fetch_proto='=http,https'
 
 	check_database_args
 

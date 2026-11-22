@@ -483,6 +483,14 @@ Proposed on 2026-11-19, **waiting for the maintainer's agreement**; nothing is i
 - **Read-only.** Opening and closing ports belongs to the firewall manager (#290) and the firewall node (#284). The ports page makes the rule of #197 visible on every server; it does not replace the default.
 - **Not decided:** whether `ports.read` should be `inventory.read`; whether destinations default on for some node types; replication of this data (#106); alerts on an unexpected port need an alerting design that does not exist.
 
+## install.sh requires a valid signature, with the exact tag identity (#208)
+
+- **Required by default.** `install.sh` downloads `checksums.txt.sigstore.json` and stops when it is missing or invalid. The old behaviour (a warning and success when cosign was absent, which is the normal case on a fresh Ubuntu) made the signature optional exactly where it matters: `checksums.txt` and the `.deb` come from the same origin, so the checksum alone proves nothing about who built them. The opt-out is explicit: `--allow-unsigned` or `REGULUS_ALLOW_UNSIGNED=1`, which says so loudly. `--require-signature` stays accepted and does nothing, so old commands keep working.
+- **The exact identity.** Both ways of checking use `release.yml@refs/tags/v<version>`, as the hub does, not `release.yml@.*` (any ref, any branch): a signature a workflow run made on another ref is refused. The documents and `.goreleaser.yaml` show the same.
+- **Who checks.** cosign if it is installed; otherwise `regulus verify-release --tag vX checksums.txt bundle`, new, which runs the same `SigstoreVerifier` as the hub and which the installer takes out of the package without installing it (`dpkg-deb -x`, no root needed to look). **The honest limit:** without cosign the package verifies itself. A hijacked origin could ship a package whose `verify-release` says yes; the check still stops a mistake, a stale mirror and a signature of another tag. For a check that does not depend on the origin, use cosign or the manual steps in `docs/releases.md`. The first install trusts GitHub and TLS in every case.
+- **Transport.** `curl --proto '=https' --tlsv1.2` (`wget --https-only`) for every download, including the release lookup; `--base-url` must be `https://` unless `--insecure-base-url` is given for a test server.
+- **Tested** with stubs in `scripts/test-install.sh` (missing, invalid and wrong-tag signatures, through cosign and through the package) and in Go (`cmd/regulus/verify_release_test.go`, the identity itself in `internal/update/signature_test.go`). **Not verified** on a real Ubuntu with a real signed release (`[Test]` issue).
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)

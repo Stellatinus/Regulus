@@ -87,7 +87,7 @@ checksum:
 # Keyless signature (Sigstore) of the checksums file, made with the GitHub
 # Actions identity of the release workflow. Verify with:
 #   cosign verify-blob --bundle checksums.txt.sigstore.json \
-#     --certificate-identity-regexp 'https://github.com/Stellatinus/Regulus/.github/workflows/release.yml@.*' \
+#     --certificate-identity 'https://github.com/Stellatinus/Regulus/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
 #     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 signs:
   - cmd: cosign

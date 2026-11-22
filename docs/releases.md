@@ -6,7 +6,7 @@ The release workflow (GoReleaser) publishes a GitHub Release with `tar.gz` archi
 
 ```sh
 cosign verify-blob --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/Stellatinus/Regulus/.github/workflows/release.yml@.*' \
+  --certificate-identity 'https://github.com/Stellatinus/Regulus/.github/workflows/release.yml@refs/tags/vX.Y.Z' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 sha256sum --check --ignore-missing checksums.txt
 ```
