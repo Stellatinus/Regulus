@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -318,5 +319,38 @@ func TestOperatorsCannotApplyUpdates(t *testing.T) {
 	op := newAPI(t, h, auth.RoleOperator)
 	if rec := op.do("POST", "/api/updates/apply", struct{}{}); rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d", rec.Code)
+	}
+}
+
+// #214: when the release verifier falls back to the Sigstore root compiled
+// into the binary, the hub logs it and GET /api/updates says why; a current
+// root clears it.
+func TestHubReportsTheEmbeddedSigstoreRoot(t *testing.T) {
+	var logs syncBuffer
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	useTestDatabase(t, &cfg)
+	cfg.Updates.Check = false
+	h, err := New(context.Background(), cfg, slog.New(slog.NewTextHandler(&logs, nil)), fstest.MapFS{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = h.Close() })
+
+	h.noteTrust(update.TrustState{Embedded: true, Reason: "network is unreachable"})
+	st, err := h.updates.Status(context.Background())
+	if err != nil || st.TrustFallback != "network is unreachable" {
+		t.Fatalf("trust_fallback = %q (%v), want the reason", st.TrustFallback, err)
+	}
+	if body, err := json.Marshal(st); err != nil || !strings.Contains(string(body), `"trust_fallback":"network is unreachable"`) {
+		t.Errorf("JSON %s (%v) does not carry trust_fallback", body, err)
+	}
+	if !strings.Contains(logs.String(), "root compiled into this binary") {
+		t.Errorf("the fallback is not logged: %s", logs.String())
+	}
+
+	h.noteTrust(update.TrustState{})
+	if st, _ := h.updates.Status(context.Background()); st.TrustFallback != "" {
+		t.Errorf("trust_fallback = %q after a current root, want none", st.TrustFallback)
 	}
 }

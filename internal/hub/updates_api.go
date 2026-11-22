@@ -165,3 +165,18 @@ func (r rolloutHandlers) stop(w http.ResponseWriter, req *http.Request) {
 	st, err := r.rollout.StopRollout(req.Context(), by.Username)
 	r.reply(w, http.StatusOK, st, err)
 }
+
+// noteTrust is called when the Sigstore trusted root of the release
+// verifier changes source (#214): it logs the fallback to the root compiled
+// into the binary once, and again when a current root is back, and tells the
+// Updates page.
+func (h *Hub) noteTrust(st update.TrustState) {
+	if st.Embedded {
+		h.log.Warn("the Sigstore trusted root could not be fetched: releases are verified with the root compiled into this binary, which does not know about keys revoked since", "reason", st.Reason)
+	} else {
+		h.log.Info("the Sigstore trusted root was fetched: releases are verified with a current root")
+	}
+	if h.updates != nil {
+		h.updates.SetTrustFallback(st.Reason)
+	}
+}

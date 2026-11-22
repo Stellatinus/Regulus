@@ -1622,6 +1622,13 @@ components:
             `regulus status` shows no live data, the hub is updated through
             `<data_dir>/running.json`, and an update from a version older than the
             #312 fix rolls back on this hub.
+        trust_fallback:
+          type: string
+          description: >-
+            Why the hub verifies releases with the Sigstore trusted root compiled
+            into the binary instead of a current one (the reason the Sigstore TUF
+            repository could not be reached); absent while the root is a current one.
+            A stale root does not know about keys Sigstore has revoked.
         last_apply:
           oneOf:
             - { $ref: "#/components/schemas/UpdateApplyResult" }

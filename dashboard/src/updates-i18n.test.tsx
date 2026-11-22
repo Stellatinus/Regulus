@@ -82,6 +82,30 @@ describe("UpdatesPage in Italian", () => {
     expect(await screen.findByText(/Questo hub non ha il socket di stato locale/)).toHaveTextContent(/il percorso è troppo lungo/);
   });
 
+  // #214: the note about the embedded Sigstore root is translated too.
+  it("explains in Italian that the embedded Sigstore root is in use", async () => {
+    window.localStorage.setItem("regulus.language", "it");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve(path === "/api/updates/rollout" ? rollout : { ...status, trust_fallback: "rete non raggiungibile" }),
+        }),
+      ),
+    );
+    render(
+      <LanguageProvider>
+        <SessionContext.Provider value={{ user: admin, signOut: () => Promise.resolve(), expired: vi.fn() }}>
+          <UpdatesPage />
+        </SessionContext.Provider>
+      </LanguageProvider>,
+    );
+    expect(await screen.findByText(/radice di fiducia Sigstore/)).toHaveTextContent(/rete non raggiungibile/);
+  });
+
   it("shows the texts of the page in Italian", async () => {
     window.localStorage.setItem("regulus.language", "it");
     vi.stubGlobal(

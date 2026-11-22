@@ -763,6 +763,9 @@ export interface UpdateStatus {
   apply_stalled?: boolean;
   // Why the hub has no local status socket; absent while it has one (#338).
   status_socket?: string;
+  // Why releases are verified with the Sigstore root compiled into the binary
+  // instead of a current one (#214); absent while the root is a current one.
+  trust_fallback?: string;
   last_apply: UpdateApplyResult | null;
   // Maintenance window of the automatic mode, "HH:MM" in the hub's local time.
   window_start?: string;

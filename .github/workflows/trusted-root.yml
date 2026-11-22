@@ -1,0 +1,52 @@
+name: Sigstore trusted root
+
+# Keeps the Sigstore trusted root compiled into the binary
+# (internal/update/trusted_root.json) current (#214). A hub that cannot reach
+# the Sigstore TUF repository verifies releases with this snapshot, and a stale
+# one still trusts keys that Sigstore has retired. Every Monday it downloads the
+# current root (cmd/refresh-trusted-root) and, when it changed, opens a pull
+# request. Note: a pull request opened with the workflow's own token does not
+# start CI; close and reopen it (or push to its branch) to run the checks.
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the branch
+      pull-requests: write # open the pull request
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Fetch the current trusted root
+        run: go run ./cmd/refresh-trusted-root
+      - name: Open a pull request when it changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if git diff --quiet -- internal/update/trusted_root.json; then
+            echo "The embedded trusted root is current."
+            exit 0
+          fi
+          branch=chore/sigstore-trusted-root
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add internal/update/trusted_root.json
+          git commit -m "chore(update): refresh the embedded Sigstore trusted root"
+          git push --force-with-lease -u origin "$branch" || git push --force -u origin "$branch"
+          if gh pr view "$branch" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            echo "A pull request is already open for $branch."
+            exit 0
+          fi
+          gh pr create --base main --head "$branch" \
+            --title "chore(update): refresh the embedded Sigstore trusted root" \
+            --body "Sigstore published a new trusted root. This updates the snapshot compiled into the binary (\`internal/update/trusted_root.json\`), which a hub or agent uses when it cannot reach the Sigstore TUF repository (#214). Opened by \`.github/workflows/trusted-root.yml\`; CI does not run on it until it is closed and reopened."

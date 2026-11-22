@@ -221,7 +221,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h.agents.hubVersion = h.version
 	ver := h.updateVer
 	if ver == nil {
-		ver = &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(cfg.DataDir, "tuf"))}
+		ver = &update.SigstoreVerifier{Trust: update.PublicTrustReporting(filepath.Join(cfg.DataDir, "tuf"), h.noteTrust)}
 	}
 	src := h.updateSrc
 	if src == nil {

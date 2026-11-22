@@ -169,6 +169,13 @@ type Status struct {
 	// has one (#338). Without it `regulus status` shows no live data, and an
 	// update from a version older than the #312 fix rolls back on this hub.
 	StatusSocket string `json:"status_socket,omitempty"`
+
+	// TrustFallback is why the hub verifies releases with the Sigstore trusted
+	// root compiled into the binary instead of a current one: the reason the
+	// Sigstore TUF repository could not be reached (#214). Empty while the
+	// root is a current one, or before the first verification. A stale
+	// snapshot does not know about keys Sigstore has revoked.
+	TrustFallback string `json:"trust_fallback,omitempty"`
 }
 
 // Auditor records events; *auth.Service implements it.
@@ -277,7 +284,17 @@ type Manager struct {
 	stageErr  string
 	lastCheck time.Time
 
-	statusSocket string // why the hub has no local status socket (#338)
+	statusSocket  string // why the hub has no local status socket (#338)
+	trustFallback string // why the embedded Sigstore root is in use (#214)
+}
+
+// SetTrustFallback records why the hub verifies releases with the embedded
+// Sigstore trusted root ("" once a current one was fetched), so that Status
+// can say so (#214).
+func (m *Manager) SetTrustFallback(reason string) {
+	m.mu.Lock()
+	m.trustFallback = reason
+	m.mu.Unlock()
 }
 
 // SetStatusSocket records why the hub runs without its local status socket
@@ -506,6 +523,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		Downloading:    m.staging,
 		DownloadError:  m.stageErr,
 		StatusSocket:   m.statusSocket,
+		TrustFallback:  m.trustFallback,
 	}
 	if !m.state.CheckedAt.IsZero() {
 		t := m.state.CheckedAt
