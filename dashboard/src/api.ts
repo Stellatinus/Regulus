@@ -1029,5 +1029,52 @@ export interface PluginsStatus {
   agents: { id: string; name?: string; plugins: PluginStatus[] }[];
 }
 
+// A physical disk and its identity (GET /api/agents/{id}/disks, needs
+// inventory.read, #148 and #382). The key follows the drive from server to
+// server; `agent` is the server that last reported it.
+export interface Disk {
+  key: string;
+  kind: string;
+  identifiable: boolean;
+  conflict: boolean;
+  reason?: string;
+  // Another connected server reports the same disk at the same time.
+  contested: boolean;
+  contested_by?: string;
+  agent: string;
+  device: string;
+  vendor: string;
+  model: string;
+  serial: string;
+  wwn: string;
+  transport: string;
+  size_bytes: number;
+  virtual: boolean;
+  present: boolean;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface DiskMove {
+  id: number;
+  at: string;
+  key: string;
+  model: string;
+  serial: string;
+  from: string;
+  to: string;
+}
+
+export const fetchAgentDisks = (id: string, signal?: AbortSignal) =>
+  request<{ agent: string; disks: Disk[] }>(
+    "GET",
+    `/api/agents/${encodeURIComponent(id)}/disks`,
+    undefined,
+    signal,
+  ).then((r) => r.disks);
+
+export const fetchDiskMoves = (limit = 200, signal?: AbortSignal) =>
+  request<DiskMove[]>("GET", `/api/disks/moves?limit=${limit}`, undefined, signal);
+
 export const fetchPlugins = (signal?: AbortSignal) =>
   request<PluginsStatus>("GET", "/api/plugins", undefined, signal);
