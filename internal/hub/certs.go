@@ -193,7 +193,7 @@ func certificatesHandler(src CertificateSource) http.HandlerFunc {
 		}
 		c, err := src.Certificates(r.Context())
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "internal error")
+			writeInternal(w)
 			return
 		}
 		writeJSONBody(w, http.StatusOK, toCertificatesJSON(c, time.Now()))

@@ -154,7 +154,7 @@ func (s *Service) ChangePassword(ctx context.Context, user User, keepToken, curr
 	defer att.abandon()
 	n := utf8.RuneCountInString(next)
 	if n < minPasswordLen || n > maxPasswordLen {
-		return &inputError{fmt.Sprintf("the new password must be %d to %d characters", minPasswordLen, maxPasswordLen)}
+		return inputErr("new_password_length", fmt.Sprintf("the new password must be %d to %d characters", minPasswordLen, maxPasswordLen), "min", minPasswordLen, "max", maxPasswordLen)
 	}
 	hash, err := s.store.passwordHash(ctx, user.ID)
 	if err != nil {

@@ -87,20 +87,34 @@ func (s Settings) InWindow(now time.Time) bool {
 	return n >= start || n < end
 }
 
+// settingsError is the explanation of settings that cannot be saved. It is an
+// ErrInvalidSettings; Code lets the dashboard show it in the page's language
+// (#354).
+type settingsError struct{ code, msg string }
+
+func (e *settingsError) Error() string        { return ErrInvalidSettings.Error() + ": " + e.msg }
+func (e *settingsError) Unwrap() error        { return ErrInvalidSettings }
+func (e *settingsError) Code() string         { return e.code }
+func (e *settingsError) Args() map[string]any { return nil }
+
+// SettingsErrorCodes are the codes of settingsError, for the test that checks
+// the dashboard has a text for each.
+var SettingsErrorCodes = []string{"update_mode_invalid", "update_window_required", "update_channel_invalid"}
+
 // Validate reports whether the settings can be saved.
 func (s Settings) Validate() error {
 	if !validMode(s.Mode) {
-		return fmt.Errorf("%w: mode must be %q, %q or %q", ErrInvalidSettings, ModeManual, ModeDownload, ModeAutomatic)
+		return &settingsError{"update_mode_invalid", fmt.Sprintf("mode must be %q, %q or %q", ModeManual, ModeDownload, ModeAutomatic)}
 	}
 	if s.Mode == ModeAutomatic {
 		start, ok1 := minutesOf(s.WindowStart)
 		end, ok2 := minutesOf(s.WindowEnd)
 		if !ok1 || !ok2 || start == end {
-			return fmt.Errorf("%w: the automatic mode needs a maintenance window, two different times such as 03:00 and 05:00", ErrInvalidSettings)
+			return &settingsError{"update_window_required", "the automatic mode needs a maintenance window, two different times such as 03:00 and 05:00"}
 		}
 	}
 	if !s.Channel.Valid() {
-		return fmt.Errorf("%w: channel must be %q, %q or %q", ErrInvalidSettings, Stable, Beta, Alpha)
+		return &settingsError{"update_channel_invalid", fmt.Sprintf("channel must be %q, %q or %q", Stable, Beta, Alpha)}
 	}
 	return nil
 }

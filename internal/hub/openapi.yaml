@@ -1688,8 +1688,19 @@ components:
             `wrong_password`, `forbidden`, `unauthenticated`, `rate_limited`,
             `busy`, `invalid_reset`, `two_factor_on`, `two_factor_off`,
             `two_factor_not_started`, `two_factor_mandatory` and
-            `two_factor_unavailable`. New codes may be added; a client shows the
+            `two_factor_unavailable`. Since #354 the input errors (a username, a
+            password, a role, a name, a lifetime), the update and rollout errors,
+            the agent listener errors and `internal_error` carry a code too, listed
+            with their texts in `dashboard/src/i18n/messages/core.en.ts`
+            (`hub.error.<code>`). New codes may be added; a client shows the
             English `error` for one it does not know.
+        args:
+          type: object
+          additionalProperties: true
+          description: >-
+            The values the text of `code` needs (for example `min` and `max` for
+            `new_password_length`, `detail` for `update_upstream`), on the answers
+            that have some.
     User:
       type: object
       required: [username, role, created_at, disabled]

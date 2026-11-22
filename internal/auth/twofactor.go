@@ -90,7 +90,7 @@ func (s *Service) Policy() Policy {
 // applies to are asked to set it up at their next request.
 func (s *Service) SetPolicy(ctx context.Context, by User, p Policy) error {
 	if p != PolicyOff && p != PolicyAdmins && p != PolicyAll {
-		return &inputError{`policy must be "off", "admins" or "all"`}
+		return inputErr("policy_invalid", `policy must be "off", "admins" or "all"`)
 	}
 	if err := s.store.putSetting(ctx, policySetting, string(p)); err != nil {
 		return err

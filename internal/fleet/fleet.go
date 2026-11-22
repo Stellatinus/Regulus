@@ -142,28 +142,40 @@ func randomToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// NameError is a problem with the name chosen for a server.
-type NameError struct{ msg string }
+// NameError is a problem with the name chosen for a server. Code and Args let
+// the dashboard show it in the page's language (#354).
+type NameError struct {
+	msg  string
+	code string
+	args map[string]any
+}
 
-func (e *NameError) Error() string { return e.msg }
+func (e *NameError) Error() string        { return e.msg }
+func (e *NameError) Code() string         { return e.code }
+func (e *NameError) Args() map[string]any { return e.args }
 
 func cleanName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if len([]rune(name)) > maxNameLen {
-		return "", &NameError{fmt.Sprintf("the name can have at most %d characters", maxNameLen)}
+		return "", &NameError{fmt.Sprintf("the name can have at most %d characters", maxNameLen), "name_too_long", map[string]any{"max": maxNameLen}}
 	}
 	for _, r := range name {
 		if r < ' ' || r == 0x7f {
-			return "", &NameError{"the name cannot contain control characters"}
+			return "", &NameError{"the name cannot contain control characters", "name_control_chars", nil}
 		}
 	}
 	return name, nil
 }
 
 // TTLError is a problem with the lifetime asked for an enrollment token.
-type TTLError struct{ msg string }
+type TTLError struct {
+	msg  string
+	args map[string]any
+}
 
-func (e *TTLError) Error() string { return e.msg }
+func (e *TTLError) Error() string        { return e.msg }
+func (e *TTLError) Code() string         { return "token_ttl_range" }
+func (e *TTLError) Args() map[string]any { return e.args }
 
 // CreateToken makes a single-use enrollment token, valid for ttl (TokenTTL when
 // ttl is zero, otherwise between MinTokenTTL and MaxTokenTTL). The name, if
@@ -178,7 +190,7 @@ func (s *Service) CreateToken(ctx context.Context, by, name string, ttl time.Dur
 		ttl = TokenTTL
 	}
 	if ttl < MinTokenTTL || ttl > MaxTokenTTL {
-		return "", time.Time{}, &TTLError{fmt.Sprintf("the lifetime of a token must be between %v and %v", MinTokenTTL, MaxTokenTTL)}
+		return "", time.Time{}, &TTLError{fmt.Sprintf("the lifetime of a token must be between %v and %v", MinTokenTTL, MaxTokenTTL), map[string]any{"min": MinTokenTTL.String(), "max": MaxTokenTTL.String()}}
 	}
 	token, err = randomToken(24)
 	if err != nil {

@@ -189,7 +189,7 @@ func pluginsHandler(src PluginSource, agents AgentSource) http.HandlerFunc {
 			if reg, ok := agents.(registrySource); ok {
 				enrolled, err := reg.Registry(r.Context())
 				if err != nil {
-					writeJSONError(w, http.StatusInternalServerError, "internal error")
+					writeInternal(w)
 					return
 				}
 				for _, e := range enrolled {

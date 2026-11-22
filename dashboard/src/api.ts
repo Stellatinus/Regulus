@@ -156,6 +156,61 @@ const HUB_ERROR_CODES = new Set([
   "two_factor_mandatory",
   "two_factor_unavailable",
   "reauth_required",
+  "internal_error",
+  "invalid_json",
+  "invalid_limit",
+  "unsupported_media_type",
+  "cross_origin",
+  "login_expired",
+  "invalid_credentials",
+  "bad_setup_token",
+  "setup_done",
+  "username_invalid",
+  "password_too_short",
+  "password_too_long",
+  "new_password_length",
+  "account_disabled",
+  "role_name_invalid",
+  "role_name_builtin",
+  "role_unknown",
+  "permission_unknown",
+  "role_description_length",
+  "policy_invalid",
+  "agent_not_found",
+  "token_not_found",
+  "agent_not_enrolled",
+  "invalid_ttl",
+  "layouts_unavailable",
+  "layout_too_large",
+  "layout_required",
+  "stream_unavailable",
+  "too_many_streams",
+  "update_too_soon",
+  "update_checks_off",
+  "update_busy",
+  "update_nothing_to_fetch",
+  "update_not_release_build",
+  "update_apply_disabled",
+  "update_nothing_to_apply",
+  "update_not_verified",
+  "update_applying",
+  "update_mode_invalid",
+  "update_window_required",
+  "update_channel_invalid",
+  "update_upstream",
+  "rollout_running",
+  "rollout_nothing_to_roll",
+  "rollout_not_release",
+  "rollout_wave_size",
+  "port_invalid",
+  "agents_on",
+  "agents_in_config",
+  "hub_not_serving",
+  "listener_blocked",
+  "agents_off",
+  "name_too_long",
+  "name_control_chars",
+  "token_ttl_range",
 ]);
 
 // hubErrorKey is the catalog key of the text of a hub error code, if it has
@@ -233,10 +288,12 @@ async function request<T>(
   if (!res.ok) {
     let hubMessage: string | undefined;
     let code: string | undefined;
+    let args: Record<string, string | number> | undefined;
     try {
-      const data = (await res.json()) as { error?: string; code?: string };
+      const data = (await res.json()) as { error?: string; code?: string; args?: Record<string, string | number> };
       if (data.error) hubMessage = data.error;
       code = data.code;
+      args = data.args;
     } catch {
       // no explanation: the generic text below
     }
@@ -247,7 +304,7 @@ async function request<T>(
       if (await reauthHandler()) return request<T>(method, path, body, signal, true);
     }
     const key = hubErrorKey(code);
-    if (key !== undefined) throw genericError(res.status, key, {}, code, retryAfter);
+    if (key !== undefined) throw genericError(res.status, key, args ?? {}, code, retryAfter);
     if (hubMessage !== undefined) throw new ApiError(res.status, hubMessage, code, retryAfter);
     throw genericError(res.status, "request.failed", { method, path, status: res.status }, code, retryAfter);
   }

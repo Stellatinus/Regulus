@@ -40,10 +40,10 @@ type RoleInfo struct {
 
 func validRoleName(name Role) error {
 	if !roleNameRE.MatchString(string(name)) {
-		return &inputError{"role name must be 2 to 32 characters: lowercase letters, digits, dash or underscore, starting with a letter"}
+		return inputErr("role_name_invalid", "role name must be 2 to 32 characters: lowercase letters, digits, dash or underscore, starting with a letter")
 	}
 	if _, ok := builtin(name); ok {
-		return &inputError{fmt.Sprintf("%q is the name of a built-in role", name)}
+		return inputErr("role_name_builtin", fmt.Sprintf("%q is the name of a built-in role", name), "name", string(name))
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func (s *Service) mayGrant(ctx context.Context, by User, role Role) error {
 		return err
 	}
 	if !exists {
-		return &inputError{fmt.Sprintf("there is no role %q", role)}
+		return inputErr("role_unknown", fmt.Sprintf("there is no role %q", role), "role", string(role))
 	}
 	if !s.permsOfUser(ctx, by).covers(set) {
 		return fmt.Errorf("%w: the role %q has permissions you do not have", ErrForbidden, role)
@@ -167,7 +167,7 @@ func cleanPermissions(perms []string) ([]string, error) {
 	var out []string
 	for _, p := range perms {
 		if !validPermission(p) {
-			return nil, &inputError{fmt.Sprintf("unknown permission %q", p)}
+			return nil, inputErr("permission_unknown", fmt.Sprintf("unknown permission %q", p), "permission", p)
 		}
 		if !seen[p] {
 			seen[p] = true
@@ -180,7 +180,7 @@ func cleanPermissions(perms []string) ([]string, error) {
 func cleanDescription(d string) (string, error) {
 	d = strings.TrimSpace(d)
 	if len([]rune(d)) > maxRoleDescription {
-		return "", &inputError{fmt.Sprintf("the description must be at most %d characters", maxRoleDescription)}
+		return "", inputErr("role_description_length", fmt.Sprintf("the description must be at most %d characters", maxRoleDescription), "max", maxRoleDescription)
 	}
 	return d, nil
 }

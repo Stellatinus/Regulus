@@ -66,13 +66,13 @@ type layoutHandlers struct {
 func (h layoutHandlers) get(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFrom(r.Context())
 	if !ok || h.layouts == nil {
-		writeJSONError(w, http.StatusNotFound, "layouts are not available")
+		writeJSONErrorCode(w, http.StatusNotFound, "layouts are not available", codeLayoutsUnavailable)
 		return
 	}
 	layout, at, found, err := h.layouts.Layout(r.Context(), user.ID)
 	if err != nil {
 		h.log.Error("reading the layout failed", "err", err)
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 		return
 	}
 	out := layoutJSON{Layout: json.RawMessage("null")}
@@ -87,7 +87,7 @@ func (h layoutHandlers) get(w http.ResponseWriter, r *http.Request) {
 func (h layoutHandlers) put(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFrom(r.Context())
 	if !ok || h.layouts == nil {
-		writeJSONError(w, http.StatusNotFound, "layouts are not available")
+		writeJSONErrorCode(w, http.StatusNotFound, "layouts are not available", codeLayoutsUnavailable)
 		return
 	}
 	var body struct {
@@ -98,19 +98,19 @@ func (h layoutHandlers) put(w http.ResponseWriter, r *http.Request) {
 	if err := dec.Decode(&body); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			writeJSONError(w, http.StatusRequestEntityTooLarge, "layout is too large")
+			writeJSONErrorCode(w, http.StatusRequestEntityTooLarge, "layout is too large", codeLayoutTooLarge)
 			return
 		}
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		writeJSONErrorCode(w, http.StatusBadRequest, "invalid JSON body", codeInvalidJSON)
 		return
 	}
 	if len(body.Layout) == 0 || string(body.Layout) == "null" {
-		writeJSONError(w, http.StatusBadRequest, `"layout" is required`)
+		writeJSONErrorCode(w, http.StatusBadRequest, `"layout" is required`, codeLayoutRequired)
 		return
 	}
 	if err := h.layouts.SetLayout(r.Context(), user.ID, body.Layout); err != nil {
 		h.log.Error("saving the layout failed", "err", err)
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

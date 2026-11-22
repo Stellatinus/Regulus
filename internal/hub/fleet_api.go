@@ -113,7 +113,7 @@ func (f fleetHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 	if req.TTL != "" {
 		d, err := time.ParseDuration(req.TTL)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, `ttl must be a duration such as "15m" or "24h"`)
+			writeJSONErrorCode(w, http.StatusBadRequest, `ttl must be a duration such as "15m" or "24h"`, codeInvalidTTLFormat)
 			return
 		}
 		ttl = d
@@ -124,11 +124,11 @@ func (f fleetHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 	var ttlErr *fleet.TTLError
 	switch {
 	case errors.Is(err, ErrAgentsOff):
-		writeJSONError(w, http.StatusConflict, err.Error())
+		writeJSONErr(w, http.StatusConflict, err)
 	case errors.As(err, &nameErr), errors.As(err, &ttlErr):
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONErr(w, http.StatusBadRequest, err)
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	default:
 		body := map[string]any{
 			"token":          grant.Token,
@@ -155,7 +155,7 @@ func (f fleetHandlers) listTokens(w http.ResponseWriter, r *http.Request) {
 	}
 	pending, err := f.fleet.PendingEnrollments(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 		return
 	}
 	type item struct {
@@ -185,9 +185,9 @@ func (f fleetHandlers) revokeToken(w http.ResponseWriter, r *http.Request) {
 	err := f.fleet.RevokeEnrollment(r.Context(), by.Username, r.PathValue("id"))
 	switch {
 	case errors.Is(err, fleet.ErrTokenNotFound):
-		writeJSONError(w, http.StatusNotFound, "no pending enrollment token with this id")
+		writeJSONErrorCode(w, http.StatusNotFound, "no pending enrollment token with this id", codeTokenNotFound)
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -206,9 +206,9 @@ func (f fleetHandlers) revoke(w http.ResponseWriter, r *http.Request) {
 	err := f.fleet.RevokeAgent(r.Context(), by.Username, r.PathValue("id"))
 	switch {
 	case errors.Is(err, fleet.ErrNotFound):
-		writeJSONError(w, http.StatusNotFound, "no enrolled agent with this id")
+		writeJSONErrorCode(w, http.StatusNotFound, "no enrolled agent with this id", codeAgentNotEnrolled)
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -220,7 +220,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		writeJSONErrorCode(w, http.StatusBadRequest, "invalid JSON body", codeInvalidJSON)
 		return false
 	}
 	return true
@@ -242,11 +242,11 @@ func (f fleetHandlers) rename(w http.ResponseWriter, r *http.Request) {
 	var nameErr *fleet.NameError
 	switch {
 	case errors.Is(err, fleet.ErrNotFound):
-		writeJSONError(w, http.StatusNotFound, "no enrolled agent with this id")
+		writeJSONErrorCode(w, http.StatusNotFound, "no enrolled agent with this id", codeAgentNotEnrolled)
 	case errors.As(err, &nameErr):
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONErr(w, http.StatusBadRequest, err)
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	default:
 		w.WriteHeader(http.StatusNoContent)
 	}

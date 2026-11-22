@@ -114,7 +114,7 @@ func (s *Service) fail(w http.ResponseWriter, err error) {
 		writeFail(w, http.StatusServiceUnavailable, err)
 	default:
 		s.log.Error("request failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
+		writeErrorCode(w, http.StatusInternalServerError, "internal error", codeInternal)
 	}
 }
 
@@ -215,7 +215,7 @@ func (s *Service) handleAudit(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "limit must be a positive number")
+			writeErrorCode(w, http.StatusBadRequest, "limit must be a positive number", codeInvalidLimit)
 			return
 		}
 		limit = n

@@ -50,7 +50,7 @@ func (s *Service) CreateReset(ctx context.Context, by User, username string) (st
 
 func (s *Service) issueReset(ctx context.Context, by string, target User, detail string) (string, time.Time, error) {
 	if target.Disabled {
-		return "", time.Time{}, &inputError{"the account is disabled: enable it before resetting its password"}
+		return "", time.Time{}, inputErr("account_disabled", "the account is disabled: enable it before resetting its password")
 	}
 	token, err := randomToken(32)
 	if err != nil {
@@ -78,7 +78,7 @@ func (s *Service) ResetPassword(ctx context.Context, remote, token, password str
 	}
 	defer att.abandon()
 	if n := utf8.RuneCountInString(password); n < minPasswordLen || n > maxPasswordLen {
-		return &inputError{fmt.Sprintf("the new password must be %d to %d characters", minPasswordLen, maxPasswordLen)}
+		return inputErr("new_password_length", fmt.Sprintf("the new password must be %d to %d characters", minPasswordLen, maxPasswordLen), "min", minPasswordLen, "max", maxPasswordLen)
 	}
 	if token == "" || len(token) > maxResetTokenLen {
 		att.failed()

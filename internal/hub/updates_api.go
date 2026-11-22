@@ -95,18 +95,18 @@ func (u updateHandlers) reply(w http.ResponseWriter, ok int, st update.Status, e
 		writeJSONBody(w, ok, st)
 	case errors.Is(err, update.ErrTooSoon):
 		w.Header().Set("Retry-After", strconv.Itoa(30))
-		writeJSONError(w, http.StatusTooManyRequests, err.Error())
+		writeJSONErr(w, http.StatusTooManyRequests, err)
 	case errors.Is(err, update.ErrChecksOff), errors.Is(err, update.ErrBusy),
 		errors.Is(err, update.ErrNothingToFetch), errors.Is(err, update.ErrNotReleaseBuild),
 		errors.Is(err, update.ErrApplyDisabled), errors.Is(err, update.ErrNothingToApply),
 		errors.Is(err, update.ErrNotVerified), errors.Is(err, update.ErrApplying):
-		writeJSONError(w, http.StatusConflict, err.Error())
+		writeJSONErr(w, http.StatusConflict, err)
 	case errors.Is(err, update.ErrInvalidSettings):
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONErr(w, http.StatusBadRequest, err)
 	case update.IsUpstream(err):
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+		writeJSONErr(w, http.StatusBadGateway, err)
 	default:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	}
 }
 
@@ -119,13 +119,13 @@ func (r rolloutHandlers) reply(w http.ResponseWriter, ok int, st RolloutStatus, 
 	case err == nil:
 		writeJSONBody(w, ok, st)
 	case errors.Is(err, ErrRolloutRunning), errors.Is(err, ErrNothingToRoll), errors.Is(err, ErrNotRelease), errors.Is(err, update.ErrChecksOff):
-		writeJSONError(w, http.StatusConflict, err.Error())
+		writeJSONErr(w, http.StatusConflict, err)
 	case update.IsUpstream(err):
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+		writeJSONErr(w, http.StatusBadGateway, err)
 	case errors.Is(err, errBadRollout):
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONErr(w, http.StatusBadRequest, err)
 	default:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	}
 }
 
