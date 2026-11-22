@@ -37,6 +37,7 @@ var it = strs{
 	NoAgents:     "Nessun agente connesso.",
 	SetupTitle:   "Primo avvio",
 	SetupText:    "Non esiste ancora un amministratore. Apri la dashboard e inserisci questo token di configurazione iniziale, valido una volta:",
+	SetupCLI:     "Niente browser? Crea l'amministratore da qui: sudo -u regulus regulus hub create-admin -h",
 
 	SettingHeader:  [3]string{"Impostazione", "Valore", "Origine"},
 	Default:        "predefinito",

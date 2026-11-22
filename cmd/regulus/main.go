@@ -71,6 +71,8 @@ Commands:
   config   list, get and set the hub's settings (list|get|set|path)
   hub      run the hub (serves the dashboard); see 'regulus hub -h' for flags
   db       check the database settings (db check)
+  hub create-admin
+           create the first admin from the terminal; see 'regulus hub create-admin -h'
   hub reset-admin
            regain access when the admin cannot log in; see 'regulus hub reset-admin -h'
   agent    run a remote agent that connects to a hub; see 'regulus agent -h'
@@ -86,6 +88,9 @@ Commands:
 func runHub(args []string) int {
 	if len(args) > 0 && args[0] == "reset-admin" {
 		return runResetAdmin(args[1:])
+	}
+	if len(args) > 0 && args[0] == "create-admin" {
+		return runCreateAdmin(args[1:])
 	}
 	cfg, err := config.Load(args, os.Getenv, os.Stderr)
 	if errors.Is(err, flag.ErrHelp) {

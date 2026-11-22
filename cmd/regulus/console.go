@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -122,10 +123,53 @@ func (c commonFlags) choice() (console.Choice, error) {
 	return ch, nil
 }
 
-func (c commonFlags) applyColor() {
+func (c commonFlags) applyColor(getenv func(string) string) {
 	if c.noColor {
 		lipgloss.SetColorProfile(termenv.Ascii)
+		return
 	}
+	limitBackgroundQuery(getenv)
+}
+
+// limitBackgroundQuery keeps the query for the terminal's background colour
+// from delaying the console (#369). The query waits 5 seconds (termenv's
+// constant, which cannot be changed) on a terminal that never answers, so it
+// is skipped where the answer is known without asking: COLORFGBG ("fg;bg",
+// set by some terminals), the REGULUS_BACKGROUND=light|dark override, and
+// terminals that cannot answer (the Linux text console, TERM=dumb), which are
+// dark. Anywhere else the terminal is asked, as before.
+func limitBackgroundQuery(getenv func(string) string) {
+	if dark, ok := darkFromColorFGBG(getenv("COLORFGBG")); ok {
+		lipgloss.SetHasDarkBackground(dark)
+		return
+	}
+	switch strings.ToLower(getenv("REGULUS_BACKGROUND")) {
+	case "dark":
+		lipgloss.SetHasDarkBackground(true)
+		return
+	case "light":
+		lipgloss.SetHasDarkBackground(false)
+		return
+	}
+	switch getenv("TERM") {
+	case "linux", "dumb":
+		lipgloss.SetHasDarkBackground(true)
+	}
+}
+
+// darkFromColorFGBG reads the background of a COLORFGBG value: the last field
+// is an ANSI colour number. 0 to 6 and 8 are dark; 7 and 9 to 15 are light
+// (the rule vim uses).
+func darkFromColorFGBG(v string) (dark, ok bool) {
+	i := strings.LastIndex(v, ";")
+	if i < 0 {
+		return false, false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v[i+1:]))
+	if err != nil || n < 0 || n > 15 {
+		return false, false
+	}
+	return n <= 6 || n == 8, true
 }
 
 // parseInterspersed parses flags that may come before or after the other
@@ -182,7 +226,7 @@ func consoleCommand(args []string, e env, interactive bool) int {
 		_, _ = fmt.Fprintf(e.stderr, "regulus: %v\n", err)
 		return 2
 	}
-	c.applyColor()
+	c.applyColor(e.getenv)
 
 	file := config.FindFile(c.config, e.getenv)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

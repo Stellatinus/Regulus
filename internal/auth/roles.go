@@ -207,7 +207,7 @@ func (s *Service) CreateRole(ctx context.Context, by User, name Role, descriptio
 		return RoleInfo{}, err
 	}
 	s.forgetRoles()
-	s.audit(ctx, by.Username, EventRoleCreated, string(name), strings.Join(perms, ", "))
+	s.RecordCode(ctx, by.Username, EventRoleCreated, string(name), strings.Join(perms, ", "), CodePermissions, "permissions", strings.Join(perms, ","))
 	return RoleInfo{Name: name, Description: description, Permissions: perms}, nil
 }
 
@@ -261,10 +261,13 @@ func (s *Service) UpdateRole(ctx context.Context, by User, name Role, ch RoleCha
 	}
 	s.forgetRoles()
 	detail := strings.Join(next.permissions, ", ")
+	perms := strings.Join(next.permissions, ",")
 	if next.name != cur.name {
 		detail = fmt.Sprintf("renamed from %s; %s", cur.name, detail)
+		s.RecordCode(ctx, by.Username, EventRoleUpdated, string(next.name), detail, CodeRoleRenamed, "name", string(cur.name), "permissions", perms)
+	} else {
+		s.RecordCode(ctx, by.Username, EventRoleUpdated, string(next.name), detail, CodePermissions, "permissions", perms)
 	}
-	s.audit(ctx, by.Username, EventRoleUpdated, string(next.name), detail)
 	counts, _ := s.store.roleUserCounts(ctx)
 	return RoleInfo{Name: next.name, Description: next.description, Permissions: next.permissions, Users: counts[strings.ToLower(string(next.name))]}, nil
 }

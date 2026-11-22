@@ -677,7 +677,7 @@ func (m Model) statusBody() []string {
 	}
 
 	if s.SetupToken != "" {
-		out = append(out, "", " "+headStyle.Render(T.SetupTitle), " "+T.SetupText, "   "+selectStyle.Render(s.SetupToken))
+		out = append(out, "", " "+headStyle.Render(T.SetupTitle), " "+T.SetupText, "   "+selectStyle.Render(s.SetupToken), " "+mutedStyle.Render(T.SetupCLI))
 	}
 	if m.resetLink != "" {
 		out = append(out, "", " "+headStyle.Render(T.ResetLinkTitle), "   "+selectStyle.Render(m.resetLink))

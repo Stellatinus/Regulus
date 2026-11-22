@@ -14,10 +14,10 @@ Regulus v0.3.0  Hub ● running
  First run
  No administrator exists yet. Open the dashboard and enter this one-time setup token:
    abc123
+ No browser? Create the administrator here: sudo -u regulus regulus hub create-admin -h
 
  Connected agents (0)
    No agent is connected.
-
 
 
 

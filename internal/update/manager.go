@@ -19,6 +19,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/CodexCircle/Regulus/internal/auth"
 )
 
 // Mode decides what the hub does when a newer release exists.
@@ -876,7 +878,7 @@ func (m *Manager) Apply(ctx context.Context, by string) (Status, error) {
 	if err := WriteRequest(m.opts.ApplyDir, req); err != nil {
 		return Status{}, err
 	}
-	m.audit(ctx, by, EventApplyRequested, req.Version, fmt.Sprintf("from %s", m.opts.Version))
+	m.audit(auth.WithCode(ctx, auth.CodeFromVersion, "version", m.opts.Version), by, EventApplyRequested, req.Version, fmt.Sprintf("from %s", m.opts.Version))
 	m.opts.Log.Info("update requested", "version", req.Version, "by", by)
 	return m.Status(ctx)
 }
@@ -909,6 +911,9 @@ func (m *Manager) syncApply(ctx context.Context) {
 	detail := "from " + res.From
 	if res.Message != "" {
 		detail += ": " + res.Message
+		ctx = auth.WithCode(ctx, auth.CodeFromVersionMessage, "version", res.From, "message", res.Message)
+	} else {
+		ctx = auth.WithCode(ctx, auth.CodeFromVersion, "version", res.From)
 	}
 	m.audit(ctx, actor, event, res.Version, detail)
 }

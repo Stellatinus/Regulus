@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { auditDetailKeys, auditDetailText, eventText, permissionText, roleText } from "./hubTexts";
+import { applyMessageText, auditDetailKeys, auditDetailText, auditEntryDetail, eventText, rolloutMessageText, permissionText, roleText } from "./hubTexts";
 import { catalogs } from "./i18n";
 import { translate, type Lang, type MessageKey } from "./i18n";
 
@@ -47,5 +47,39 @@ describe("the detail of an audit entry", () => {
       expect(key in catalogs.en, `English text for ${key}`).toBe(true);
       expect(key in catalogs.it, `Italian text for ${key}`).toBe(true);
     }
+  });
+});
+
+// #368: an entry written with a code is translated from the code, not from the
+// English words; the fallbacks keep old rows and newer hubs readable.
+describe("the detail of an audit entry with a code", () => {
+  it("is translated from the code and its arguments", () => {
+    const e = { event: "role_changed", detail: "viewer to admin", code: "from_to", args: { from: "viewer", to: "admin" } };
+    // The English words are deliberately different: the code decides.
+    expect(auditEntryDetail(tIn("it"), { ...e, detail: "not the usual words" })).toBe("viewer → admin");
+    expect(auditEntryDetail(tIn("it"), { event: "update_rollout_finished", detail: "x", code: "rollout_state", args: { state: "failed" } })).toBe("fallito");
+    expect(auditEntryDetail(tIn("it"), { event: "update_rollout_started", detail: "x", code: "rollout_started", args: { servers: "3", wave: "2" } })).toBe("3 server, 2 alla volta");
+  });
+
+  it("shows the permissions of a role by their texts", () => {
+    const e = { event: "role_created", detail: "audit.read, servers.read", code: "permissions", args: { permissions: "audit.read,servers.read" } };
+    expect(auditEntryDetail(tIn("en"), e)).toBe("Read the audit log, See the servers, their state and their metrics");
+    expect(auditEntryDetail(tIn("it"), e)).toContain("Leggere il registro delle attività");
+  });
+
+  it("falls back to the forms, then to the hub's text, for an entry without a known code", () => {
+    expect(auditEntryDetail(tIn("it"), { event: "role_changed", detail: "viewer to admin" })).toBe("viewer → admin");
+    expect(auditEntryDetail(tIn("it"), { event: "x", detail: "free text", code: "from_a_newer_hub" })).toBe("free text");
+  });
+});
+
+describe("the messages of the installer and of a rollout step", () => {
+  it("follow the language by code and keep the text without one", () => {
+    expect(applyMessageText(tIn("it"), { message: "x", code: "not_newer", args: { version: "1.0.0", installed: "1.1.0" } })).toContain("1.0.0");
+    expect(applyMessageText(tIn("it"), { message: "x", code: "not_newer", args: { version: "1.0.0", installed: "1.1.0" } })).toContain("non è più recente");
+    expect(applyMessageText(tIn("it"), { message: "an older helper's text" })).toBe("an older helper's text");
+    expect(applyMessageText(tIn("it"), { message: "kept", code: "from_a_newer_helper" })).toBe("kept");
+    expect(rolloutMessageText(tIn("it"), { message: "x", code: "not_connected" })).toBe("Il server non è collegato.");
+    expect(rolloutMessageText(tIn("en"), { message: "the agent's own error" })).toBe("the agent's own error");
   });
 });

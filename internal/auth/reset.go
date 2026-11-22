@@ -64,7 +64,11 @@ func (s *Service) issueReset(ctx context.Context, by string, target User, detail
 	if err := s.store.deleteSessionsOf(ctx, target.ID, ""); err != nil {
 		return "", time.Time{}, err
 	}
-	s.audit(ctx, by, EventResetCreated, target.Username, strings.TrimSpace("sessions ended "+detail))
+	if detail == "" {
+		s.RecordCode(ctx, by, EventResetCreated, target.Username, "sessions ended", CodeSessionsEnded)
+	} else {
+		s.RecordCode(ctx, by, EventResetCreated, target.Username, strings.TrimSpace("sessions ended "+detail), CodeSessionsEndedByCommand)
+	}
 	return token, expires, nil
 }
 
@@ -119,7 +123,7 @@ func (s *Service) ResetPassword(ctx context.Context, remote, token, password str
 		return err
 	}
 	att.succeeded()
-	s.audit(ctx, user.Username, EventPasswordReset, user.Username, "reset link used, sessions ended")
+	s.RecordCode(ctx, user.Username, EventPasswordReset, user.Username, "reset link used, sessions ended", CodeResetLinkUsed)
 	return nil
 }
 
@@ -178,7 +182,7 @@ func RecoverAdmin(ctx context.Context, db *sql.DB, username string, log *slog.Lo
 		}
 		target.Disabled = false
 		rec.Reenabled = true
-		s.audit(ctx, ConsoleActor, EventUserEnabled, target.Username, "reset-admin command")
+		s.RecordCode(ctx, ConsoleActor, EventUserEnabled, target.Username, "reset-admin command", CodeResetAdminCommand)
 	}
 	// Console access is trusted: a locked-out admin may have lost the app and
 	// the recovery codes too, and would otherwise stay locked out.
@@ -187,7 +191,7 @@ func RecoverAdmin(ctx context.Context, db *sql.DB, username string, log *slog.Lo
 			return Recovery{}, err
 		}
 		rec.TwoFactorCleared = true
-		s.audit(ctx, ConsoleActor, EventTwoFactorReset, target.Username, "reset-admin command")
+		s.RecordCode(ctx, ConsoleActor, EventTwoFactorReset, target.Username, "reset-admin command", CodeResetAdminCommand)
 	}
 	rec.Token, rec.Expires, err = s.issueReset(ctx, ConsoleActor, target, "(reset-admin command)")
 	return rec, err

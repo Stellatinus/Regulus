@@ -184,20 +184,25 @@ type AuditEntry struct {
 	Target string    `json:"target"`
 	Remote string    `json:"remote"`
 	Detail string    `json:"detail"`
+	// Code and Args say what Detail says, for a translation: the code names
+	// the form ("from_to") and Args fills it. Both are empty for an entry
+	// that has no code, and Detail is then all there is (#368).
+	Code string            `json:"code,omitempty"`
+	Args map[string]string `json:"args,omitempty"`
 }
 
 // addAudit writes one event. It never deletes anything: old events are removed
 // by pruneAudit, on a timer (see audit.go).
 func (s store) addAudit(ctx context.Context, e AuditEntry) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO audit_log (at, actor, event, target, remote, detail) VALUES (?, ?, ?, ?, ?, ?)`,
-		e.At.UTC().Format(timeLayout), e.Actor, e.Event, e.Target, e.Remote, e.Detail)
+		`INSERT INTO audit_log (at, actor, event, target, remote, detail, detail_code, detail_args) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.At.UTC().Format(timeLayout), e.Actor, e.Event, e.Target, e.Remote, e.Detail, e.Code, encodeArgs(e.Args))
 	return err
 }
 
 func (s store) listAudit(ctx context.Context, limit int) ([]AuditEntry, error) {
 	rows, err := s.read().QueryContext(ctx,
-		`SELECT id, at, actor, event, target, remote, detail FROM audit_log ORDER BY id DESC LIMIT ?`, limit)
+		`SELECT id, at, actor, event, target, remote, detail, detail_code, detail_args FROM audit_log ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -205,12 +210,14 @@ func (s store) listAudit(ctx context.Context, limit int) ([]AuditEntry, error) {
 	list := []AuditEntry{}
 	for rows.Next() {
 		var (
-			e  AuditEntry
-			at string
+			e    AuditEntry
+			at   string
+			args string
 		)
-		if err := rows.Scan(&e.ID, &at, &e.Actor, &e.Event, &e.Target, &e.Remote, &e.Detail); err != nil {
+		if err := rows.Scan(&e.ID, &at, &e.Actor, &e.Event, &e.Target, &e.Remote, &e.Detail, &e.Code, &args); err != nil {
 			return nil, err
 		}
+		e.Args = decodeArgs(args)
 		e.At, _ = time.Parse(timeLayout, at)
 		list = append(list, e)
 	}

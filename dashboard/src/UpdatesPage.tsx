@@ -18,6 +18,7 @@ import {
   type Agent,
 } from "./api";
 import { formatAgo, formatBytes } from "./format";
+import { applyMessageText, rolloutMessageText } from "./hubTexts";
 import { useT, type MessageKey } from "./i18n";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
@@ -291,7 +292,7 @@ function Version({
           {last.outcome === "rolled_back"
             ? t("updates.last.rolledBack", { version: last.version })
             : t("updates.last.notInstalled", { version: last.version })}
-          {last.message ? ` ${last.message}` : ""}
+          {last.message ? ` ${applyMessageText(t, last)}` : ""}
         </p>
       )}
       {status.download_error && (
@@ -701,7 +702,7 @@ function AgentRows({
               name: a.hostname || a.id,
               from: a.from,
               status: t(AGENT_STATUS[a.status]),
-              message: a.message ?? "",
+              message: rolloutMessageText(t, a),
             },
           )}
         </li>

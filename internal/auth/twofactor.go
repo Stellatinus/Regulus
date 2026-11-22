@@ -458,7 +458,7 @@ func (s *Service) ResetTwoFactor(ctx context.Context, by User, username string) 
 	if err := s.store.deleteSessionsOf(ctx, target.ID, ""); err != nil {
 		return err
 	}
-	s.audit(ctx, by.Username, EventTwoFactorReset, target.Username, "sessions ended")
+	s.RecordCode(ctx, by.Username, EventTwoFactorReset, target.Username, "sessions ended", CodeSessionsEnded)
 	return nil
 }
 
@@ -521,7 +521,7 @@ func (s *Service) CompleteLogin(ctx context.Context, remote, pending, code strin
 	}
 	if factor == factorNone {
 		att.failed()
-		s.audit(ctx, user.Username, EventLoginFailed, "", "wrong second factor")
+		s.RecordCode(ctx, user.Username, EventLoginFailed, "", "wrong second factor", CodeWrongSecondFactor)
 		return LoginResult{}, ErrInvalidCode
 	}
 	_ = s.store.deletePending(ctx, hash)
@@ -534,14 +534,18 @@ func (s *Service) CompleteLogin(ctx context.Context, remote, pending, code strin
 		return LoginResult{}, err
 	}
 	res := LoginResult{User: user, Token: token, Expires: expires}
-	detail := ""
+	detail, code := "", ""
 	if factor == factorRecovery {
 		res.RecoveryUsed = true
 		res.RecoveryLeft, _ = s.store.recoveryCodesLeft(ctx, user.ID)
 		s.noteRecoveryUsed(ctx, user.Username)
-		detail = "recovery code"
+		detail, code = "recovery code", CodeRecoveryCode
 	}
-	s.audit(ctx, user.Username, EventLogin, "", detail)
+	if code != "" {
+		s.RecordCode(ctx, user.Username, EventLogin, "", detail, code)
+	} else {
+		s.audit(ctx, user.Username, EventLogin, "", "")
+	}
 	return res, nil
 }
 

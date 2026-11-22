@@ -150,8 +150,9 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	case requestNone:
 		return ApplyResult{}, ErrNoRequest
 	case requestInvalid:
-		err := errors.New("the update request could not be read (not a request, too large, or not a regular file): it was removed")
-		res := ApplyResult{Outcome: OutcomeFailed, Message: err.Error(), At: in.Now().UTC()}
+		err := coded(errors.New("the update request could not be read (not a request, too large, or not a regular file): it was removed"), ApplyRequestUnreadable)
+		res := ApplyResult{Outcome: OutcomeFailed, At: in.Now().UTC()}
+		res.setMessage(err)
 		_ = WriteResult(dir, res)
 		return res, err
 	}
@@ -160,7 +161,7 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	finish := func(outcome string, err error) (ApplyResult, error) {
 		res.Outcome, res.At = outcome, in.Now().UTC()
 		if err != nil {
-			res.Message = err.Error()
+			res.setMessage(err)
 		}
 		if werr := WriteResult(dir, res); werr != nil {
 			in.Log.Error("writing the result", "err", werr)
@@ -171,7 +172,7 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 
 	want, err := ParseVersion(req.Version)
 	if err != nil {
-		return finish(OutcomeFailed, fmt.Errorf("the request names an invalid version: %w", err))
+		return finish(OutcomeFailed, coded(fmt.Errorf("the request names an invalid version: %w", err), ApplyInvalidVersion, "error", err.Error()))
 	}
 	res.Version = want.String()
 	from, err := in.installedVersion(ctx)
@@ -180,7 +181,7 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	}
 	res.From = from.String()
 	if want.Compare(from) <= 0 {
-		return finish(OutcomeFailed, fmt.Errorf("version %s is not newer than the installed %s; updates never go backwards", want, from))
+		return finish(OutcomeFailed, coded(fmt.Errorf("version %s is not newer than the installed %s; updates never go backwards", want, from), ApplyNotNewer, "version", want.String(), "installed", from.String()))
 	}
 	res.Outcome = OutcomeInstalling
 	_ = WriteResult(dir, res)
@@ -246,10 +247,10 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 		note, rerr := in.rollback(rctx, backup, from.String(), snapshot, schemaBefore)
 		if rerr != nil {
 			// The marker stays: Recover tries once more.
-			return finish(OutcomeFailed, fmt.Errorf("%v; and putting %s back failed: %v", err, from, rerr))
+			return finish(OutcomeFailed, coded(fmt.Errorf("%v; and putting %s back failed: %v", err, from, rerr), ApplyRollbackFailed, "error", err.Error(), "version", from.String(), "rollback_error", rerr.Error()))
 		}
 		in.clearPending()
-		return finish(OutcomeRolledBack, fmt.Errorf("%v; version %s was put back%s", err, from, note))
+		return finish(OutcomeRolledBack, coded(fmt.Errorf("%v; version %s was put back%s", err, from, note), ApplyRolledBack, "error", err.Error(), "version", from.String(), "note", note))
 	}
 	in.clearPending()
 	return finish(OutcomeApplied, nil)

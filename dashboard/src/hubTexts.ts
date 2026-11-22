@@ -63,6 +63,42 @@ export function auditDetailText(t: Translate, event: string, detail: string): st
   return detail;
 }
 
+// auditEntryDetail is the detail of an audit entry in the language of t. An
+// entry the hub wrote with a code (#368) is shown from the catalog
+// ("users.detail.code.<code>", with its arguments); the permission ids in its
+// arguments are shown by their texts. An entry with no code, or a code this
+// dashboard does not know (a newer hub's), falls back to the English-form
+// recognition above, and then to the hub's own text.
+export function auditEntryDetail(t: Translate, e: { event: string; detail: string; code?: string; args?: Record<string, string> }): string {
+  if (e.code && `users.detail.code.${e.code}` in catalogs.en) {
+    const args = { ...(e.args ?? {}) };
+    if (args.permissions !== undefined) {
+      args.permissions = args.permissions
+        .split(",")
+        .filter((id) => id !== "")
+        .map((id) => permissionText(t, id, id))
+        .join(", ");
+    }
+    if (e.code === "rollout_state") return known(t, `users.detail.rollout.${args.state}`, e.detail);
+    return t(`users.detail.code.${e.code}` as MessageKey, args);
+  }
+  return auditDetailText(t, e.event, e.detail);
+}
+
+// The message the installer on a server wrote (result.json), or a rollout
+// step's message, in the language of t: from the catalog when it has a code,
+// else as the hub or the helper wrote it (an older helper's, or a failure that
+// has no code).
+export function applyMessageText(t: Translate, m: { message?: string; code?: string; args?: Record<string, string> }): string {
+  const key = `updates.applyMsg.${m.code ?? ""}`;
+  return m.code && key in catalogs.en ? t(key as MessageKey, m.args ?? {}) : (m.message ?? "");
+}
+
+export function rolloutMessageText(t: Translate, m: { message?: string; code?: string; args?: Record<string, string> }): string {
+  const key = `updates.rolloutMsg.${m.code ?? ""}`;
+  return m.code && key in catalogs.en ? t(key as MessageKey, m.args ?? {}) : (m.message ?? "");
+}
+
 // auditDetailKeys lists the catalog keys the forms above use, for the test that
 // checks both languages have each.
 export const auditDetailKeys = [

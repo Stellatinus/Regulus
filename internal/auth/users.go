@@ -35,6 +35,7 @@ func (s *Service) audit(ctx context.Context, actor, event, target, detail string
 		Remote: clientFrom(ctx).Remote,
 		Detail: clip(detail, 200),
 	}
+	e.Code, e.Args = codeFrom(ctx)
 	if err := s.store.addAudit(ctx, e); err != nil {
 		s.log.Error("cannot record audit event", "event", event, "err", err)
 	}
@@ -64,7 +65,7 @@ func (s *Service) CreateUser(ctx context.Context, by User, username, password st
 	if err != nil {
 		return User{}, err
 	}
-	s.audit(ctx, by.Username, EventUserCreated, u.Username, "role "+string(role))
+	s.RecordCode(ctx, by.Username, EventUserCreated, u.Username, "role "+string(role), CodeRole, "role", string(role))
 	return u, nil
 }
 
@@ -95,7 +96,7 @@ func (s *Service) UpdateUser(ctx context.Context, by User, username string, ch U
 			if err := s.store.setRole(ctx, target.ID, *ch.Role); err != nil {
 				return User{}, err
 			}
-			s.audit(ctx, by.Username, EventRoleChanged, target.Username, fmt.Sprintf("%s to %s", target.Role, *ch.Role))
+			s.RecordCode(ctx, by.Username, EventRoleChanged, target.Username, fmt.Sprintf("%s to %s", target.Role, *ch.Role), CodeFromTo, "from", string(target.Role), "to", string(*ch.Role))
 			target.Role = *ch.Role
 		}
 	}
@@ -180,7 +181,7 @@ func (s *Service) ChangePassword(ctx context.Context, user User, keepToken, curr
 	if err := s.store.deleteSessionsOf(ctx, user.ID, hashToken(keepToken)); err != nil {
 		return err
 	}
-	s.audit(ctx, user.Username, EventPasswordChange, user.Username, "other sessions ended")
+	s.RecordCode(ctx, user.Username, EventPasswordChange, user.Username, "other sessions ended", CodeOtherSessionsEnded)
 	return nil
 }
 
