@@ -28,8 +28,8 @@ Both need **`inventory.read`**, a permission of its own: serial numbers identify
 
 ## Limits, and what is not done
 
-- **Not verified on real hardware** (#81). The reading is tested against fake `/sys` trees built from the layouts of SATA, NVMe, virtio and USB disks, not against a real disk moved between two machines: `[Test]` issue "Disk identity on real machines".
+- **Not verified on real hardware** (#81). The reading is tested against fake `/sys` trees built from the layouts of SATA, NVMe, virtio and USB disks, not against a real disk moved between two machines: #381.
 - Two servers that report the same disk **at the same time** (a cloned disk, or an agent that lies) show as moves back and forth, not as a conflict: conflicts are detected within one report. Agents are trusted for their own inventory.
-- The identity is not shown in the dashboard: there is no inventory page yet (#62). The API serves it.
+- The identity is not shown in the dashboard: there is no inventory page yet (#62, #382). The API serves it.
 - The move is recorded in its own table; the event log of the disk (#150) is not built.
 - Serials of cloud volumes (for example an EBS volume reports `vol…` as its serial) are stable but are treated as virtual only when the vendor or model says so.
