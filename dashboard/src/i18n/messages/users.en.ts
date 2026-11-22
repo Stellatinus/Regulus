@@ -23,7 +23,8 @@ export const users = {
   "users.enable": "Enable {name}",
   "users.disable": "Disable {name}",
   "users.resetPassword": "Reset password of {name}",
-  "users.confirmResetPassword": "Make a password reset link for {name}? It signs {name} out everywhere.",
+  "users.confirmResetPassword":
+    "Make a password reset link for {name}? It signs {name} out everywhere.",
   "users.resetTwoFactor": "Reset two-factor of {name}",
   "users.confirmResetTwoFactor":
     "Remove the two-factor authentication of {name}? {name} is signed out everywhere and can sign in with the password alone.",
@@ -46,7 +47,8 @@ export const users = {
   "users.security.nobody": "nobody (optional for everyone)",
   "users.security.admins": "administrators",
   "users.security.all": "everyone",
-  "users.security.hint": "Users it applies to set it up the next time they use Regulus, before anything else.",
+  "users.security.hint":
+    "Users it applies to set it up the next time they use Regulus, before anything else.",
 
   "users.add.title": "Add a user",
   "users.add.username": "Username",
@@ -69,7 +71,8 @@ export const users = {
 
   "users.roles.title": "Roles",
   "users.roles.confirmDelete": "Delete the role {name}?",
-  "users.roles.inUse": "In use by {count}: move them to another role to delete it.",
+  "users.roles.inUse":
+    "In use by {count}: move them to another role to delete it.",
   "users.roles.permissionsOf": "Permissions of {name}",
   "users.roles.confirm.delete": "Delete the role",
   "users.roles.colRole": "Role",
@@ -93,10 +96,14 @@ export const users = {
   "users.perm.servers.read": "See the servers, their state and their metrics",
   "users.perm.servers.manage": "Add, rename and revoke servers",
   "users.perm.layout.edit": "Customize and save their own dashboard layout",
-  "users.perm.users.manage": "Manage accounts: create, disable, delete, reset passwords and two-factor, and the two-factor policy",
+  "users.perm.users.manage":
+    "Manage accounts: create, disable, delete, reset passwords and two-factor, and the two-factor policy",
   "users.perm.roles.manage": "Create, change and delete roles",
   "users.perm.audit.read": "Read the audit log",
-  "users.perm.core.update": "See the updates of Regulus, check for them, download them and choose the update mode and channel",
+  "users.perm.inventory.read":
+    "See the hardware inventory: the disks of the servers with their serial numbers, and where a disk moved",
+  "users.perm.core.update":
+    "See the updates of Regulus, check for them, download them and choose the update mode and channel",
   "users.roleDesc.admin": "Everything, including accounts and roles",
   "users.roleDesc.operator": "Works with the servers; does not manage accounts",
   "users.roleDesc.viewer": "Read only",
@@ -169,9 +176,11 @@ export const users = {
   "users.detail.code.other_sessions_ended": "other sessions ended",
   "users.detail.code.reset_link_used": "reset link used, sessions ended",
   "users.detail.code.sessions_ended": "sessions ended",
-  "users.detail.code.sessions_ended_command": "sessions ended (reset-admin command)",
+  "users.detail.code.sessions_ended_command":
+    "sessions ended (reset-admin command)",
   "users.detail.code.first_admin": "first admin",
-  "users.detail.code.create_admin_command": "first admin (create-admin command)",
+  "users.detail.code.create_admin_command":
+    "first admin (create-admin command)",
   "users.detail.code.reset_admin_command": "reset-admin command",
   "users.detail.code.wrong_second_factor": "wrong second factor",
   "users.detail.code.account_disabled": "account disabled",
@@ -184,8 +193,10 @@ export const users = {
 
   // #372: details that were English only.
   "users.detail.code.update_settings": "mode {mode}, channel {channel}",
-  "users.detail.code.update_settings_window": "mode {mode}, channel {channel}, window {from}-{to}",
-  "users.detail.code.update_downloaded": "{archive}, sha256 {sha256}, verified by {verified}",
+  "users.detail.code.update_settings_window":
+    "mode {mode}, channel {channel}, window {from}-{to}",
+  "users.detail.code.update_downloaded":
+    "{archive}, sha256 {sha256}, verified by {verified}",
   "users.detail.code.update_download_failed": "{error}",
   "users.detail.code.two_factor_settings": "two-factor settings",
   "users.detail.code.reauthentication": "re-authentication",

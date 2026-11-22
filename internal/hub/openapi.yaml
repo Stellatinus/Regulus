@@ -781,6 +781,79 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /api/agents/{id}/disks:
+    get:
+      tags: [agents]
+      summary: The physical disks of a server and their identity (needs inventory.read)
+      description: |
+        The disks the agent last reported, then those it no longer reports
+        (`present` false: removed, or moved to another server). `key` is the
+        identity of the disk and stays the same when it moves to another
+        machine or is reformatted; it is made from the WWN, EUI-64 or NGUID of
+        the drive, else its model and serial number (`kind`). A disk without a
+        reliable identifier has `identifiable` false and a `key` that only
+        names its place on this server; `reason` says why (`no-identifier`,
+        `virtual`, `usb-bridge`, `placeholder-serial`, `duplicate`). Two disks
+        of one report that give the same identifier are both `conflict` and not
+        identifiable. Serial numbers identify hardware, so this needs
+        `inventory.read`, not `servers.read`. An id the hub has no disks for
+        gives an empty list.
+      parameters:
+        - $ref: "#/components/parameters/AgentID"
+      responses:
+        "200":
+          description: The disks.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [agent, disks]
+                properties:
+                  agent: { type: string }
+                  disks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Disk" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/disks/moves:
+    get:
+      tags: [agents]
+      summary: Disks that moved between servers, newest first (needs inventory.read)
+      description: |
+        One entry each time a disk with an identity was reported by another
+        server than the one before. The hub keeps the newest 5000. A disk that
+        two servers report at the same time (a cloned disk) shows as moves back
+        and forth.
+      parameters:
+        - name: limit
+          in: query
+          description: How many moves, from 1 to 1000 (default 100).
+          schema: { type: integer, minimum: 1, maximum: 1000 }
+      responses:
+        "200":
+          description: The moves.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [moves]
+                properties:
+                  moves:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, at, key, model, serial, from, to]
+                      properties:
+                        id: { type: integer }
+                        at: { type: string, format: date-time }
+                        key: { type: string }
+                        model: { type: string }
+                        serial: { type: string }
+                        from: { type: string, description: The agent id that reported the disk before. }
+                        to: { type: string, description: The agent id that reports it now. }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/plugins:
     get:
       tags: [plugins]
@@ -1999,6 +2072,27 @@ components:
             and the CA are not renewed automatically yet (#128): an agent is
             revoked and enrolled again; a new CA means every agent enrolls again.
           items: { $ref: "#/components/schemas/Certificate" }
+    Disk:
+      type: object
+      required: [key, kind, identifiable, conflict, agent, device, vendor, model, serial, wwn, transport, size_bytes, virtual, present, first_seen, last_seen]
+      properties:
+        key: { type: string }
+        kind: { type: string, enum: [wwn, eui64, nguid, model-serial, none] }
+        identifiable: { type: boolean }
+        conflict: { type: boolean }
+        reason: { type: string }
+        agent: { type: string, description: The server that last reported the disk. }
+        device: { type: string, description: The kernel name on that server. Never an identity. }
+        vendor: { type: string }
+        model: { type: string }
+        serial: { type: string }
+        wwn: { type: string, description: WWN, EUI-64 or NGUID as lowercase hexadecimal; empty when the drive reports none. }
+        transport: { type: string }
+        size_bytes: { type: integer }
+        virtual: { type: boolean }
+        present: { type: boolean }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
     MetricsPoint:
       type: object
       required:

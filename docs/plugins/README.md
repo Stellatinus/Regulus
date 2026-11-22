@@ -10,7 +10,7 @@ This folder is the guide to the plugin system. Read the pages in order:
 |---|---|---|
 | [Manifest](manifest.md) | `plugin.yaml`: id, version, plugin API, the Regulus versions it needs, components, permissions | implemented (#19) |
 | [Runtime](runtime.md) | how Regulus finds, starts, checks, restarts and stops plugins; the contract on the socket; limits and security; where their state is shown | implemented on the agent (#19) and the hub (#262) |
-| [Writing a plugin](writing-a-plugin.md) | the example plugin, the SDK for Go, other languages, how to try a plugin | implemented (#19) |
+| [Writing a plugin](writing-a-plugin.md) | the example plugin, making your own step by step, the SDK for Go, other languages, packaging | implemented (#19, #22) |
 
 The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/plugin/sdk` (for plugins written in Go), `proto/regulus/plugin/v1` (the contract) and `plugins/example-hello` (the example).
 
@@ -26,7 +26,7 @@ The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/pl
 | The host side of plugin features (what a plugin can ask Regulus for, how its data reaches the dashboard) | #19 follow-up | **not designed**: today a plugin can only prove it runs and is healthy |
 | Index, installation, updates, removal, signatures, per-plugin update mode | #20 | designed below, not implemented |
 | Dashboard widgets loaded at runtime | #21 | designed below, not implemented (the manifest already accepts `components.ui`) |
-| First real plugin and developer guide | #22 | the example plugin and [Writing a plugin](writing-a-plugin.md) are a start |
+| Example plugin and developer guide | #22 | **done as far as the system goes**: the example (agent and hub component, state in its data directory, health, a provisional widget), a step-by-step guide and a packaging script. A *real* plugin that does something for the dashboard needs the host side (open question 1) and the widget loader (#21) |
 | Third-party plugins | #23 | after the internal system is stable |
 | Skills for the AI assistant | #68 | `skills` is not accepted in the manifest yet |
 

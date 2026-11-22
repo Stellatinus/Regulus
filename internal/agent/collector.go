@@ -46,6 +46,10 @@ type LinuxCollector struct {
 	// cgroup, if set, reads the limits of the control group; it is set only
 	// when the agent runs in a container (#325), where /proc shows the host.
 	cgroup func() cgroupLimits
+	// sysBlock and udevData, if set, are where the physical disks and their
+	// identifiers are read (#148). They are empty in a container, where the
+	// host's disks are not the container's, and in most tests.
+	sysBlock, udevData string
 
 	mu      sync.Mutex
 	prevCPU cpuTimes
@@ -82,6 +86,8 @@ func NewLinuxCollector() *LinuxCollector {
 	if detectContainer("/") != "" {
 		c.cgroup = func() cgroupLimits { return readCgroupLimits("/proc", cgroupRoot) }
 		c.groupCPUUsage(c.cgroup()) // the first reading, to compare the next one with
+	} else {
+		c.sysBlock, c.udevData = sysBlockDir, udevDataDir
 	}
 	return c
 }
@@ -157,6 +163,11 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 		report.Disks = c.disks(mounts)
 	} else {
 		report.Unavailable = append(report.Unavailable, partDisks)
+	}
+	if c.sysBlock != "" {
+		if disks := readPhysicalDisks(c.sysBlock, c.udevData); len(disks) > 0 {
+			report.DiskIdentityVersion, report.PhysicalDisks = diskIdentityVersion, disks
+		}
 	}
 	if netDev, ok := c.readOK("net/dev"); ok {
 		report.Networks = parseNetDev(netDev)

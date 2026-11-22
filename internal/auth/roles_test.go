@@ -40,7 +40,7 @@ func TestBuiltinRoles(t *testing.T) {
 	if got := strings.Join(byName[RoleViewer].Permissions, ","); got != "layout.edit,servers.read" {
 		t.Errorf("viewer = %s", got)
 	}
-	if got := strings.Join(byName[RoleOperator].Permissions, ","); got != "layout.edit,servers.manage,servers.read" {
+	if got := strings.Join(byName[RoleOperator].Permissions, ","); got != "inventory.read,layout.edit,servers.manage,servers.read" {
 		t.Errorf("operator = %s", got)
 	}
 	if byName[RoleAdmin].Users != 1 || byName[RoleViewer].Users != 1 || byName[RoleOperator].Users != 0 {
@@ -271,7 +271,7 @@ func TestPermissionsAreEnforcedOverHTTP(t *testing.T) {
 		} `json:"user"`
 	}
 	_ = json.Unmarshal(c.do("GET", "/api/auth/me", nil).Body.Bytes(), &me)
-	if got := strings.Join(me.User.Permissions, ","); got != "layout.edit,servers.manage,servers.read" {
+	if got := strings.Join(me.User.Permissions, ","); got != "inventory.read,layout.edit,servers.manage,servers.read" {
 		t.Errorf("operator's permissions in /me = %s", got)
 	}
 

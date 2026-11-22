@@ -298,6 +298,12 @@ type proc struct {
 
 func start(t *testing.T, bin, logPath string, args ...string) *proc {
 	t.Helper()
+	return startEnv(t, bin, logPath, nil, args...)
+}
+
+// startEnv is start with more environment variables for the process.
+func startEnv(t *testing.T, bin, logPath string, env []string, args ...string) *proc {
+	t.Helper()
 	f, err := os.Create(logPath)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +312,7 @@ func start(t *testing.T, bin, logPath string, args ...string) *proc {
 	cmd := exec.Command(bin, args...)
 	cmd.Stdout, cmd.Stderr = f, f
 	// Never reach out for releases, and keep REGULUS_* of the caller out.
-	cmd.Env = append(filteredEnv(), "REGULUS_UPDATES_CHECK=false")
+	cmd.Env = append(append(filteredEnv(), "REGULUS_UPDATES_CHECK=false"), env...)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +429,12 @@ type hubProc struct {
 
 func startHub(t *testing.T, bin, logPath string, args ...string) *hubProc {
 	t.Helper()
-	h := &hubProc{proc: start(t, bin, logPath, args...)}
+	return startHubEnv(t, bin, logPath, nil, args...)
+}
+
+func startHubEnv(t *testing.T, bin, logPath string, env []string, args ...string) *hubProc {
+	t.Helper()
+	h := &hubProc{proc: startEnv(t, bin, logPath, env, args...)}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		var ok1, ok2 bool

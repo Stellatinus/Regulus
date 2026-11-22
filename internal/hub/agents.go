@@ -109,6 +109,10 @@ type agentServer struct {
 	// seen.go).
 	seen func(info AgentInfo, at time.Time)
 
+	// disks, if set, is told the physical disks an agent reported, when they
+	// changed since its last report (#148). Like seen it must not wait.
+	disks func(agentID string, disks []*agentv1.PhysicalDisk, at time.Time)
+
 	mu       sync.Mutex
 	sessions map[string]*session
 	rejected map[string]Rejection // by agent id, only for agents with a certificate
@@ -175,6 +179,7 @@ type session struct {
 	nextCmd   uint64
 
 	lastReport  time.Time // when the last metrics report was accepted (serve goroutine only)
+	diskSig     string    // the last physical-disk report, to write only a change
 	reportsLogd bool      // a dropped or cut report was already logged for this stream
 }
 
@@ -396,6 +401,16 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		// the agent and left out of the stored report.
 		enabled, plugins := p.Metrics.GetPluginsEnabled(), p.Metrics.GetPlugins()
 		p.Metrics.Plugins, p.Metrics.PluginsEnabled = nil, false
+		// So are the physical disks: they go to the disks table when they
+		// change, not into the metrics history.
+		physical := p.Metrics.GetPhysicalDisks()
+		p.Metrics.PhysicalDisks, p.Metrics.DiskIdentityVersion = nil, 0
+		if s.disks != nil && len(physical) > 0 {
+			if sig := disksSignature(physical); sig != sess.diskSig {
+				sess.diskSig = sig
+				s.disks(sess.info.ID, physical, now)
+			}
+		}
 		s.mu.Lock()
 		sess.info.LastMetrics = p.Metrics
 		same := samePlugins(sess.info.PluginsEnabled, sess.info.Plugins, enabled, plugins)

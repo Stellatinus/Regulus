@@ -175,7 +175,10 @@ type Status struct {
 	// helper is set up; see updates.apply). ApplyAvailable adds that a
 	// verified release is waiting. Applying is true from the request until the
 	// helper has finished, and ApplyStalled when nothing picked the request up.
-	ApplyEnabled   bool `json:"apply_enabled"`
+	ApplyEnabled bool `json:"apply_enabled"`
+	// Postgres is true when the hub's database is PostgreSQL: a rollback
+	// cannot put that database back (#247), and the Updates page says so.
+	Postgres       bool `json:"postgres,omitempty"`
 	ApplyAvailable bool `json:"apply_available"`
 	Applying       bool `json:"applying"`
 	ApplyStalled   bool `json:"apply_stalled,omitempty"`
@@ -253,7 +256,10 @@ const (
 
 // Options configure a Manager.
 type Options struct {
-	DB *sql.DB
+	// Postgres is true when the hub's database is PostgreSQL, which the
+	// update helper cannot copy (see Status.Postgres).
+	Postgres bool
+	DB       *sql.DB
 	// ReadDB, if set, is the pool for the plain reads of the settings (the
 	// read pool of storage.HubDB, #345); DB is used when it is nil.
 	ReadDB *sql.DB
@@ -869,6 +875,7 @@ func (m *Manager) saveState(ctx context.Context, p persisted) error {
 
 // applyStatus fills in what concerns installing. The caller holds m.mu.
 func (m *Manager) applyStatus(st *Status) {
+	st.Postgres = m.opts.Postgres
 	if m.opts.ApplyDir == "" {
 		return
 	}

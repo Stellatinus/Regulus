@@ -266,6 +266,11 @@ function Version({
           )}
         </div>
       )}
+      {status.postgres && (
+        <p className="muted" data-testid="updates-postgres-note">
+          {t("updates.postgres.note")}
+        </p>
+      )}
       {status.downloading && <p role="status">{t("updates.downloading")}</p>}
       {status.applying && (
         <p role="status">

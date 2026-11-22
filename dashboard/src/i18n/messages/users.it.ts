@@ -24,12 +24,14 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.enable": "Attiva {name}",
   "users.disable": "Disattiva {name}",
   "users.resetPassword": "Reimposta la password di {name}",
-  "users.confirmResetPassword": "Creare un link per reimpostare la password di {name}? {name} verrà disconnesso ovunque.",
+  "users.confirmResetPassword":
+    "Creare un link per reimpostare la password di {name}? {name} verrà disconnesso ovunque.",
   "users.resetTwoFactor": "Reimposta il doppio fattore di {name}",
   "users.confirmResetTwoFactor":
     "Rimuovere l'autenticazione a due fattori di {name}? {name} verrà disconnesso ovunque e potrà accedere solo con la password.",
   "users.delete": "Elimina {name}",
-  "users.confirmDelete": "Eliminare l'account {name}? L'operazione non si può annullare.",
+  "users.confirmDelete":
+    "Eliminare l'account {name}? L'operazione non si può annullare.",
   "users.confirm.resetPassword": "Crea il link",
   "users.confirm.resetTwoFactor": "Reimposta il doppio fattore",
   "users.confirm.delete": "Elimina l'account",
@@ -47,7 +49,8 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.security.nobody": "nessuno (facoltativa per tutti)",
   "users.security.admins": "gli amministratori",
   "users.security.all": "tutti",
-  "users.security.hint": "Gli utenti interessati la impostano la prossima volta che usano Regulus, prima di ogni altra cosa.",
+  "users.security.hint":
+    "Gli utenti interessati la impostano la prossima volta che usano Regulus, prima di ogni altra cosa.",
 
   "users.add.title": "Aggiungi un utente",
   "users.add.username": "Nome utente",
@@ -70,7 +73,8 @@ export const usersIt: Record<keyof typeof users, string> = {
 
   "users.roles.title": "Ruoli",
   "users.roles.confirmDelete": "Eliminare il ruolo {name}?",
-  "users.roles.inUse": "Usato da {count}: spostali su un altro ruolo per eliminarlo.",
+  "users.roles.inUse":
+    "Usato da {count}: spostali su un altro ruolo per eliminarlo.",
   "users.roles.permissionsOf": "Permessi di {name}",
   "users.roles.confirm.delete": "Elimina il ruolo",
   "users.roles.colRole": "Ruolo",
@@ -91,13 +95,19 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.roles.cancel": "Annulla",
 
   // Texts the hub sends in English (permissions, built-in roles, audit events): shown in the page's language by id (#125).
-  "users.perm.servers.read": "Vedere i server, il loro stato e le loro metriche",
+  "users.perm.servers.read":
+    "Vedere i server, il loro stato e le loro metriche",
   "users.perm.servers.manage": "Aggiungere, rinominare e revocare server",
-  "users.perm.layout.edit": "Personalizzare e salvare la propria disposizione della dashboard",
-  "users.perm.users.manage": "Gestire gli account: creare, disabilitare, eliminare, reimpostare password e due fattori, e la politica dei due fattori",
+  "users.perm.layout.edit":
+    "Personalizzare e salvare la propria disposizione della dashboard",
+  "users.perm.users.manage":
+    "Gestire gli account: creare, disabilitare, eliminare, reimpostare password e due fattori, e la politica dei due fattori",
   "users.perm.roles.manage": "Creare, modificare ed eliminare ruoli",
   "users.perm.audit.read": "Leggere il registro delle attività",
-  "users.perm.core.update": "Vedere gli aggiornamenti di Regulus, cercarli, scaricarli e scegliere modalità e canale di aggiornamento",
+  "users.perm.inventory.read":
+    "Vedere l'inventario hardware: i dischi dei server con i loro numeri di serie e dove si è spostato un disco",
+  "users.perm.core.update":
+    "Vedere gli aggiornamenti di Regulus, cercarli, scaricarli e scegliere modalità e canale di aggiornamento",
   "users.roleDesc.admin": "Tutto, compresi account e ruoli",
   "users.roleDesc.operator": "Lavora con i server; non gestisce gli account",
   "users.roleDesc.viewer": "Sola lettura",
@@ -130,14 +140,18 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.event.update_agent_failed": "aggiornamento del server non riuscito",
   "users.event.update_agent_updated": "server aggiornato",
   "users.event.update_applied": "aggiornamento installato",
-  "users.event.update_apply_failed": "installazione dell'aggiornamento non riuscita",
-  "users.event.update_apply_requested": "installazione dell'aggiornamento richiesta",
-  "users.event.update_download_failed": "download dell'aggiornamento non riuscito",
+  "users.event.update_apply_failed":
+    "installazione dell'aggiornamento non riuscita",
+  "users.event.update_apply_requested":
+    "installazione dell'aggiornamento richiesta",
+  "users.event.update_download_failed":
+    "download dell'aggiornamento non riuscito",
   "users.event.update_downloaded": "aggiornamento scaricato",
   "users.event.update_rolled_back": "aggiornamento annullato",
   "users.event.update_rollout_finished": "aggiornamento dei server terminato",
   "users.event.update_rollout_started": "aggiornamento dei server avviato",
-  "users.event.update_settings_changed": "impostazioni di aggiornamento cambiate",
+  "users.event.update_settings_changed":
+    "impostazioni di aggiornamento cambiate",
   "users.event.user_created": "utente creato",
   "users.event.user_deleted": "utente eliminato",
   "users.event.user_disabled": "utente disabilitato",
@@ -167,12 +181,16 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.detail.code.from_to": "{from} → {to}",
   "users.detail.code.from_version": "dalla {version}",
   "users.detail.code.from_version_message": "dalla {version}: {message}",
-  "users.detail.code.other_sessions_ended": "le altre sessioni sono state chiuse",
-  "users.detail.code.reset_link_used": "link di reimpostazione usato, sessioni chiuse",
+  "users.detail.code.other_sessions_ended":
+    "le altre sessioni sono state chiuse",
+  "users.detail.code.reset_link_used":
+    "link di reimpostazione usato, sessioni chiuse",
   "users.detail.code.sessions_ended": "sessioni chiuse",
-  "users.detail.code.sessions_ended_command": "sessioni chiuse (comando reset-admin)",
+  "users.detail.code.sessions_ended_command":
+    "sessioni chiuse (comando reset-admin)",
   "users.detail.code.first_admin": "primo amministratore",
-  "users.detail.code.create_admin_command": "primo amministratore (comando create-admin)",
+  "users.detail.code.create_admin_command":
+    "primo amministratore (comando create-admin)",
   "users.detail.code.reset_admin_command": "comando reset-admin",
   "users.detail.code.wrong_second_factor": "secondo fattore errato",
   "users.detail.code.account_disabled": "account disattivato",
@@ -185,9 +203,12 @@ export const usersIt: Record<keyof typeof users, string> = {
 
   // #372: dettagli che erano solo in inglese.
   "users.detail.code.update_settings": "modalità {mode}, canale {channel}",
-  "users.detail.code.update_settings_window": "modalità {mode}, canale {channel}, finestra {from}-{to}",
-  "users.detail.code.update_downloaded": "{archive}, sha256 {sha256}, verificato da {verified}",
+  "users.detail.code.update_settings_window":
+    "modalità {mode}, canale {channel}, finestra {from}-{to}",
+  "users.detail.code.update_downloaded":
+    "{archive}, sha256 {sha256}, verificato da {verified}",
   "users.detail.code.update_download_failed": "{error}",
-  "users.detail.code.two_factor_settings": "impostazioni della verifica in due passaggi",
+  "users.detail.code.two_factor_settings":
+    "impostazioni della verifica in due passaggi",
   "users.detail.code.reauthentication": "nuova autenticazione",
 };

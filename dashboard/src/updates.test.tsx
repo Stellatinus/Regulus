@@ -166,6 +166,21 @@ describe("UpdatesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("says what a rollback does not restore on a PostgreSQL hub", async () => {
+    mockHub({ "GET /api/updates": [{ data: { ...base, postgres: true } }] });
+    renderPage();
+    expect(
+      await screen.findByTestId("updates-postgres-note"),
+    ).toHaveTextContent(/puts back the program only, not the database/);
+  });
+
+  it("shows no PostgreSQL note on a SQLite hub", async () => {
+    mockHub({ "GET /api/updates": [{ data: base }] });
+    renderPage();
+    await screen.findAllByText(/release/i);
+    expect(screen.queryByTestId("updates-postgres-note")).toBeNull();
+  });
+
   it("warns when the hub has not reached the release server for days", async () => {
     const old = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
     mockHub({

@@ -6,25 +6,17 @@ A plugin is a program that serves the plugin contract on the Unix socket Regulus
 
 ```
 plugins/example-hello/
-  plugin.yaml   the manifest
-  main.go       the program
+  plugin.yaml    the manifest: id, version, components, permission
+  main.go        the program: serves the contract, keeps a count in its data directory
+  main_test.go   checks the program against the manifest, and its two small behaviours
+  ui/widgets.js  the widget (provisional, nothing loads it yet)
 ```
 
-It serves the contract, reports itself healthy and does nothing else. It is the starting point for a new plugin.
+It serves the contract, counts its starts in its data directory (`REGULUS_PLUGIN_DATA_DIR`) and is healthy while that directory is writable. It does nothing the dashboard can see: **today a plugin can only run, be healthy and keep its own files**. What a plugin can offer the dashboard and what it may ask of the host is not designed (see [Plugins](README.md), "Open questions"), and the widget is only a file in the right place. The example shows every part a plugin has so far and no more.
 
-`main.go`, in full:
+`main.go`, the part that matters:
 
 ```go
-package main
-
-import (
-	"context"
-	"fmt"
-	"os"
-
-	"github.com/CodexCircle/Regulus/internal/plugin/sdk"
-)
-
 // These must match plugin.yaml: Regulus checks them when it starts the plugin.
 const (
 	id      = "example-hello"
@@ -33,28 +25,33 @@ const (
 )
 
 func main() {
-	fmt.Printf("example-hello %s started as the %s component\n", version, os.Getenv(sdk.EnvRole))
-	err := sdk.Serve(context.Background(), sdk.Plugin{ID: id, Version: version, APIVersion: api}, nil)
-	if err != nil {
+	dir := os.Getenv(sdk.EnvDataDir)
+	n, _ := countStart(dir) // the plugin's own state, in its own directory
+	fmt.Printf("example-hello %s started as the %s component, start number %d\n", version, os.Getenv(sdk.EnvRole), n)
+
+	p := sdk.Plugin{ID: id, Version: version, APIVersion: api, Health: func(context.Context) error { return writable(dir) }}
+	if err := sdk.Serve(context.Background(), p, nil); err != nil {
 		fmt.Fprintln(os.Stderr, "example-hello:", err)
 		os.Exit(1)
 	}
 }
 ```
 
-## Try it on your machine
+## Make your own plugin, step by step
 
-Build Regulus and the example, then run an agent with the plugins directory set. The agent needs a hub to connect to; see [Development](../development.md) for running one locally.
+This is the path the example was checked with. Replace `my-plugin` with your id (2 to 40 characters: lower-case letters, digits, single hyphens, starting with a letter).
 
-```bash
-go build -o plugins/example-hello/bin/example-hello ./plugins/example-hello
-```
+1. **Copy the example.** `cp -r plugins/example-hello plugins/my-plugin` (not the `bin/` directory).
+2. **Edit the manifest** (`plugins/my-plugin/plugin.yaml`, see [Manifest](manifest.md)): the `id`, `version`, `name`, `description`, `requires` (the Regulus releases you tested with) and `api: 1`. Keep `components.agent`, `components.hub` or both, whichever your plugin has; a component whose command is missing is simply not started. Keep or drop `components.ui`.
+3. **Declare the permissions** it will need, each starting with the id and a dot (`my-plugin.read`) and with a description an administrator can read. They are a *request*: nothing enforces them yet ([Manifest](manifest.md), "Permissions").
+4. **Change the program** (`main.go`): the constants `id`, `version` and `api` must equal the manifest, and the package comment must say what it does and what it does not. The contract the host speaks to you is `Describe` and `Health` ([the SDK](#the-sdk-for-go-internalpluginsdk) serves both). Keep files only in `REGULUS_PLUGIN_DATA_DIR`.
+5. **Change the test** (`main_test.go`): `TestTheProgramMatchesItsManifest` reads `plugin.yaml` with the same parser Regulus uses and fails when the constants, the directory name, the permissions or the widget path are wrong. Run `go test ./plugins/my-plugin/`.
+6. **The widget** (`ui/widgets.js`, named by `components.ui.module`): a JavaScript module inside the plugin directory. Regulus checks the name and that it is inside the plugin; it does **not** load or run it (#21). The file in the example shows the shape the design proposes and will change with that design.
+7. **Build it into `bin/`:** `go build -o plugins/my-plugin/bin/my-plugin ./plugins/my-plugin` (the path of `components.<role>.command`). `plugins/*/bin/` is ignored by git.
+8. **Run it.** Start a hub (or an agent) with the plugins directory: `regulus hub --plugins-dir "$PWD/plugins"` (an agent: `regulus agent --hub HOST:PORT --plugins-dir "$PWD/plugins"`, after enrolling, see [Remote agents](../remote-agents.md)). The log shows `plugin running plugin=my-plugin`, then what your program printed. `regulus status` and `GET /api/plugins` show its state; a plugin that is not valid is listed as `invalid` with the reason. Stop the hub and the plugin stops with it. Its data directory is `<data_dir>/plugins-data/my-plugin/` on the hub.
+9. **Package it:** `scripts/package-plugin.sh plugins/my-plugin` writes `dist/plugins/my-plugin_<version>_<os>_<arch>.tar.gz` and a `.sha256`, with the program built for this machine (`GOOS` and `GOARCH` change that). It holds one directory with `plugin.yaml`, the programs and the widget module. **To install it, unpack it in the plugins directory** (`tar -xzf my-plugin_0.1.0_linux_amd64.tar.gz -C /etc/regulus/plugins`, or wherever `plugins_dir` points, owned by root). The archive name and layout are provisional until the plugin index and installation (#20); nothing signs the archive yet.
 
-```bash
-regulus agent --hub localhost:8443 --data-dir /tmp/agent --plugins-dir "$PWD/plugins"
-```
-
-The agent's log shows `plugin running plugin=example-hello`, then the line the example prints. Stop the agent and the plugin stops with it. `plugins/example-hello/bin/` is ignored by git.
+What was checked: the example builds, is found, validated and run by the supervisor (`TestTheExamplePluginRuns`); it was started by a real hub with `--plugins-dir` and counted its start in the hub's plugins data directory; the packaging script and its archive are tested (`scripts/test-package-plugin.sh`, part of `make test`). **Not checked:** an installed hub or agent under systemd (the unit's hardening may need relaxing for some plugins, see [Runtime](runtime.md)), and the widget, which nothing loads.
 
 ## The SDK for Go: `internal/plugin/sdk`
 

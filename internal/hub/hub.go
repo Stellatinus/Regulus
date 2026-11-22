@@ -208,6 +208,9 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		}
 	})
 	h.agents.seen = h.seen.seen
+	h.agents.disks = func(agentID string, disks []*agentv1.PhysicalDisk, at time.Time) {
+		h.seen.put("disks/"+agentID, func(ctx context.Context) error { return h.recordDisks(ctx, agentID, disks, at) })
+	}
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
@@ -242,6 +245,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h.agents.files = stager
 	h.updates = update.New(update.Options{
 		ApplyDir: applyDir,
+		Postgres: cfg.Storage().IsPostgres(),
 		DB:       db,
 		ReadDB:   store.Read,
 		Log:      log.With("component", "updates"),
@@ -322,7 +326,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -496,7 +500,10 @@ type Deps struct {
 	UI fs.FS
 	// Agents, Layouts and Log may be nil in tests; the agent list is then empty
 	// and the layout endpoints answer 404.
-	Agents  AgentSource
+	Agents AgentSource
+	// Disks serves the physical disks and their moves (inventory.read). May be
+	// nil in tests; the endpoints then answer 404.
+	Disks   DiskSource
 	Layouts LayoutStore
 	Log     *slog.Logger
 	// Auth protects the API. A nil Auth leaves it open, which is only meant for
@@ -565,6 +572,8 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/agents", handler: need(auth.PermServersRead, agentsHandler(d.Agents))},
 		{pattern: "GET /api/agents/{id}", handler: need(auth.PermServersRead, agentGetHandler(d.Agents))},
 		{pattern: "GET /api/agents/{id}/metrics", handler: need(auth.PermServersRead, metricsHandler(d.Agents))},
+		{pattern: "GET /api/agents/{id}/disks", handler: need(auth.PermInventoryRead, agentDisksHandler(d.Disks))},
+		{pattern: "GET /api/disks/moves", handler: need(auth.PermInventoryRead, diskMovesHandler(d.Disks))},
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},

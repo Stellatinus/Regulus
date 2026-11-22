@@ -798,9 +798,18 @@ type MetricsReport struct {
 	// "cpu", "load", "memory", "disks", "network", "uptime". A hub shows a value
 	// it does not know as it is. Empty when everything was read, and from an
 	// agent older than this field. Added in protocol 1 without a new version.
-	Unavailable   []string `protobuf:"bytes,10,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Unavailable []string `protobuf:"bytes,10,rep,name=unavailable,proto3" json:"unavailable,omitempty"`
+	// The physical disks of the machine with what each drive reports about
+	// itself (#148), so the hub can follow a disk from server to server. They
+	// are raw identifiers: the hub decides which one is the identity key
+	// (docs/disks.md). disk_identity_version is the version of this part, 1 for
+	// the fields of PhysicalDisk below; 0 (and no disks) from an agent older than
+	// this field, or on a system where the agent could not read any. Added in
+	// protocol 1 without a new version: an older hub ignores both.
+	DiskIdentityVersion uint32          `protobuf:"varint,11,opt,name=disk_identity_version,json=diskIdentityVersion,proto3" json:"disk_identity_version,omitempty"`
+	PhysicalDisks       []*PhysicalDisk `protobuf:"bytes,12,rep,name=physical_disks,json=physicalDisks,proto3" json:"physical_disks,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *MetricsReport) Reset() {
@@ -903,6 +912,140 @@ func (x *MetricsReport) GetUnavailable() []string {
 	return nil
 }
 
+func (x *MetricsReport) GetDiskIdentityVersion() uint32 {
+	if x != nil {
+		return x.DiskIdentityVersion
+	}
+	return 0
+}
+
+func (x *MetricsReport) GetPhysicalDisks() []*PhysicalDisk {
+	if x != nil {
+		return x.PhysicalDisks
+	}
+	return nil
+}
+
+// PhysicalDisk is one drive as the machine reports it. Everything is read
+// from the system (sysfs, udev) without privileges; a field the drive does not
+// report is empty, never guessed.
+type PhysicalDisk struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The kernel name, for example "sda" or "nvme0n1". It identifies the disk
+	// on this server only and changes when the disk is moved or the machine
+	// restarts: never an identity, shown only to say where the disk is now.
+	Device string `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`
+	Vendor string `protobuf:"bytes,2,opt,name=vendor,proto3" json:"vendor,omitempty"`
+	Model  string `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	Serial string `protobuf:"bytes,4,opt,name=serial,proto3" json:"serial,omitempty"`
+	// The world-wide identifier of the drive: a WWN (SATA, SAS) or an EUI-64 or
+	// NGUID (NVMe), as lowercase hexadecimal without separators or prefix.
+	Wwn string `protobuf:"bytes,5,opt,name=wwn,proto3" json:"wwn,omitempty"`
+	// What wwn is: "wwn", "eui64" or "nguid"; empty when wwn is empty.
+	WwnKind   string `protobuf:"bytes,6,opt,name=wwn_kind,json=wwnKind,proto3" json:"wwn_kind,omitempty"`
+	SizeBytes uint64 `protobuf:"varint,7,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// "sata", "sas", "nvme", "usb", "virtio", "scsi" or empty when unknown.
+	Transport string `protobuf:"bytes,8,opt,name=transport,proto3" json:"transport,omitempty"`
+	// The system says the disk is a virtual one (a hypervisor's disk). Such a
+	// disk usually has a made-up or missing serial.
+	Virtual       bool `protobuf:"varint,9,opt,name=virtual,proto3" json:"virtual,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PhysicalDisk) Reset() {
+	*x = PhysicalDisk{}
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PhysicalDisk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PhysicalDisk) ProtoMessage() {}
+
+func (x *PhysicalDisk) ProtoReflect() protoreflect.Message {
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PhysicalDisk.ProtoReflect.Descriptor instead.
+func (*PhysicalDisk) Descriptor() ([]byte, []int) {
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PhysicalDisk) GetDevice() string {
+	if x != nil {
+		return x.Device
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetVendor() string {
+	if x != nil {
+		return x.Vendor
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetSerial() string {
+	if x != nil {
+		return x.Serial
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetWwn() string {
+	if x != nil {
+		return x.Wwn
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetWwnKind() string {
+	if x != nil {
+		return x.WwnKind
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *PhysicalDisk) GetTransport() string {
+	if x != nil {
+		return x.Transport
+	}
+	return ""
+}
+
+func (x *PhysicalDisk) GetVirtual() bool {
+	if x != nil {
+		return x.Virtual
+	}
+	return false
+}
+
 // PluginStatus is the state of one plugin as the agent's supervisor sees it.
 type PluginStatus struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -925,7 +1068,7 @@ type PluginStatus struct {
 
 func (x *PluginStatus) Reset() {
 	*x = PluginStatus{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -937,7 +1080,7 @@ func (x *PluginStatus) String() string {
 func (*PluginStatus) ProtoMessage() {}
 
 func (x *PluginStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[8]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -950,7 +1093,7 @@ func (x *PluginStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PluginStatus.ProtoReflect.Descriptor instead.
 func (*PluginStatus) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{8}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PluginStatus) GetId() string {
@@ -1008,7 +1151,7 @@ type CpuMetrics struct {
 
 func (x *CpuMetrics) Reset() {
 	*x = CpuMetrics{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1020,7 +1163,7 @@ func (x *CpuMetrics) String() string {
 func (*CpuMetrics) ProtoMessage() {}
 
 func (x *CpuMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[9]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1033,7 +1176,7 @@ func (x *CpuMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CpuMetrics.ProtoReflect.Descriptor instead.
 func (*CpuMetrics) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{9}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CpuMetrics) GetUsagePercent() float64 {
@@ -1077,7 +1220,7 @@ type MemoryMetrics struct {
 
 func (x *MemoryMetrics) Reset() {
 	*x = MemoryMetrics{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1089,7 +1232,7 @@ func (x *MemoryMetrics) String() string {
 func (*MemoryMetrics) ProtoMessage() {}
 
 func (x *MemoryMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[10]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1102,7 +1245,7 @@ func (x *MemoryMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryMetrics.ProtoReflect.Descriptor instead.
 func (*MemoryMetrics) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{10}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MemoryMetrics) GetTotalBytes() uint64 {
@@ -1152,7 +1295,7 @@ type DiskMetrics struct {
 
 func (x *DiskMetrics) Reset() {
 	*x = DiskMetrics{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1164,7 +1307,7 @@ func (x *DiskMetrics) String() string {
 func (*DiskMetrics) ProtoMessage() {}
 
 func (x *DiskMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[11]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1177,7 +1320,7 @@ func (x *DiskMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskMetrics.ProtoReflect.Descriptor instead.
 func (*DiskMetrics) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{11}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DiskMetrics) GetMountPoint() string {
@@ -1220,7 +1363,7 @@ type NetworkMetrics struct {
 
 func (x *NetworkMetrics) Reset() {
 	*x = NetworkMetrics{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1232,7 +1375,7 @@ func (x *NetworkMetrics) String() string {
 func (*NetworkMetrics) ProtoMessage() {}
 
 func (x *NetworkMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[12]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1245,7 +1388,7 @@ func (x *NetworkMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkMetrics.ProtoReflect.Descriptor instead.
 func (*NetworkMetrics) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{12}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *NetworkMetrics) GetInterface() string {
@@ -1287,7 +1430,7 @@ type Command struct {
 
 func (x *Command) Reset() {
 	*x = Command{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1442,7 @@ func (x *Command) String() string {
 func (*Command) ProtoMessage() {}
 
 func (x *Command) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[13]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1455,7 @@ func (x *Command) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Command.ProtoReflect.Descriptor instead.
 func (*Command) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{13}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Command) GetId() string {
@@ -1387,7 +1530,7 @@ type Ping struct {
 
 func (x *Ping) Reset() {
 	*x = Ping{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1399,7 +1542,7 @@ func (x *Ping) String() string {
 func (*Ping) ProtoMessage() {}
 
 func (x *Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[14]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1412,7 +1555,7 @@ func (x *Ping) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ping.ProtoReflect.Descriptor instead.
 func (*Ping) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{14}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{15}
 }
 
 // SetIntervals changes the reporting intervals. A zero value keeps the
@@ -1427,7 +1570,7 @@ type SetIntervals struct {
 
 func (x *SetIntervals) Reset() {
 	*x = SetIntervals{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1582,7 @@ func (x *SetIntervals) String() string {
 func (*SetIntervals) ProtoMessage() {}
 
 func (x *SetIntervals) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[15]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1595,7 @@ func (x *SetIntervals) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetIntervals.ProtoReflect.Descriptor instead.
 func (*SetIntervals) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{15}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SetIntervals) GetHeartbeatInterval() *durationpb.Duration {
@@ -1482,7 +1625,7 @@ type CommandResult struct {
 
 func (x *CommandResult) Reset() {
 	*x = CommandResult{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1494,7 +1637,7 @@ func (x *CommandResult) String() string {
 func (*CommandResult) ProtoMessage() {}
 
 func (x *CommandResult) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[16]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1507,7 +1650,7 @@ func (x *CommandResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
 func (*CommandResult) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CommandResult) GetCommandId() string {
@@ -1552,7 +1695,7 @@ type ApplyUpdate struct {
 
 func (x *ApplyUpdate) Reset() {
 	*x = ApplyUpdate{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1564,7 +1707,7 @@ func (x *ApplyUpdate) String() string {
 func (*ApplyUpdate) ProtoMessage() {}
 
 func (x *ApplyUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[17]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1577,7 +1720,7 @@ func (x *ApplyUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyUpdate.ProtoReflect.Descriptor instead.
 func (*ApplyUpdate) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ApplyUpdate) GetVersion() string {
@@ -1618,7 +1761,7 @@ type FetchUpdateRequest struct {
 
 func (x *FetchUpdateRequest) Reset() {
 	*x = FetchUpdateRequest{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1630,7 +1773,7 @@ func (x *FetchUpdateRequest) String() string {
 func (*FetchUpdateRequest) ProtoMessage() {}
 
 func (x *FetchUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[18]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1643,7 +1786,7 @@ func (x *FetchUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchUpdateRequest.ProtoReflect.Descriptor instead.
 func (*FetchUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *FetchUpdateRequest) GetVersion() string {
@@ -1669,7 +1812,7 @@ type FileChunk struct {
 
 func (x *FileChunk) Reset() {
 	*x = FileChunk{}
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1681,7 +1824,7 @@ func (x *FileChunk) String() string {
 func (*FileChunk) ProtoMessage() {}
 
 func (x *FileChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_regulus_agent_v1_agent_proto_msgTypes[19]
+	mi := &file_regulus_agent_v1_agent_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1694,7 +1837,7 @@ func (x *FileChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileChunk.ProtoReflect.Descriptor instead.
 func (*FileChunk) Descriptor() ([]byte, []int) {
-	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+	return file_regulus_agent_v1_agent_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FileChunk) GetData() []byte {
@@ -1759,7 +1902,7 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x13REASON_UNAUTHORIZED\x10\x02\x12\x18\n" +
 	"\x14REASON_AGENT_TOO_OLD\x10\x03\"@\n" +
 	"\tHeartbeat\x123\n" +
-	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xf4\x03\n" +
+	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xef\x04\n" +
 	"\rMetricsReport\x12=\n" +
 	"\fcollected_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12.\n" +
 	"\x03cpu\x18\x02 \x01(\v2\x1c.regulus.agent.v1.CpuMetricsR\x03cpu\x127\n" +
@@ -1771,7 +1914,20 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x0fplugins_enabled\x18\b \x01(\bR\x0epluginsEnabled\x12\x1c\n" +
 	"\tcollector\x18\t \x01(\tR\tcollector\x12 \n" +
 	"\vunavailable\x18\n" +
-	" \x03(\tR\vunavailable\"\xbb\x01\n" +
+	" \x03(\tR\vunavailable\x122\n" +
+	"\x15disk_identity_version\x18\v \x01(\rR\x13diskIdentityVersion\x12E\n" +
+	"\x0ephysical_disks\x18\f \x03(\v2\x1e.regulus.agent.v1.PhysicalDiskR\rphysicalDisks\"\xf0\x01\n" +
+	"\fPhysicalDisk\x12\x16\n" +
+	"\x06device\x18\x01 \x01(\tR\x06device\x12\x16\n" +
+	"\x06vendor\x18\x02 \x01(\tR\x06vendor\x12\x14\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x12\x16\n" +
+	"\x06serial\x18\x04 \x01(\tR\x06serial\x12\x10\n" +
+	"\x03wwn\x18\x05 \x01(\tR\x03wwn\x12\x19\n" +
+	"\bwwn_kind\x18\x06 \x01(\tR\awwnKind\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\a \x01(\x04R\tsizeBytes\x12\x1c\n" +
+	"\ttransport\x18\b \x01(\tR\ttransport\x12\x18\n" +
+	"\avirtual\x18\t \x01(\bR\avirtual\"\xbb\x01\n" +
 	"\fPluginStatus\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x14\n" +
@@ -1858,7 +2014,7 @@ func file_regulus_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_regulus_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_regulus_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_regulus_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_regulus_agent_v1_agent_proto_goTypes = []any{
 	(UpdateFile)(0),               // 0: regulus.agent.v1.UpdateFile
 	(Reject_Reason)(0),            // 1: regulus.agent.v1.Reject.Reason
@@ -1870,56 +2026,58 @@ var file_regulus_agent_v1_agent_proto_goTypes = []any{
 	(*Reject)(nil),                // 7: regulus.agent.v1.Reject
 	(*Heartbeat)(nil),             // 8: regulus.agent.v1.Heartbeat
 	(*MetricsReport)(nil),         // 9: regulus.agent.v1.MetricsReport
-	(*PluginStatus)(nil),          // 10: regulus.agent.v1.PluginStatus
-	(*CpuMetrics)(nil),            // 11: regulus.agent.v1.CpuMetrics
-	(*MemoryMetrics)(nil),         // 12: regulus.agent.v1.MemoryMetrics
-	(*DiskMetrics)(nil),           // 13: regulus.agent.v1.DiskMetrics
-	(*NetworkMetrics)(nil),        // 14: regulus.agent.v1.NetworkMetrics
-	(*Command)(nil),               // 15: regulus.agent.v1.Command
-	(*Ping)(nil),                  // 16: regulus.agent.v1.Ping
-	(*SetIntervals)(nil),          // 17: regulus.agent.v1.SetIntervals
-	(*CommandResult)(nil),         // 18: regulus.agent.v1.CommandResult
-	(*ApplyUpdate)(nil),           // 19: regulus.agent.v1.ApplyUpdate
-	(*FetchUpdateRequest)(nil),    // 20: regulus.agent.v1.FetchUpdateRequest
-	(*FileChunk)(nil),             // 21: regulus.agent.v1.FileChunk
-	(*durationpb.Duration)(nil),   // 22: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil), // 23: google.protobuf.Timestamp
+	(*PhysicalDisk)(nil),          // 10: regulus.agent.v1.PhysicalDisk
+	(*PluginStatus)(nil),          // 11: regulus.agent.v1.PluginStatus
+	(*CpuMetrics)(nil),            // 12: regulus.agent.v1.CpuMetrics
+	(*MemoryMetrics)(nil),         // 13: regulus.agent.v1.MemoryMetrics
+	(*DiskMetrics)(nil),           // 14: regulus.agent.v1.DiskMetrics
+	(*NetworkMetrics)(nil),        // 15: regulus.agent.v1.NetworkMetrics
+	(*Command)(nil),               // 16: regulus.agent.v1.Command
+	(*Ping)(nil),                  // 17: regulus.agent.v1.Ping
+	(*SetIntervals)(nil),          // 18: regulus.agent.v1.SetIntervals
+	(*CommandResult)(nil),         // 19: regulus.agent.v1.CommandResult
+	(*ApplyUpdate)(nil),           // 20: regulus.agent.v1.ApplyUpdate
+	(*FetchUpdateRequest)(nil),    // 21: regulus.agent.v1.FetchUpdateRequest
+	(*FileChunk)(nil),             // 22: regulus.agent.v1.FileChunk
+	(*durationpb.Duration)(nil),   // 23: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil), // 24: google.protobuf.Timestamp
 }
 var file_regulus_agent_v1_agent_proto_depIdxs = []int32{
 	4,  // 0: regulus.agent.v1.AgentMessage.hello:type_name -> regulus.agent.v1.Hello
 	8,  // 1: regulus.agent.v1.AgentMessage.heartbeat:type_name -> regulus.agent.v1.Heartbeat
 	9,  // 2: regulus.agent.v1.AgentMessage.metrics:type_name -> regulus.agent.v1.MetricsReport
-	18, // 3: regulus.agent.v1.AgentMessage.command_result:type_name -> regulus.agent.v1.CommandResult
+	19, // 3: regulus.agent.v1.AgentMessage.command_result:type_name -> regulus.agent.v1.CommandResult
 	6,  // 4: regulus.agent.v1.HubMessage.welcome:type_name -> regulus.agent.v1.Welcome
 	7,  // 5: regulus.agent.v1.HubMessage.reject:type_name -> regulus.agent.v1.Reject
-	15, // 6: regulus.agent.v1.HubMessage.command:type_name -> regulus.agent.v1.Command
+	16, // 6: regulus.agent.v1.HubMessage.command:type_name -> regulus.agent.v1.Command
 	5,  // 7: regulus.agent.v1.Hello.system:type_name -> regulus.agent.v1.SystemInfo
-	22, // 8: regulus.agent.v1.Welcome.heartbeat_interval:type_name -> google.protobuf.Duration
-	22, // 9: regulus.agent.v1.Welcome.metrics_interval:type_name -> google.protobuf.Duration
+	23, // 8: regulus.agent.v1.Welcome.heartbeat_interval:type_name -> google.protobuf.Duration
+	23, // 9: regulus.agent.v1.Welcome.metrics_interval:type_name -> google.protobuf.Duration
 	1,  // 10: regulus.agent.v1.Reject.reason:type_name -> regulus.agent.v1.Reject.Reason
-	23, // 11: regulus.agent.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	23, // 12: regulus.agent.v1.MetricsReport.collected_at:type_name -> google.protobuf.Timestamp
-	11, // 13: regulus.agent.v1.MetricsReport.cpu:type_name -> regulus.agent.v1.CpuMetrics
-	12, // 14: regulus.agent.v1.MetricsReport.memory:type_name -> regulus.agent.v1.MemoryMetrics
-	13, // 15: regulus.agent.v1.MetricsReport.disks:type_name -> regulus.agent.v1.DiskMetrics
-	14, // 16: regulus.agent.v1.MetricsReport.networks:type_name -> regulus.agent.v1.NetworkMetrics
-	10, // 17: regulus.agent.v1.MetricsReport.plugins:type_name -> regulus.agent.v1.PluginStatus
-	23, // 18: regulus.agent.v1.PluginStatus.since:type_name -> google.protobuf.Timestamp
-	16, // 19: regulus.agent.v1.Command.ping:type_name -> regulus.agent.v1.Ping
-	17, // 20: regulus.agent.v1.Command.set_intervals:type_name -> regulus.agent.v1.SetIntervals
-	19, // 21: regulus.agent.v1.Command.apply_update:type_name -> regulus.agent.v1.ApplyUpdate
-	22, // 22: regulus.agent.v1.SetIntervals.heartbeat_interval:type_name -> google.protobuf.Duration
-	22, // 23: regulus.agent.v1.SetIntervals.metrics_interval:type_name -> google.protobuf.Duration
-	0,  // 24: regulus.agent.v1.FetchUpdateRequest.file:type_name -> regulus.agent.v1.UpdateFile
-	2,  // 25: regulus.agent.v1.AgentService.Connect:input_type -> regulus.agent.v1.AgentMessage
-	20, // 26: regulus.agent.v1.AgentService.FetchUpdate:input_type -> regulus.agent.v1.FetchUpdateRequest
-	3,  // 27: regulus.agent.v1.AgentService.Connect:output_type -> regulus.agent.v1.HubMessage
-	21, // 28: regulus.agent.v1.AgentService.FetchUpdate:output_type -> regulus.agent.v1.FileChunk
-	27, // [27:29] is the sub-list for method output_type
-	25, // [25:27] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	24, // 11: regulus.agent.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
+	24, // 12: regulus.agent.v1.MetricsReport.collected_at:type_name -> google.protobuf.Timestamp
+	12, // 13: regulus.agent.v1.MetricsReport.cpu:type_name -> regulus.agent.v1.CpuMetrics
+	13, // 14: regulus.agent.v1.MetricsReport.memory:type_name -> regulus.agent.v1.MemoryMetrics
+	14, // 15: regulus.agent.v1.MetricsReport.disks:type_name -> regulus.agent.v1.DiskMetrics
+	15, // 16: regulus.agent.v1.MetricsReport.networks:type_name -> regulus.agent.v1.NetworkMetrics
+	11, // 17: regulus.agent.v1.MetricsReport.plugins:type_name -> regulus.agent.v1.PluginStatus
+	10, // 18: regulus.agent.v1.MetricsReport.physical_disks:type_name -> regulus.agent.v1.PhysicalDisk
+	24, // 19: regulus.agent.v1.PluginStatus.since:type_name -> google.protobuf.Timestamp
+	17, // 20: regulus.agent.v1.Command.ping:type_name -> regulus.agent.v1.Ping
+	18, // 21: regulus.agent.v1.Command.set_intervals:type_name -> regulus.agent.v1.SetIntervals
+	20, // 22: regulus.agent.v1.Command.apply_update:type_name -> regulus.agent.v1.ApplyUpdate
+	23, // 23: regulus.agent.v1.SetIntervals.heartbeat_interval:type_name -> google.protobuf.Duration
+	23, // 24: regulus.agent.v1.SetIntervals.metrics_interval:type_name -> google.protobuf.Duration
+	0,  // 25: regulus.agent.v1.FetchUpdateRequest.file:type_name -> regulus.agent.v1.UpdateFile
+	2,  // 26: regulus.agent.v1.AgentService.Connect:input_type -> regulus.agent.v1.AgentMessage
+	21, // 27: regulus.agent.v1.AgentService.FetchUpdate:input_type -> regulus.agent.v1.FetchUpdateRequest
+	3,  // 28: regulus.agent.v1.AgentService.Connect:output_type -> regulus.agent.v1.HubMessage
+	22, // 29: regulus.agent.v1.AgentService.FetchUpdate:output_type -> regulus.agent.v1.FileChunk
+	28, // [28:30] is the sub-list for method output_type
+	26, // [26:28] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_regulus_agent_v1_agent_proto_init() }
@@ -1938,7 +2096,7 @@ func file_regulus_agent_v1_agent_proto_init() {
 		(*HubMessage_Reject)(nil),
 		(*HubMessage_Command)(nil),
 	}
-	file_regulus_agent_v1_agent_proto_msgTypes[13].OneofWrappers = []any{
+	file_regulus_agent_v1_agent_proto_msgTypes[14].OneofWrappers = []any{
 		(*Command_Ping)(nil),
 		(*Command_SetIntervals)(nil),
 		(*Command_ApplyUpdate)(nil),
@@ -1949,7 +2107,7 @@ func file_regulus_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_regulus_agent_v1_agent_proto_rawDesc), len(file_regulus_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

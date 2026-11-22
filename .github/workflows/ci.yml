@@ -222,8 +222,9 @@ jobs:
           # A skipped test would pass without proving anything. The one that
           # needs a published release to download may skip, with its reason (a
           # repository without releases, or GitHub not answering): it says so
-          # in the log, and this prints it as a warning.
-          if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+          # in the log, and this prints it as a warning. The load test
+          # (TestHubUnderRealLoad) runs only with REGULUS_LOAD=1, by hand.
+          if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' -e 'TestHubUnderRealLoad' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
           if grep -q -e '--- SKIP: TestAgentOfAnOlderRelease' e2e.log; then echo "::warning::the test of the previous release was skipped: $(grep -h -e 'no previous release' e2e.log | head -1)"; fi
 
   proto:

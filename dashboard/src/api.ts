@@ -891,6 +891,8 @@ export interface UpdateStatus {
   download_error?: string;
   // The hub was set up to install updates (updates.apply and the root helper).
   apply_enabled: boolean;
+  // The hub's database is PostgreSQL: a rollback does not put it back.
+  postgres?: boolean;
   // A release verified by its signature is waiting and nothing is installing.
   apply_available: boolean;
   // An installation was requested or is running; the hub restarts in the middle.
