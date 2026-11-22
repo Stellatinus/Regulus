@@ -795,7 +795,11 @@ paths:
         names its place on this server; `reason` says why (`no-identifier`,
         `virtual`, `usb-bridge`, `placeholder-serial`, `duplicate`). Two disks
         of one report that give the same identifier are both `conflict` and not
-        identifiable. Serial numbers identify hardware, so this needs
+        identifiable. A disk that two connected servers report at the same time
+        is `contested` (`contested_by` names the second server, `agent` is the
+        one that had it): it is a conflict, not a move, and no move is written
+        for it until one of them stops reporting it or goes away (#382). The
+        list of a server also holds the disks it contests. Serial numbers identify hardware, so this needs
         `inventory.read`, not `servers.read`. An id the hub has no disks for
         gives an empty list.
       parameters:
@@ -2074,13 +2078,15 @@ components:
           items: { $ref: "#/components/schemas/Certificate" }
     Disk:
       type: object
-      required: [key, kind, identifiable, conflict, agent, device, vendor, model, serial, wwn, transport, size_bytes, virtual, present, first_seen, last_seen]
+      required: [key, kind, identifiable, conflict, contested, agent, device, vendor, model, serial, wwn, transport, size_bytes, virtual, present, first_seen, last_seen]
       properties:
         key: { type: string }
         kind: { type: string, enum: [wwn, eui64, nguid, model-serial, none] }
         identifiable: { type: boolean }
         conflict: { type: boolean }
         reason: { type: string }
+        contested: { type: boolean, description: Another connected server reports the same disk at the same time. }
+        contested_by: { type: string, description: The other server, when `contested`. }
         agent: { type: string, description: The server that last reported the disk. }
         device: { type: string, description: The kernel name on that server. Never an identity. }
         vendor: { type: string }

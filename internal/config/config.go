@@ -68,11 +68,27 @@ type Config struct {
 	// PluginsDir, when set, is the directory of the plugins the hub runs, each
 	// as its own process with the role hub (docs/plugins/runtime.md). Empty:
 	// no plugin is run.
-	PluginsDir string   `yaml:"plugins_dir"`
-	Database   Database `yaml:"database"`
-	Log        Log      `yaml:"log"`
-	Console    Console  `yaml:"console"`
-	Updates    Updates  `yaml:"updates"`
+	PluginsDir string     `yaml:"plugins_dir"`
+	Database   Database   `yaml:"database"`
+	Log        Log        `yaml:"log"`
+	Console    Console    `yaml:"console"`
+	Updates    Updates    `yaml:"updates"`
+	Prometheus Prometheus `yaml:"prometheus"`
+}
+
+// MinMetricsTokenLength is the shortest accepted prometheus.token: the token is
+// the only thing between the metrics endpoint and whoever can reach the port.
+const MinMetricsTokenLength = 32
+
+// Prometheus configures GET /metrics, the hub's own figures and the latest
+// figures of each server in the Prometheus text format (#389). It is off by
+// default. The endpoint is not behind a login, so it needs a bearer token; the
+// token is read only from the environment (REGULUS_PROMETHEUS_TOKEN), like the
+// database password, and never shown or written to the configuration file.
+type Prometheus struct {
+	Enabled bool `yaml:"enabled"`
+	// Token is the bearer secret a scraper sends in the Authorization header.
+	Token string `yaml:"-"`
 }
 
 // Database says where the hub keeps its data: a SQLite file in data_dir (the
@@ -218,6 +234,9 @@ func (c Config) Validate() error {
 	if c.MetricsBudget < MinMetricsBudget {
 		return fmt.Errorf("metrics_budget %v is too small (minimum %v)", c.MetricsBudget, MinMetricsBudget)
 	}
+	if c.Prometheus.Enabled && len(c.Prometheus.Token) < MinMetricsTokenLength {
+		return fmt.Errorf("prometheus.enabled needs a token of at least %d characters in REGULUS_PROMETHEUS_TOKEN (for example the output of `openssl rand -hex 32`), put it in /etc/regulus/regulus.env", MinMetricsTokenLength)
+	}
 	if err := c.Storage().Validate(); err != nil {
 		return err
 	}
@@ -326,6 +345,14 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 		}
 		cfg.Updates.Apply = b
 	}
+	if v := getenv("REGULUS_PROMETHEUS_ENABLED"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid configuration: REGULUS_PROMETHEUS_ENABLED %q is not a boolean", v)
+		}
+		cfg.Prometheus.Enabled = b
+	}
+	cfg.Prometheus.Token = getenv("REGULUS_PROMETHEUS_TOKEN")
 	setIfNotEmpty(&cfg.Database.Type, strings.ToLower(getenv("REGULUS_DATABASE_TYPE")))
 	setIfNotEmpty(&cfg.Database.Host, getenv("REGULUS_DATABASE_HOST"))
 	if v := getenv("REGULUS_DATABASE_PORT"); v != "" {

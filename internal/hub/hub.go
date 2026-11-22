@@ -55,6 +55,8 @@ type Hub struct {
 	closeErr  error
 
 	dbState dbHealth
+	// stats are the counters of GET /metrics (#389).
+	stats *Stats
 	// demoted is set when another hub took the active-hub lock of the
 	// database (#344); stopTimers ends the timers that must run in one place.
 	demoted    atomic.Bool
@@ -195,6 +197,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		unlockDir:      unlockDir,
 		ui:             ui,
 		agents:         newAgentServer(log),
+		stats:          &Stats{},
 		transport:      inproc.New(),
 		startedAt:      time.Now(),
 		agentKeepalive: defaultAgentKeepalive(),
@@ -207,6 +210,15 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 			return h.fleet.Seen(ctx, info.ID, info.Version, sys.GetHostname(), sys.GetOsVersion(), at)
 		}
 	})
+	h.agents.stats = h.stats
+	h.agents.gone = func(agentID string) {
+		h.seen.put("disks-gone/"+agentID, func(ctx context.Context) error { return h.releaseContested(ctx, agentID) })
+	}
+	h.seen.onWrite = func(took time.Duration, err error) {
+		if err == nil {
+			h.stats.dbWrite(took)
+		}
+	}
 	h.agents.seen = h.seen.seen
 	h.agents.disks = func(agentID string, disks []*agentv1.PhysicalDisk, at time.Time) {
 		h.seen.put("disks/"+agentID, func(ctx context.Context) error { return h.recordDisks(ctx, agentID, disks, at) })
@@ -326,7 +338,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -531,6 +543,11 @@ type Deps struct {
 	// Certificates reports when the hub's certificates end. May be nil in
 	// tests; the endpoint then answers 404.
 	Certificates CertificateSource
+	// MetricsToken, when not empty, turns on GET /metrics for this bearer
+	// token (#389). Empty: the endpoint does not exist.
+	MetricsToken string
+	// Stats holds the counters of GET /metrics. May be nil.
+	Stats *Stats
 }
 
 // route is a protected API endpoint.
@@ -577,7 +594,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
-		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead)))},
+		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(l.put)))), needsAuth: true},
 		{pattern: "GET /api/enrollment-tokens", handler: need(auth.PermServersManage, http.HandlerFunc(f.listTokens)), needsAuth: true},
@@ -626,6 +643,16 @@ func NewHandler(d Deps) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": ok})
 	})
+
+	// /metrics is not under /api/ and not behind a login: a scraper cannot
+	// sign in, so it has its own bearer token (see prometheus.go). Without a
+	// token there is no such endpoint.
+	if d.MetricsToken != "" {
+		mux.Handle("GET /metrics", metricsEndpointHandler(promSource{
+			token: d.MetricsToken, version: d.Version, agents: d.Agents, certificates: d.Certificates,
+			updates: d.Updates, rollout: d.Rollout, dbProblem: d.DatabaseProblem, stats: d.Stats,
+		}))
+	}
 
 	api := http.NewServeMux()
 	for _, r := range apiRoutes(d) {

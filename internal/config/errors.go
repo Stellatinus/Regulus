@@ -18,7 +18,7 @@ const (
 	ErrAddress         ErrorCode = "address"          // none
 	ErrPort            ErrorCode = "port"             // none
 	ErrSchema          ErrorCode = "schema"           // none
-	ErrPasswordInFile  ErrorCode = "password_in_file" // none
+	ErrPasswordInFile  ErrorCode = "password_in_file" // the environment variable
 	ErrBool            ErrorCode = "bool"             // none
 	ErrDuration        ErrorCode = "duration"         // none
 	ErrSize            ErrorCode = "size"             // none
@@ -43,7 +43,7 @@ var englishErrors = map[ErrorCode]string{
 	ErrAddress:         "use host:port, such as :8080 or 127.0.0.1:8080, or only the port",
 	ErrPort:            "the port must be a number from 1 to 65535",
 	ErrSchema:          "use letters, digits and underscore, not starting with a digit",
-	ErrPasswordInFile:  "the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
+	ErrPasswordInFile:  "the secret is never stored in the configuration file: put %s=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
 	ErrBool:            "use true or false",
 	ErrDuration:        "use a duration such as 10s or 1m",
 	ErrSize:            "use a size such as 256MiB or 1GiB",

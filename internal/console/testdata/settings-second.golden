@@ -23,8 +23,8 @@ Regulus v0.3.0  Hub ● running
    log.format             text                       file
    updates.check          true                       default
    updates.apply          false                      default
-   console.tui            true                       default
-
+   prometheus.enabled     false                      default
+   prometheus.token       (empty)                    default
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ section  ↑/↓ move  enter edit  r restart  q quit

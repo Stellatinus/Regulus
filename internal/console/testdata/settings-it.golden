@@ -23,8 +23,8 @@ Regulus v0.3.0  Hub ● in esecuzione
    log.format             text                       file
    updates.check          true                       predefinito
    updates.apply          false                      predefinito
-   console.tui            true                       predefinito
-
+   prometheus.enabled     false                      predefinito
+   prometheus.token       (vuoto)                    predefinito
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ sezione  ↑/↓ muovi  invio modifica  r riavvia  q esci

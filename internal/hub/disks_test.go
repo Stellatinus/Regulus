@@ -244,3 +244,95 @@ func TestPhysicalDisksOfAReportAreStoredAndLeftOutOfTheHistory(t *testing.T) {
 		t.Errorf("the agent's last report keeps the physical disks: %v", last)
 	}
 }
+
+// connectFake gives the agent a session without a stream (the disks code only
+// asks whether it is connected).
+func connectFake(t *testing.T, h *Hub, id string) *session {
+	t.Helper()
+	return h.agents.register(id, &agentv1.Hello{}, 1, "", false)
+}
+
+func TestTheSameDiskFromTwoConnectedServersIsAConflictNotMoves(t *testing.T) {
+	h := startHub(t)
+	t0 := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	a, b := connectFake(t, h, "server-a"), connectFake(t, h, "server-b")
+
+	recordDisks(t, h, "server-a", t0, sata("sda", "CLONE1"))
+	// server-b reports the same disk, over and over, while server-a does too.
+	for i := 1; i <= 3; i++ {
+		recordDisks(t, h, "server-b", t0.Add(time.Duration(i)*time.Minute), sata("sdx", "CLONE1"))
+		recordDisks(t, h, "server-a", t0.Add(time.Duration(i)*time.Minute), sata("sda", "CLONE1"), sata("sdb", "OWN-A"))
+	}
+	if moves, _ := h.DiskMoves(t.Context(), 10); len(moves) != 0 {
+		t.Fatalf("a disk reported by two connected servers made %d moves: %+v", len(moves), moves)
+	}
+	for _, id := range []string{"server-a", "server-b"} {
+		disks, err := h.AgentDisks(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found *DiskRecord
+		for i := range disks {
+			if strings.Contains(disks[i].Key, "clone1") {
+				found = &disks[i]
+			}
+		}
+		if found == nil || !found.Contested || found.Agent != "server-a" || found.ContestedBy != "server-b" {
+			t.Errorf("%s sees %+v, want the disk held by server-a and contested by server-b", id, disks)
+		}
+	}
+	if disks, _ := h.AgentDisks(t.Context(), "server-a"); len(disks) != 2 {
+		t.Errorf("server-a lists %d disks, want its two", len(disks))
+	}
+
+	// server-a stops reporting it: server-b has it, and is asked to report
+	// again, which records the move.
+	b.diskRecheck.Store(false)
+	recordDisks(t, h, "server-a", t0.Add(10*time.Minute), sata("sdb", "OWN-A"))
+	if !b.diskRecheck.Load() {
+		t.Fatal("server-b was not asked to report its disks again")
+	}
+	recordDisks(t, h, "server-b", t0.Add(11*time.Minute), sata("sdx", "CLONE1"))
+	moves, _ := h.DiskMoves(t.Context(), 10)
+	if len(moves) != 1 || moves[0].From != "server-a" || moves[0].To != "server-b" {
+		t.Fatalf("moves = %+v, want one from server-a to server-b", moves)
+	}
+	disks, _ := h.AgentDisks(t.Context(), "server-b")
+	if len(disks) != 1 || disks[0].Contested || disks[0].Agent != "server-b" || !disks[0].Present {
+		t.Errorf("server-b = %+v", disks)
+	}
+	_ = a
+}
+
+func TestAConflictEndsWhenTheOtherServerStopsReportingOrGoesAway(t *testing.T) {
+	h := startHub(t)
+	t0 := time.Now()
+	connectFake(t, h, "a")
+	b := connectFake(t, h, "b")
+
+	// b stops reporting it: no conflict, no move.
+	recordDisks(t, h, "a", t0, sata("sda", "Z1"))
+	recordDisks(t, h, "b", t0, sata("sdc", "Z1"))
+	if d, _ := h.AgentDisks(t.Context(), "a"); len(d) != 1 || !d[0].Contested {
+		t.Fatalf("not contested: %+v", d)
+	}
+	recordDisks(t, h, "b", t0.Add(time.Minute))
+	if d, _ := h.AgentDisks(t.Context(), "a"); len(d) != 1 || d[0].Contested || d[0].ContestedBy != "" {
+		t.Errorf("still contested after b stopped reporting it: %+v", d)
+	}
+	if moves, _ := h.DiskMoves(t.Context(), 10); len(moves) != 0 {
+		t.Errorf("moves = %+v", moves)
+	}
+
+	// b contests again, then a goes away: b is asked to report again, and
+	// then the disk is b's by a move.
+	recordDisks(t, h, "b", t0.Add(2*time.Minute), sata("sdc", "Z1"))
+	b.diskRecheck.Store(false)
+	h.agents.unregister(h.agents.sessions["a"])
+	waitFor(t, "b asked to report its disks again", func() bool { return b.diskRecheck.Load() })
+	recordDisks(t, h, "b", t0.Add(3*time.Minute), sata("sdc", "Z1"))
+	moves, _ := h.DiskMoves(t.Context(), 10)
+	if len(moves) != 1 || moves[0].From != "a" || moves[0].To != "b" {
+		t.Fatalf("moves = %+v, want one from a to b", moves)
+	}
+}

@@ -130,7 +130,7 @@ func TestSetFileKeepsCommentsAndOtherLines(t *testing.T) {
 	}
 	for _, e := range entries {
 		wantOrigin := OriginFile
-		if e.Key == "agent_listen" || e.Key == "plugins_dir" || e.Key == "console.tui" || strings.HasPrefix(e.Key, "database.") {
+		if e.Key == "agent_listen" || e.Key == "plugins_dir" || e.Key == "console.tui" || strings.HasPrefix(e.Key, "database.") || strings.HasPrefix(e.Key, "prometheus.") {
 			wantOrigin = OriginDefault
 		}
 		if e.Origin != wantOrigin {

@@ -132,6 +132,8 @@ var it = strs{
 		"log.format":           "Formato del log",
 		"updates.check":        "Cerca nuove release su GitHub ogni poche ore; false impedisce all'hub di contattare qualsiasi server per gli aggiornamenti",
 		"updates.apply":        "Permette alla dashboard di installare gli aggiornamenti scaricati tramite l'helper di root (regulus-update.path, attivato dall'installer)",
+		"prometheus.enabled":   "Serve GET /metrics nel formato testuale di Prometheus (i numeri dell'hub e gli ultimi di ogni server); richiede prometheus.token",
+		"prometheus.token":     "Token bearer che invia uno scrape di Prometheus, almeno 32 caratteri; letto solo dall'ambiente (/etc/regulus/regulus.env), mai mostrato né scritto nel file di configurazione",
 		"console.tui":          "Apre la console a schermo intero quando esegui `regulus` in un terminale",
 	},
 
@@ -225,7 +227,7 @@ var it = strs{
 		"address":          "usa host:porta, come :8080 o 127.0.0.1:8080, oppure solo la porta",
 		"port":             "la porta deve essere un numero da 1 a 65535",
 		"schema":           "usa lettere, cifre e trattino basso, senza iniziare con una cifra",
-		"password_in_file": "la password non viene mai salvata nel file di configurazione: scrivi REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (permessi 0640, root:regulus) e riavvia il servizio",
+		"password_in_file": "il segreto non viene mai salvato nel file di configurazione: scrivi %s=... in /etc/regulus/regulus.env (permessi 0640, root:regulus) e riavvia il servizio",
 		"bool":             "usa true o false",
 		"duration":         "usa una durata come 10s o 1m",
 		"size":             "usa una dimensione come 256MiB o 1GiB",

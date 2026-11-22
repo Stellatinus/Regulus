@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -443,5 +444,37 @@ func TestParseSizeRoundTrip(t *testing.T) {
 		if _, err := ParseSize(bad); err == nil {
 			t.Errorf("ParseSize(%q) succeeded, want an error", bad)
 		}
+	}
+}
+
+func TestPrometheusNeedsALongToken(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	if cfg, err := Load(nil, env(nil), io.Discard); err != nil || cfg.Prometheus.Enabled {
+		t.Fatalf("default: %+v, %v", cfg.Prometheus, err)
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_PROMETHEUS_ENABLED": "true"}), io.Discard); err == nil || !strings.Contains(err.Error(), "REGULUS_PROMETHEUS_TOKEN") {
+		t.Fatalf("enabled without a token: %v", err)
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_PROMETHEUS_ENABLED": "true", "REGULUS_PROMETHEUS_TOKEN": "short"}), io.Discard); err == nil {
+		t.Fatal("a short token was accepted")
+	}
+	long := strings.Repeat("a", MinMetricsTokenLength)
+	cfg, err := Load(nil, env(map[string]string{"REGULUS_PROMETHEUS_ENABLED": "true", "REGULUS_PROMETHEUS_TOKEN": long}), io.Discard)
+	if err != nil || !cfg.Prometheus.Enabled || cfg.Prometheus.Token != long {
+		t.Fatalf("enabled with a token: %+v, %v", cfg.Prometheus, err)
+	}
+	if v, _ := cfg.Get("prometheus.token"); v != Masked {
+		t.Errorf("the token is shown as %q", v)
+	}
+	if _, err := Load(nil, env(map[string]string{"REGULUS_PROMETHEUS_ENABLED": "maybe"}), io.Discard); err == nil {
+		t.Error("a value that is not a boolean was accepted")
+	}
+}
+
+func TestPrometheusTokenIsNeverWrittenToTheFile(t *testing.T) {
+	_, err := Normalize("prometheus.token", strings.Repeat("a", 40))
+	var se *SettingError
+	if !errors.As(err, &se) || se.Code != ErrPasswordInFile || se.Args[0] != "REGULUS_PROMETHEUS_TOKEN" {
+		t.Fatalf("Normalize: %v", err)
 	}
 }

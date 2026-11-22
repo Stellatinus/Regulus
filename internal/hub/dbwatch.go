@@ -53,8 +53,11 @@ func (h *Hub) checkDatabase(ctx context.Context) {
 	pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	problem := ""
+	began := time.Now()
 	if err := h.db.PingContext(pctx); err != nil {
 		problem = storage.Explain(err)
+	} else {
+		h.stats.dbRead(time.Since(began))
 	}
 	if problem == "" {
 		h.checkActiveLock(pctx)

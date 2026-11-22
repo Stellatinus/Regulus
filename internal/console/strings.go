@@ -334,7 +334,7 @@ var en = strs{
 		"address":          "use host:port, such as :8080 or 127.0.0.1:8080, or only the port",
 		"port":             "the port must be a number from 1 to 65535",
 		"schema":           "use letters, digits and underscore, not starting with a digit",
-		"password_in_file": "the password is never stored in the configuration file: put REGULUS_DATABASE_PASSWORD=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
+		"password_in_file": "the secret is never stored in the configuration file: put %s=... in /etc/regulus/regulus.env (mode 0640, root:regulus) and restart the service",
 		"bool":             "use true or false",
 		"duration":         "use a duration such as 10s or 1m",
 		"size":             "use a size such as 256MiB or 1GiB",
