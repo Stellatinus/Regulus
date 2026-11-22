@@ -18,7 +18,10 @@
 // it says how much the tab costs, not which component does.
 //
 // Needs the `playwright` package and a Chromium (the cloud session has both).
-import { chromium } from "playwright";
+import { createRequire } from "node:module";
+
+// require, not import: it finds a globally installed playwright through NODE_PATH.
+const { chromium } = createRequire(import.meta.url)("playwright");
 
 const base = process.argv[2];
 const seconds = Number(process.argv[3] ?? 60);

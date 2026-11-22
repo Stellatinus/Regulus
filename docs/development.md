@@ -65,3 +65,31 @@ It starts a hub (SQLite, built-in agent off, the real 10 s agent intervals), con
 The CPU figure includes the simulated agents and dashboards, so the hub's own share is lower. Nothing was dropped and every call answered 200.
 
 **What this does not measure**, and so what must not be claimed from it: a real network and TLS between agents and hub (the agents use the in-process transport); the WebSocket stream the dashboard really uses (its fan-out to 20 browsers); the database (the metrics history is in memory, and only the Servers and settings data touch it); the browser, where the cost of redrawing 200 servers is: the React profile with 50 or more agents is not done; and memory per connected agent: the process heap in the run is dominated by the 2 MiB of buffers the in-process transport allocates per connection, so it says nothing about a real connection. What the run does support is that the hub's own CPU and the latency of the two API calls are small at 200 agents, ten times the real report rate included. "Tested with" in the documents means this run only. A load run over real TLS connections (several machines, or a loopback listener with the agent binary) and the browser measurements stay open in #234.
+
+## Load test over real connections (#370)
+
+`internal/e2e/load_test.go` (`TestHubUnderRealLoad`) measures what the in-process run above cannot. It runs the real `regulus` binary as the hub in a process of its own (so the CPU and memory are the hub's own), connects N simulated agents over **real mTLS** on a loopback listener (one enrollment and one certificate each), gives each of M users a **real WebSocket** to `/api/stream` and one **database write** a second (a layout save, alternating with `GET /api/agents`), and prints the hub's CPU and memory from `/proc`, the WebSocket events per second and how long a metrics event takes to reach a dashboard after its report, and the latency of the calls.
+
+```sh
+REGULUS_LOAD=1 go test -run TestHubUnderRealLoad -v -count=1 -timeout 20m ./internal/e2e/
+# knobs: REGULUS_LOAD_AGENTS=200 REGULUS_LOAD_DASHBOARDS=20 REGULUS_LOAD_INTERVAL=10s REGULUS_LOAD_SECONDS=60
+# PostgreSQL: REGULUS_LOAD_DATABASE_URL='postgres://user:pass@host:5432/emptydb?sslmode=disable'
+# REGULUS_E2E_BIN=bin/regulus uses a binary you built (otherwise one is built without -race)
+```
+
+**One run** (a 4-vCPU virtual machine with 16 GB, Go 1.27, PostgreSQL 16 on the same machine over loopback, 22 November 2026; the simulated agents and dashboards share the machine with the hub), 200 agents and 20 dashboards:
+
+| | SQLite, a report every 10 s (real default) | SQLite, every 1 s (10× real) | PostgreSQL, every 10 s |
+|---|---|---|---|
+| Hub CPU (its own process) | 5.1% of one CPU | 18.2% | 5.0% |
+| Hub memory (RSS), with 200 agents connected | 60 MiB (77 at the end, highest 92) | 63 MiB (88 at the end, highest 92) | 57 MiB (76 at the end, highest 91) |
+| WebSocket events to 20 dashboards | 800/s | 8,003/s (87 MiB in 30 s) | 801/s |
+| Report to dashboard (p50 / p95 / max) | 0.7 / 1.4 / 12.8 ms | 0.6 / 1.0 / 23.3 ms | 0.8 / 1.1 / 10.7 ms |
+| `PUT /api/layout` (p50 / p95 / max) | 6.8 / 14.1 / 29.9 ms | 5.9 / 30.5 / 36.0 ms | 8.9 / 18.6 / 31.7 ms |
+| `GET /api/agents` (p50 / p95 / max) | 7.9 / 15.7 / 21.1 ms | 11.9 / 23.6 / 45.2 ms | 15.0 / 28.8 / 64.2 ms |
+
+Nothing was dropped: every call answered and no WebSocket closed. The 200 agents enrolled and connected in 2 s. The hub's memory figure has no per-connection value: the hub's start-up peaks near 90 MiB and the runtime returns it over minutes, so two readings do not differ by what a connection costs; the claim that holds is that the hub stayed under 92 MiB with 200 connected agents and 20 dashboards. A write path under a handful of users is not a contention test: 20 users write one small row each per second.
+
+**The dashboard in a browser**, 50 agents connected: `scripts/browser-load.mjs` (needs Playwright and a binary built with the dashboard, see the comment at its top) drives Chromium and reads its own metrics. Run for 30 s, a report every 10 s: the Servers page showed all 50 servers 1.0 s after sign-in; the JavaScript heap was 3.9 MiB at the start and 4.1 MiB after 30 s with a forced garbage collection, the DOM stayed at 1,214 nodes, the page spent 3.9 ms of every second on tasks (1.1 ms running scripts), there was no task longer than 50 ms, and a heap snapshot is 11 MiB. This is **not** the React Profiler: it says what the tab costs, not which component does, and a report every 10 s gives the page little to redraw; a run at 1 s is still to do.
+
+**Still not measured**: several machines and a real network between agents and hub (all of this is loopback, so network latency and the cost of many real TLS handshakes at once are not in it), the write paths under many users writing to the same rows or under load from the agents' own writes (agent presence), PostgreSQL on another host, and the browser with the React Profiler or on a slow device. The limits written in the documents ("tested with") mean these runs only. Findings become `[Audit]` issues: none from this run.

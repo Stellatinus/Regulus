@@ -343,8 +343,11 @@ func TestHubUnderRealLoad(t *testing.T) {
 		agents, interval, float64(agents)/interval.Seconds(), dashboards, elapsed.Round(time.Second))
 	t.Logf("reports sent: %d", sent.Load())
 	t.Logf("hub CPU (its own process): %.1f%% of one CPU", 100*(cpu1-cpu0)/elapsed.Seconds())
-	t.Logf("hub memory (RSS): %.1f MiB empty, %.1f MiB with %d connected agents, %.1f MiB at the end (peak %.1f MiB); %.0f KiB per connected agent; %d threads",
-		float64(rss0)/1024, float64(rss1)/1024, agents, float64(rss2)/1024, float64(hwm)/1024, float64(rss1-rss0)/float64(agents), threads)
+	// No figure per agent: the start-up of the hub peaks above what it holds
+	// at rest, and the runtime gives that memory back over minutes, so the
+	// difference of two readings says nothing about one connection.
+	t.Logf("hub memory (RSS): %.1f MiB shortly after start (start-up peak), %.1f MiB with %d connected agents, %.1f MiB at the end, %.1f MiB highest; %d threads",
+		float64(rss0)/1024, float64(rss1)/1024, agents, float64(rss2)/1024, float64(hwm)/1024, threads)
 	t.Logf("WebSocket: %d events (%.1f MiB) to %d dashboards = %.0f events/s in total; metrics events arrived %s ms p50, %s ms p95, %s ms max after the report (%d events measured); %d connections dropped",
 		events.Load(), float64(bytesIn.Load())/(1<<20), dashboards, float64(events.Load())/elapsed.Seconds(),
 		ms(pct(latencies, 0.5)), ms(pct(latencies, 0.95)), ms(pct(latencies, 1)), len(latencies), wsErr.Load())
