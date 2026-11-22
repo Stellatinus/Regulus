@@ -91,6 +91,9 @@ type Snapshot struct {
 	// the CA and agent certificates that end within 90 days (see certs.go).
 	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
 	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
+	// UpdateAvailable is the version of a newer release found at the last
+	// check of the running hub (#71), empty when there is none.
+	UpdateAvailable string `json:"update_available,omitempty"`
 	// PluginsEnabled is true when the running hub has a plugins directory;
 	// Plugins is the state of its plugins and PluginsProblem why none runs.
 	PluginsEnabled bool     `json:"plugins_enabled,omitempty"`
@@ -220,10 +223,14 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 		snap.DatabaseProblem = live.DatabaseProblem
 		snap.PluginsEnabled, snap.PluginsProblem, snap.Plugins = live.PluginsEnabled, live.PluginsProblem, live.Plugins
 		snap.CertSoonest, snap.CertWarnings = live.CertSoonest, live.CertWarnings
+		snap.UpdateAvailable = live.UpdateAvailable
 	}
 	snap.Health = healthChecks(snap, cfg, fetchErr)
 	if c, ok := certCheck(snap, sys.Now()); ok {
 		snap.Health = append(snap.Health, c)
+	}
+	if snap.Running {
+		snap.Health = append(snap.Health, updatesCheck(snap))
 	}
 	return snap
 }
@@ -439,4 +446,16 @@ func formatDuration(d time.Duration, s strs) string {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// updatesCheck says whether the running hub found a newer release (#71). It is
+// a warning, not a failure: the server works, it only is not the newest.
+func updatesCheck(snap Snapshot) Check {
+	name := func(s strs) string { return s.ChkUpdates }
+	if snap.UpdateAvailable != "" {
+		d := tr(func(s strs) string { return s.UpdPending }, snap.UpdateAvailable)
+		return Check{Name: name(en), Status: Warn, Detail: d(en), Key: "updates", Title: name(T), Text: d(T)}
+	}
+	d := tr(func(s strs) string { return s.UpdNone })
+	return Check{Name: name(en), Status: OK, Detail: d(en), Key: "updates", Title: name(T), Text: d(T)}
 }

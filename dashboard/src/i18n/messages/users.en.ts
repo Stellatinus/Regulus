@@ -141,4 +141,23 @@ export const users = {
   "users.event.user_deleted": "user deleted",
   "users.event.user_disabled": "user disabled",
   "users.event.user_enabled": "user enabled",
+
+  // #354: the fixed forms of the detail of an audit entry.
+  "users.detail.role": "role {role}",
+  "users.detail.fromTo": "{from} → {to}",
+  "users.detail.otherSessionsEnded": "other sessions ended",
+  "users.detail.resetLinkUsed": "reset link used, sessions ended",
+  "users.detail.sessionsEnded": "sessions ended",
+  "users.detail.firstAdmin": "first admin",
+  "users.detail.resetAdminCommand": "reset-admin command",
+  "users.detail.wrongSecondFactor": "wrong second factor",
+  "users.detail.accountDisabled": "account disabled",
+  "users.detail.recoveryCode": "recovery code",
+  "users.detail.port": "port {port}",
+  "users.detail.rolloutStarted": "{servers} servers, {wave} at a time",
+  "users.detail.rollout.stopped": "stopped",
+  "users.detail.rollout.done": "done",
+  "users.detail.rollout.failed": "failed",
+  "users.detail.fromVersion": "from {version}",
+  "users.detail.roleRenamed": "renamed from {name}; {permissions}",
 } as const;

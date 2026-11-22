@@ -5,23 +5,66 @@ name: Release
 # is pushed, or when "Publish release" (publish-release.yml) starts it on the
 # tag it made. It must run on the tag: the hub only accepts a signature made by
 # release.yml@refs/tags/<tag>.
+#
+# Two jobs, because the signing identity is the root of trust of every hub and
+# agent (#206):
+#   build    runs the dependency installs and build scripts (npm, Go, GoReleaser)
+#            with a read-only token and NO id-token, so nothing it runs can ask
+#            Sigstore for a certificate.
+#   publish  runs no install and no build: it checks the files the build made
+#            against checksums.txt, signs checksums.txt and uploads the release.
+#            It is the only job with id-token and contents: write.
+# The tools are pinned to a version here. Pinning every action to a commit is
+# not done yet: see docs/decisions.md, "The release workflow" and scripts/pin-actions.sh.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: write # create the release and upload assets
-  id-token: write # keyless signing with Sigstore
+# No permission at all unless a job asks for it.
+permissions: {}
+
+env:
+  GORELEASER_VERSION: v2.12.0
+  COSIGN_VERSION: v2.6.1
+  SYFT_VERSION: v1.57.2
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      actions: read # to read the result of CI on this commit
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # GoReleaser builds the changelog from the git history
+          fetch-depth: 0 # GoReleaser builds the changelog from the git history, and the check below needs main
+          persist-credentials: false
+      # A tag pushed by hand skips publish-release.yml, which is where the
+      # checks used to live (#207). They are repeated here, in the workflow
+      # whose identity is trusted. They are not the whole protection: the
+      # workflow file that runs is the one at the tagged commit, so someone who
+      # can push a tag can also remove these steps. What stops that is who may
+      # create `v*` tags and who may approve the `release` environment (see
+      # docs/releases.md); these steps stop a mistake and an unreviewed commit.
+      - name: Only a commit on main whose CI is green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          # fetch-depth 0 above brought every branch.
+          git rev-parse --verify -q refs/remotes/origin/main >/dev/null || { echo "::error::main was not fetched"; exit 1; }
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::${GITHUB_REF_NAME} is on ${GITHUB_SHA}, which is not on main. Releases are made from main only."
+            exit 1
+          fi
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&per_page=1" --jq '.workflow_runs[0] // {} | (.status // "") + " " + (.conclusion // "")')
+          if [ "$run" != "completed success" ]; then
+            echo "::error::CI has not passed on ${GITHUB_SHA} (${run:-no run}). Releases are made from a commit with green CI."
+            exit 1
+          fi
+          echo "${GITHUB_SHA} is on main and CI passed."
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -30,11 +73,89 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
-      - uses: sigstore/cosign-installer@v3
       - uses: anchore/sbom-action/download-syft@v0
+        with:
+          syft-version: ${{ env.SYFT_VERSION }}
       - uses: goreleaser/goreleaser-action@v6
         with:
-          version: "~> v2"
-          args: release --clean
+          version: ${{ env.GORELEASER_VERSION }}
+          # Builds the archives, packages, SBOMs and checksums.txt. Signing and
+          # uploading are the next job's.
+          args: release --clean --skip=publish,sign,announce
+      - name: Collect the files of the release
+        run: |
+          set -eu
+          mkdir release
+          cp dist/checksums.txt dist/CHANGELOG.md release/
+          for f in dist/*.tar.gz dist/*.deb dist/*.rpm dist/*.sbom.json; do
+            [ -e "$f" ] && cp "$f" release/
+          done
+          # The installer is published, and signed, with the packages.
+          cp packaging/install.sh release/install.sh
+          ls -l release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-files
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # Protection rules of this environment (required reviewers, only `v*` tags)
+    # are set in the repository settings; without them it changes nothing.
+    environment: release
+    permissions:
+      contents: write # create the release and upload assets
+      id-token: write # keyless signing with Sigstore
+    steps:
+      # The download is checked against the digest of the upload (the action
+      # fails on a mismatch). No checkout and no install in this job.
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-files
+          path: release
+      - name: Check the files against checksums.txt
+        working-directory: release
+        run: |
+          set -eu
+          sha256sum --check --strict checksums.txt
+          # Nothing is published that checksums.txt does not name.
+          for f in *; do
+            case "$f" in checksums.txt | CHANGELOG.md) continue ;; esac
+            grep -q -- "  $f\$" checksums.txt || { echo "::error::$f is not listed in checksums.txt"; exit 1; }
+          done
+      - uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Sign checksums.txt
+        working-directory: release
+        run: |
+          # The hub verifies this file in-process and reads the Sigstore bundle
+          # format; cosign 2 writes an older layout unless asked.
+          cosign sign-blob --yes --new-bundle-format --bundle checksums.txt.sigstore.json checksums.txt
+      - name: Publish the release
+        working-directory: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          version=${TAG#v}
+          {
+            printf 'Install this version on Ubuntu Server 22.04 or newer:\n\n```sh\n'
+            printf 'curl -fsSLO https://github.com/%s/releases/download/%s/install.sh\n' "$GITHUB_REPOSITORY" "$TAG"
+            printf 'sh install.sh --version %s\n```\n\n' "$version"
+            printf 'Read `install.sh --help` for the options (built-in agent, agent role, channel).\n\n'
+            cat CHANGELOG.md
+          } >../notes.md
+          # Alphas and betas (a tag with a suffix) are pre-releases; GitHub's
+          # "latest" is always the newest stable release.
+          case "$TAG" in
+            *-*) kind=--prerelease ;;
+            *) kind=--latest ;;
+          esac
+          files=$(ls | grep -v '^CHANGELOG.md$')
+          # shellcheck disable=SC2086
+          gh release create "$TAG" $files --verify-tag --title "$TAG" --notes-file ../notes.md "$kind"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/sigstore/sigstore-go/pkg/root"
@@ -90,5 +91,72 @@ func TestTheEmbeddedTrustedRootLoads(t *testing.T) {
 	}
 	if len(tr.FulcioCertificateAuthorities()) == 0 || len(tr.RekorLogs()) == 0 || len(tr.CTLogs()) == 0 {
 		t.Errorf("the snapshot lacks Fulcio, Rekor or CT material: %d, %d, %d", len(tr.FulcioCertificateAuthorities()), len(tr.RekorLogs()), len(tr.CTLogs()))
+	}
+}
+
+// #214: the use of the embedded Sigstore root is reported, once, and again
+// when a current root is back; a failed fetch after a good one keeps the good
+// one without reporting anything.
+func TestPublicTrustReportsTheEmbeddedFallback(t *testing.T) {
+	old := fetchTrustedRootFunc
+	t.Cleanup(func() { fetchTrustedRootFunc = old })
+	fail := errors.New("network is unreachable")
+	failing := true
+	live, err := root.NewTrustedRootFromJSON(trustedRootJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetchTrustedRootFunc = func(context.Context, string) (*root.TrustedRoot, error) {
+		if failing {
+			return nil, fail
+		}
+		return live, nil
+	}
+	var states []TrustState
+	trust := PublicTrustReporting("", func(s TrustState) { states = append(states, s) })
+
+	if _, err := trust(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := trust(context.Background()); err != nil { // cached: no second report
+		t.Fatal(err)
+	}
+	if len(states) != 1 || !states[0].Embedded || states[0].Reason != fail.Error() {
+		t.Fatalf("states = %+v, want one fallback with the reason of the failure", states)
+	}
+}
+
+func TestPublicTrustReportsWhenACurrentRootIsBack(t *testing.T) {
+	old := fetchTrustedRootFunc
+	t.Cleanup(func() { fetchTrustedRootFunc = old })
+	live, err := root.NewTrustedRootFromJSON(trustedRootJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := true
+	fetchTrustedRootFunc = func(context.Context, string) (*root.TrustedRoot, error) {
+		if failing {
+			return nil, errors.New("offline")
+		}
+		return live, nil
+	}
+	var states []TrustState
+	var mu sync.Mutex
+	trust := PublicTrustReporting("", func(s TrustState) { mu.Lock(); states = append(states, s); mu.Unlock() })
+	if _, err := trust(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// Time passes: the embedded root is retried sooner than a current one.
+	failing = false
+	oldRetry := trustRetryEmbedded
+	trustRetryEmbedded = 0
+	t.Cleanup(func() { trustRetryEmbedded = oldRetry })
+	if _, err := trust(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(states) != 2 || !states[0].Embedded || states[1].Embedded {
+		t.Fatalf("states = %+v, want the fallback and then the end of it", states)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 )
@@ -158,5 +159,138 @@ func TestContainerSystemInfoFollowsTheLimits(t *testing.T) {
 	applyContainerLimits(info, cgroupLimits{})
 	if info.CpuCount != 4 || info.MemoryTotalBytes != 16*gib {
 		t.Errorf("without limits info = %+v, want the host's", info)
+	}
+}
+
+// #355, cgroup v2: the CPU time and the swap of the group are read.
+func TestCgroupV2CPUUsageAndSwap(t *testing.T) {
+	proc, root := t.TempDir(), t.TempDir()
+	writeProc(t, proc, map[string]string{"self/cgroup": "0::/\n"})
+	writeProc(t, root, map[string]string{
+		"cgroup.controllers":  "cpu memory\n",
+		"memory.max":          "max\n",
+		"memory.swap.max":     "268435456\n", // 256 MiB
+		"memory.swap.current": "67108864\n",  // 64 MiB
+		"cpu.stat":            "usage_usec 5000000\nuser_usec 3000000\nsystem_usec 2000000\n",
+	})
+	got := readCgroupLimits(proc, root)
+	if !got.HaveCPUUsage || got.CPUUsageUsec != 5_000_000 {
+		t.Errorf("cpu usage = %d (read %v), want 5000000 µs", got.CPUUsageUsec, got.HaveCPUUsage)
+	}
+	if !got.HaveSwapLimit || got.SwapLimit != 256*mib || !got.HaveSwapUsed || got.SwapUsed != 64*mib {
+		t.Errorf("swap = %+v, want 64 MiB of 256 MiB", got)
+	}
+
+	// "max" is no limit; a limit of 0 is "no swap".
+	writeProc(t, root, map[string]string{"memory.swap.max": "max\n"})
+	if got := readCgroupLimits(proc, root); got.HaveSwapLimit {
+		t.Errorf("swap.max max read as a limit of %d", got.SwapLimit)
+	}
+	writeProc(t, root, map[string]string{"memory.swap.max": "0\n"})
+	if got := readCgroupLimits(proc, root); !got.HaveSwapLimit || got.SwapLimit != 0 {
+		t.Errorf("swap.max 0: %+v, want a limit of 0", got)
+	}
+}
+
+// #355, cgroup v1: cpuacct.usage is in nanoseconds; the swap is what memsw has
+// beyond the memory figures.
+func TestCgroupV1CPUUsageAndSwap(t *testing.T) {
+	proc, root := t.TempDir(), t.TempDir()
+	writeProc(t, proc, map[string]string{"self/cgroup": "12:memory:/docker/abc\n4:cpu,cpuacct:/docker/abc\n"})
+	writeProc(t, root, map[string]string{
+		"memory/docker/abc/memory.limit_in_bytes":       "268435456\n",
+		"memory/docker/abc/memory.usage_in_bytes":       "134217728\n",
+		"memory/docker/abc/memory.memsw.limit_in_bytes": "402653184\n", // 384 MiB: 128 MiB of swap
+		"memory/docker/abc/memory.memsw.usage_in_bytes": "159383552\n", // 152 MiB: 24 MiB of swap
+		"cpu,cpuacct/docker/abc/cpuacct.usage":          "7500000000\n",
+		"cpu,cpuacct/docker/abc/cpu.cfs_quota_us":       "-1\n",
+		"cpu,cpuacct/docker/abc/cpu.cfs_period_us":      "100000\n",
+	})
+	got := readCgroupLimits(proc, root)
+	if !got.HaveCPUUsage || got.CPUUsageUsec != 7_500_000 {
+		t.Errorf("cpu usage = %d (read %v), want 7500000 µs", got.CPUUsageUsec, got.HaveCPUUsage)
+	}
+	if !got.HaveSwapLimit || got.SwapLimit != 128*mib || !got.HaveSwapUsed || got.SwapUsed != 24*mib {
+		t.Errorf("swap = %+v, want 24 MiB of 128 MiB", got)
+	}
+}
+
+// TestCollectorReportsTheContainersCPUUsage is #355: the CPU widget follows the
+// container's own use, divided by its quota; a first report, or one over too
+// short an interval, keeps the host's figure.
+func TestCollectorReportsTheContainersCPUUsage(t *testing.T) {
+	proc := t.TempDir()
+	writeProc(t, proc, map[string]string{"stat": statSample, "meminfo": meminfoSample})
+	c := newLinuxCollector(proc, nil)
+	clock := time.Unix(1_000_000, 0)
+	c.now = func() time.Time { return clock }
+	c.hostCPUs = func() int { return 4 }
+	lim := cgroupLimits{HaveCPUUsage: true, CPUUsageUsec: 10_000_000, CPUQuota: 1.5}
+	c.cgroup = func() cgroupLimits { return lim }
+
+	host, err := c.Collect(context.Background()) // first reading: the host's figure stays
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = clock.Add(10 * time.Second)
+	lim.CPUUsageUsec += 7_500_000 // 0.75 CPU on average, half of a 1.5 CPU quota
+	r, err := c.Collect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.GetCpu().GetUsagePercent(); got < 49.99 || got > 50.01 {
+		t.Errorf("usage = %.2f%%, want 50%% of the 1.5 CPU quota (the host figure was %.2f%%)", got, host.GetCpu().GetUsagePercent())
+	}
+
+	// No quota: divide by the CPUs the group may run on.
+	lim.CPUQuota = 0
+	clock = clock.Add(10 * time.Second)
+	lim.CPUUsageUsec += 10_000_000 // one CPU of four
+	r, _ = c.Collect(context.Background())
+	if got := r.GetCpu().GetUsagePercent(); got < 24.99 || got > 25.01 {
+		t.Errorf("without a quota usage = %.2f%%, want 25%% of 4 CPUs", got)
+	}
+
+	// An interval that is too short does not move the reading.
+	clock = clock.Add(100 * time.Millisecond)
+	lim.CPUUsageUsec += 90_000
+	_, _ = c.Collect(context.Background())
+	clock = clock.Add(10 * time.Second)
+	lim.CPUUsageUsec += 4_000_000
+	r, _ = c.Collect(context.Background())
+	if got := r.GetCpu().GetUsagePercent(); got < 10 || got > 10.2 {
+		t.Errorf("after a short interval usage = %.2f%%, want about 10%% (4.09 s over 10.1 s on 4 CPUs)", got)
+	}
+
+	// No reading from the cgroup: the host's figure.
+	lim.HaveCPUUsage = false
+	if r, _ = c.Collect(context.Background()); r.GetCpu() == nil {
+		t.Fatal("no CPU figure")
+	}
+}
+
+func TestContainersSwapFollowsTheCgroup(t *testing.T) {
+	mem := &agentv1.MemoryMetrics{SwapTotalBytes: 8 * gib, SwapUsedBytes: 3 * gib}
+	applySwapLimit(mem, cgroupLimits{HaveSwapLimit: true, SwapLimit: 256 * mib, HaveSwapUsed: true, SwapUsed: 64 * mib})
+	if mem.SwapTotalBytes != 256*mib || mem.SwapUsedBytes != 64*mib {
+		t.Errorf("swap = %d/%d, want 64 MiB of 256 MiB", mem.SwapUsedBytes, mem.SwapTotalBytes)
+	}
+	// No limit: the host's total, the container's use.
+	mem = &agentv1.MemoryMetrics{SwapTotalBytes: 8 * gib, SwapUsedBytes: 3 * gib}
+	applySwapLimit(mem, cgroupLimits{HaveSwapUsed: true, SwapUsed: 64 * mib})
+	if mem.SwapTotalBytes != 8*gib || mem.SwapUsedBytes != 64*mib {
+		t.Errorf("swap without a limit = %d/%d", mem.SwapUsedBytes, mem.SwapTotalBytes)
+	}
+	// A limit above the host's swap is not more swap; no swap on the host is none.
+	mem = &agentv1.MemoryMetrics{SwapTotalBytes: 0}
+	applySwapLimit(mem, cgroupLimits{HaveSwapLimit: true, SwapLimit: gib, HaveSwapUsed: true, SwapUsed: 5})
+	if mem.SwapTotalBytes != 0 || mem.SwapUsedBytes != 0 {
+		t.Errorf("host without swap: %d/%d", mem.SwapUsedBytes, mem.SwapTotalBytes)
+	}
+	// Nothing read: unchanged.
+	mem = &agentv1.MemoryMetrics{SwapTotalBytes: gib, SwapUsedBytes: 5}
+	applySwapLimit(mem, cgroupLimits{})
+	if mem.SwapTotalBytes != gib || mem.SwapUsedBytes != 5 {
+		t.Errorf("swap changed without a reading: %+v", mem)
 	}
 }

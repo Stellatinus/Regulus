@@ -158,7 +158,7 @@ func agentsHandler(src AgentSource) http.HandlerFunc {
 			if reg, ok := src.(registrySource); ok {
 				var err error
 				if enrolled, err = reg.Registry(r.Context()); err != nil {
-					writeJSONError(w, http.StatusInternalServerError, "internal error")
+					writeInternal(w)
 					return
 				}
 			}
@@ -422,7 +422,7 @@ func agentGetHandler(src AgentSource) http.HandlerFunc {
 			if reg, ok := src.(registrySource); ok {
 				var err error
 				if enrolled, err = reg.Registry(r.Context()); err != nil {
-					writeJSONError(w, http.StatusInternalServerError, "internal error")
+					writeInternal(w)
 					return
 				}
 			}
@@ -446,7 +446,7 @@ func agentGetHandler(src AgentSource) http.HandlerFunc {
 				}
 			}
 		}
-		writeJSONError(w, http.StatusNotFound, "unknown agent")
+		writeJSONErrorCode(w, http.StatusNotFound, "unknown agent", codeAgentNotFound)
 	}
 }
 
@@ -459,4 +459,17 @@ func writeJSONBody(w http.ResponseWriter, status int, v any) {
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	writeJSONBody(w, status, map[string]string{"error": msg})
+}
+
+// writeJSONErrorCode is writeJSONError with a code the dashboard translates
+// (#354). The text stays English for scripts and for clients that do not know
+// the code; every code used here is listed in errorCodes (errorcodes.go), and
+// a test fails when one has no text in the catalogs.
+func writeJSONErrorCode(w http.ResponseWriter, status int, msg, code string) {
+	writeJSONBody(w, status, map[string]string{"error": msg, "code": code})
+}
+
+// writeInternal answers 500 without saying what went wrong (it is in the log).
+func writeInternal(w http.ResponseWriter) {
+	writeJSONErrorCode(w, http.StatusInternalServerError, "internal error", codeInternal)
 }

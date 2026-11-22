@@ -87,20 +87,34 @@ func (s Settings) InWindow(now time.Time) bool {
 	return n >= start || n < end
 }
 
+// settingsError is the explanation of settings that cannot be saved. It is an
+// ErrInvalidSettings; Code lets the dashboard show it in the page's language
+// (#354).
+type settingsError struct{ code, msg string }
+
+func (e *settingsError) Error() string        { return ErrInvalidSettings.Error() + ": " + e.msg }
+func (e *settingsError) Unwrap() error        { return ErrInvalidSettings }
+func (e *settingsError) Code() string         { return e.code }
+func (e *settingsError) Args() map[string]any { return nil }
+
+// SettingsErrorCodes are the codes of settingsError, for the test that checks
+// the dashboard has a text for each.
+var SettingsErrorCodes = []string{"update_mode_invalid", "update_window_required", "update_channel_invalid"}
+
 // Validate reports whether the settings can be saved.
 func (s Settings) Validate() error {
 	if !validMode(s.Mode) {
-		return fmt.Errorf("%w: mode must be %q, %q or %q", ErrInvalidSettings, ModeManual, ModeDownload, ModeAutomatic)
+		return &settingsError{"update_mode_invalid", fmt.Sprintf("mode must be %q, %q or %q", ModeManual, ModeDownload, ModeAutomatic)}
 	}
 	if s.Mode == ModeAutomatic {
 		start, ok1 := minutesOf(s.WindowStart)
 		end, ok2 := minutesOf(s.WindowEnd)
 		if !ok1 || !ok2 || start == end {
-			return fmt.Errorf("%w: the automatic mode needs a maintenance window, two different times such as 03:00 and 05:00", ErrInvalidSettings)
+			return &settingsError{"update_window_required", "the automatic mode needs a maintenance window, two different times such as 03:00 and 05:00"}
 		}
 	}
 	if !s.Channel.Valid() {
-		return fmt.Errorf("%w: channel must be %q, %q or %q", ErrInvalidSettings, Stable, Beta, Alpha)
+		return &settingsError{"update_channel_invalid", fmt.Sprintf("channel must be %q, %q or %q", Stable, Beta, Alpha)}
 	}
 	return nil
 }
@@ -169,6 +183,13 @@ type Status struct {
 	// has one (#338). Without it `regulus status` shows no live data, and an
 	// update from a version older than the #312 fix rolls back on this hub.
 	StatusSocket string `json:"status_socket,omitempty"`
+
+	// TrustFallback is why the hub verifies releases with the Sigstore trusted
+	// root compiled into the binary instead of a current one: the reason the
+	// Sigstore TUF repository could not be reached (#214). Empty while the
+	// root is a current one, or before the first verification. A stale
+	// snapshot does not know about keys Sigstore has revoked.
+	TrustFallback string `json:"trust_fallback,omitempty"`
 }
 
 // Auditor records events; *auth.Service implements it.
@@ -277,7 +298,17 @@ type Manager struct {
 	stageErr  string
 	lastCheck time.Time
 
-	statusSocket string // why the hub has no local status socket (#338)
+	statusSocket  string // why the hub has no local status socket (#338)
+	trustFallback string // why the embedded Sigstore root is in use (#214)
+}
+
+// SetTrustFallback records why the hub verifies releases with the embedded
+// Sigstore trusted root ("" once a current one was fetched), so that Status
+// can say so (#214).
+func (m *Manager) SetTrustFallback(reason string) {
+	m.mu.Lock()
+	m.trustFallback = reason
+	m.mu.Unlock()
 }
 
 // SetStatusSocket records why the hub runs without its local status socket
@@ -506,6 +537,7 @@ func (m *Manager) Status(ctx context.Context) (Status, error) {
 		Downloading:    m.staging,
 		DownloadError:  m.stageErr,
 		StatusSocket:   m.statusSocket,
+		TrustFallback:  m.trustFallback,
 	}
 	if !m.state.CheckedAt.IsZero() {
 		t := m.state.CheckedAt

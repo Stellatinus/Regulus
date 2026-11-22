@@ -142,4 +142,23 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.event.user_deleted": "utente eliminato",
   "users.event.user_disabled": "utente disabilitato",
   "users.event.user_enabled": "utente abilitato",
+
+  // #354: the fixed forms of the detail of an audit entry.
+  "users.detail.role": "ruolo {role}",
+  "users.detail.fromTo": "{from} → {to}",
+  "users.detail.otherSessionsEnded": "le altre sessioni sono state chiuse",
+  "users.detail.resetLinkUsed": "link di reimpostazione usato, sessioni chiuse",
+  "users.detail.sessionsEnded": "sessioni chiuse",
+  "users.detail.firstAdmin": "primo amministratore",
+  "users.detail.resetAdminCommand": "comando reset-admin",
+  "users.detail.wrongSecondFactor": "secondo fattore errato",
+  "users.detail.accountDisabled": "account disattivato",
+  "users.detail.recoveryCode": "codice di recupero",
+  "users.detail.port": "porta {port}",
+  "users.detail.rolloutStarted": "{servers} server, {wave} alla volta",
+  "users.detail.rollout.stopped": "fermato",
+  "users.detail.rollout.done": "completato",
+  "users.detail.rollout.failed": "fallito",
+  "users.detail.fromVersion": "dalla {version}",
+  "users.detail.roleRenamed": "rinominato da {name}; {permissions}",
 };

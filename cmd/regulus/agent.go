@@ -87,7 +87,11 @@ func agentMain(ctx context.Context, args []string, getenv func(string) string, s
 	opts := agent.Options{Version: version, ID: creds.AgentID, Log: log}
 	if cfg.Updates {
 		opts.UpdateDir = cfg.DataDir
-		opts.Verifier = &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(cfg.DataDir, "tuf"))}
+		opts.Verifier = &update.SigstoreVerifier{Trust: update.PublicTrustReporting(filepath.Join(cfg.DataDir, "tuf"), func(st update.TrustState) {
+			if st.Embedded {
+				log.Warn("the Sigstore trusted root could not be fetched: releases are verified with the root compiled into this binary, which does not know about keys revoked since", "reason", st.Reason)
+			}
+		})}
 	}
 	// Plugins run beside the agent, each in its own process: nothing they do
 	// reaches agent.Run, and the agent stops them when it stops. Their state

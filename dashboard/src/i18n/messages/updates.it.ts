@@ -59,6 +59,8 @@ export const updatesIt: Record<keyof typeof updates, string> = {
     "Nessuno ha preso in carico la richiesta da alcuni minuti. L'unità che installa gli aggiornamenti probabilmente non è in esecuzione:",
   "updates.noStatusSocket":
     "Questo hub non ha il socket di stato locale, quindi `regulus status` non mostra dati in tempo reale, e un aggiornamento da una release che non scrive ancora running.json (precedente alla correzione di #312) viene annullato su di esso. Gli aggiornamenti da questa versione in poi funzionano. Motivo:",
+  "updates.trustFallback":
+    "L'hub non è riuscito a scaricare la radice di fiducia Sigstore aggiornata, quindi controlla le release con quella inclusa in questa versione, che non conosce le chiavi di firma revocate da Sigstore dopo la sua creazione. Riprova da solo. Motivo:",
   "updates.last.applied": "Aggiornato alla {version} {ago}.",
   "updates.last.appliedFrom": "Aggiornato alla {version} dalla {from} {ago}.",
   "updates.last.rolledBack":

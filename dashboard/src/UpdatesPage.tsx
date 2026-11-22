@@ -261,6 +261,11 @@ function Version({
           {t("updates.noStatusSocket")} {status.status_socket}
         </p>
       )}
+      {status.trust_fallback && (
+        <p role="status" className="muted">
+          {t("updates.trustFallback")} {status.trust_fallback}
+        </p>
+      )}
       {status.apply_stalled && (
         <p role="alert">
           {t("updates.stalled")}{" "}

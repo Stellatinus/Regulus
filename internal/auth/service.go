@@ -310,20 +310,43 @@ func normalizeUsername(u string) string {
 }
 
 // inputError is a problem with the username or password chosen by the user.
-type inputError struct{ msg string }
+//
+// code and args let the dashboard show the problem in the page's language
+// (#354): the code names it, the arguments fill the text ("hub.error.<code>").
+type inputError struct {
+	msg  string
+	code string
+	args map[string]any
+}
+
+// inputErr makes an inputError; kv are argument name and value pairs.
+func inputErr(code, msg string, kv ...any) *inputError {
+	e := &inputError{msg: msg, code: code}
+	if len(kv) > 0 {
+		e.args = map[string]any{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			e.args[kv[i].(string)] = kv[i+1]
+		}
+	}
+	return e
+}
+
+// Code is the code of the problem; Args are the values its text needs.
+func (e *inputError) Code() string         { return e.code }
+func (e *inputError) Args() map[string]any { return e.args }
 
 func (e *inputError) Error() string { return e.msg }
 
 func validateCredentials(username, password string) error {
 	if !usernameRE.MatchString(username) {
-		return &inputError{"username must be 3 to 32 characters: letters, digits, dot, dash or underscore, starting with a letter or digit"}
+		return inputErr("username_invalid", "username must be 3 to 32 characters: letters, digits, dot, dash or underscore, starting with a letter or digit")
 	}
 	n := utf8.RuneCountInString(password)
 	if n < minPasswordLen {
-		return &inputError{fmt.Sprintf("password must be at least %d characters", minPasswordLen)}
+		return inputErr("password_too_short", fmt.Sprintf("password must be at least %d characters", minPasswordLen), "min", minPasswordLen)
 	}
 	if n > maxPasswordLen {
-		return &inputError{fmt.Sprintf("password must be at most %d characters", maxPasswordLen)}
+		return inputErr("password_too_long", fmt.Sprintf("password must be at most %d characters", maxPasswordLen), "max", maxPasswordLen)
 	}
 	return nil
 }

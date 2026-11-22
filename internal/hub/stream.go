@@ -71,7 +71,7 @@ func streamHandler(src AgentSource, still func(*http.Request) func(context.Conte
 	slots := &streamSlots{open: map[int64]int{}}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if src == nil {
-			writeJSONError(w, http.StatusNotFound, "stream is not available")
+			writeJSONErrorCode(w, http.StatusNotFound, "stream is not available", codeStreamUnavailable)
 			return
 		}
 		// Without a login (tests of the handler alone) there is no user to count.
@@ -80,7 +80,7 @@ func streamHandler(src AgentSource, still func(*http.Request) func(context.Conte
 			if !ok {
 				// A stream that died unnoticed is gone after one ping.
 				w.Header().Set("Retry-After", strconv.Itoa(int(pingInterval.Seconds())))
-				writeJSONError(w, http.StatusTooManyRequests, "too many open streams for this user: close another tab or window")
+				writeJSONErrorCode(w, http.StatusTooManyRequests, "too many open streams for this user: close another tab or window", codeTooManyStreams)
 				return
 			}
 			defer release()

@@ -210,7 +210,7 @@ func (h *Hub) StartRollout(ctx context.Context, by string, opts RolloutOptions) 
 		return RolloutStatus{}, ErrNotRelease
 	}
 	if opts.WaveSize < 0 || opts.WaveSize > 100 {
-		return RolloutStatus{}, fmt.Errorf("%w: wave_size must be between 1 and 100", errBadRollout)
+		return RolloutStatus{}, &rolloutInputError{"wave_size must be between 1 and 100"}
 	}
 	if opts.WaveSize == 0 {
 		opts.WaveSize = 1

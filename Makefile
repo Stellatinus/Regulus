@@ -2,7 +2,7 @@
 
 # Build the dashboard into internal/webui/dist so it is embedded in the binary.
 dashboard:
-	cd dashboard && npm ci && npm run build
+	cd dashboard && npm ci --ignore-scripts && npm run build
 
 build: dashboard
 	go build -ldflags "-X main.version=$$(git describe --tags --always --dirty)" -o bin/regulus ./cmd/regulus

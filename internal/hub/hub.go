@@ -60,7 +60,12 @@ type Hub struct {
 	demoted    atomic.Bool
 	timersMu   sync.Mutex
 	stopTimers context.CancelFunc
-	ui         fs.FS
+	// serveCtx is the context of Serve: the timers are started under it, and
+	// again after a demotion that ended (#356). timersWG waits for them.
+	serveCtx      context.Context
+	timersRunning bool
+	timersWG      sync.WaitGroup
+	ui            fs.FS
 
 	version   string
 	startedAt time.Time
@@ -216,7 +221,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	h.agents.hubVersion = h.version
 	ver := h.updateVer
 	if ver == nil {
-		ver = &update.SigstoreVerifier{Trust: update.PublicTrust(filepath.Join(cfg.DataDir, "tuf"))}
+		ver = &update.SigstoreVerifier{Trust: update.PublicTrustReporting(filepath.Join(cfg.DataDir, "tuf"), h.noteTrust)}
 	}
 	src := h.updateSrc
 	if src == nil {
@@ -363,38 +368,15 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	h.watchCertificates(ctx)
 
 	// The update checks and the automatic rollouts must run in one hub only;
-	// a hub that loses the database lock to another one ends them (#344).
-	tctx, stopTimers := context.WithCancel(ctx)
-	defer stopTimers()
+	// a hub that loses the database lock to another one ends them (#344) and
+	// starts them again when the lock is free (#356).
 	h.timersMu.Lock()
-	h.stopTimers = stopTimers
+	h.serveCtx = ctx
 	h.timersMu.Unlock()
-	if h.demoted.Load() {
-		stopTimers()
+	if !h.demoted.Load() {
+		h.startTimers()
 	}
-
-	h.rollout.mu.Lock()
-	h.rollout.base = tctx
-	h.rollout.mu.Unlock()
-	rolloutTick := time.NewTicker(5 * time.Minute)
-	defer rolloutTick.Stop()
-	go func() {
-		for {
-			select {
-			case <-tctx.Done():
-				return
-			case <-rolloutTick.C:
-				h.autoRollout(tctx)
-			}
-		}
-	}()
-
-	updatesDone := make(chan struct{})
-	go func() {
-		defer close(updatesDone)
-		h.updates.Run(tctx)
-	}()
-	defer func() { <-updatesDone }()
+	defer h.endTimers()
 
 	auditDone := make(chan struct{})
 	go func() {

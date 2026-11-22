@@ -43,10 +43,14 @@ type Verifier interface {
 }
 
 // trustedRootJSON is a snapshot of the public Sigstore trusted root, used when
-// the up-to-date one cannot be fetched. Refresh it when Sigstore rotates
-// its keys (the hub already follows rotations through the TUF cache, see
-// docs/updates.md); a stale
-// snapshot only makes verification fail, never pass.
+// the up-to-date one cannot be fetched. It is **not** harmless when stale: a
+// root that is out of date keeps trusting keys and certificate authorities
+// that Sigstore has retired or revoked, so a signature that the live root
+// would refuse can pass (#214). That is why the use of this snapshot is logged
+// and shown on the Updates page (TrustState), and why a scheduled workflow
+// keeps the file current (.github/workflows/trusted-root.yml). A hub that can
+// reach the Sigstore TUF repository follows rotations by itself (see
+// docs/updates.md).
 //
 //go:embed trusted_root.json
 var trustedRootJSON []byte
@@ -119,37 +123,85 @@ const (
 	trustFetchTimeout = 20 * time.Second
 )
 
+// trustRetryEmbedded is how soon the TUF repository is asked again while the
+// embedded snapshot is in use, so that the warning goes away soon after the
+// network is back.
+var trustRetryEmbedded = time.Hour
+
+// TrustState says where the trusted root of the last verification came from.
+type TrustState struct {
+	// Embedded is true while the snapshot compiled into the binary is in use
+	// because the Sigstore TUF repository could not be reached and no earlier
+	// fetch worked (a stale snapshot does not know about key revocations).
+	Embedded bool
+	// Reason is why the fetch failed; empty unless Embedded.
+	Reason string
+}
+
 // PublicTrust returns the trust source for the public Sigstore instance. It
 // asks the Sigstore TUF repository for the current trusted root (so a key
 // rotation reaches a hub that nobody updated), keeping the answer in cacheDir
 // (empty: not cached on disk), and falls back to the snapshot embedded in the
 // binary when the repository cannot be reached.
 func PublicTrust(cacheDir string) TrustSource {
+	return PublicTrustReporting(cacheDir, nil)
+}
+
+// PublicTrustReporting is PublicTrust that calls report whenever the source of
+// the root changes: with Embedded set when it falls back to the snapshot, and
+// with the zero state when a fetch works again. report may be nil; it is not
+// called with the lock held.
+func PublicTrustReporting(cacheDir string, report func(TrustState)) TrustSource {
 	var (
-		mu      sync.Mutex
-		current root.TrustedMaterial
-		fetched time.Time
+		mu       sync.Mutex
+		current  root.TrustedMaterial
+		fetched  time.Time
+		embedded bool
 	)
-	return func(ctx context.Context) (root.TrustedMaterial, error) {
+	// get returns the root, and the new state when the source changed.
+	get := func(ctx context.Context) (root.TrustedMaterial, *TrustState, error) {
 		mu.Lock()
 		defer mu.Unlock()
-		if current != nil && time.Since(fetched) < trustRefreshEvery {
-			return current, nil
+		ttl := trustRefreshEvery
+		if embedded {
+			ttl = trustRetryEmbedded
 		}
-		tr, err := fetchTrustedRoot(ctx, cacheDir)
-		if err != nil {
+		if current != nil && time.Since(fetched) < ttl {
+			return current, nil, nil
+		}
+		tr, fetchErr := fetchTrustedRootFunc(ctx, cacheDir)
+		if fetchErr != nil {
 			if current != nil {
-				return current, nil // keep the last good one
+				fetched = time.Now() // keep the last good one, ask again later
+				return current, nil, nil
 			}
-			tr, err = root.NewTrustedRootFromJSON(trustedRootJSON)
+			emb, err := root.NewTrustedRootFromJSON(trustedRootJSON)
 			if err != nil {
-				return nil, fmt.Errorf("embedded Sigstore trusted root: %w", err)
+				return nil, nil, fmt.Errorf("embedded Sigstore trusted root: %w", err)
 			}
+			embedded = true
+			current, fetched = emb, time.Now()
+			return emb, &TrustState{Embedded: true, Reason: fetchErr.Error()}, nil
+		}
+		var state *TrustState
+		if embedded {
+			embedded = false
+			state = &TrustState{}
 		}
 		current, fetched = tr, time.Now()
-		return tr, nil
+		return tr, state, nil
+	}
+	return func(ctx context.Context) (root.TrustedMaterial, error) {
+		material, state, err := get(ctx)
+		if state != nil && report != nil {
+			report(*state)
+		}
+		return material, err
 	}
 }
+
+// fetchTrustedRootFunc is replaced in tests.
+var fetchTrustedRootFunc = fetchTrustedRoot
 
 func fetchTrustedRoot(ctx context.Context, cacheDir string) (*root.TrustedRoot, error) {
 	opts := tuf.DefaultOptions()

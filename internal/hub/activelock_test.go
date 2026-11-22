@@ -100,3 +100,47 @@ func TestHubStopsItsTimersWhenAnotherHubTookTheLock(t *testing.T) {
 		t.Fatal("the problem is not shown to the administrator")
 	}
 }
+
+// #356: when the other hub is stopped, the demoted one takes the lock again,
+// clears the problem and starts its timers again, without a restart.
+func TestDemotedHubStartsItsTimersAgainWhenTheOtherHubIsGone(t *testing.T) {
+	h, cfg := activeLockHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	h.serveCtx = ctx
+	h.startTimers()
+	defer h.endTimers()
+	firstBase := h.rollout.base
+
+	endLockSession(t, h)
+	other, err := storage.OpenHub(context.Background(), cfg.Storage())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.checkDatabase(context.Background())
+	if !h.demoted.Load() || h.dbState.get() == "" || firstBase.Err() == nil {
+		t.Fatalf("demoted = %v, problem = %q, timers still running = %v", h.demoted.Load(), h.dbState.get(), firstBase.Err() == nil)
+	}
+
+	// The other hub is stopped on purpose.
+	if err := other.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h.checkDatabase(context.Background())
+	if h.demoted.Load() || h.dbState.get() != "" {
+		t.Fatalf("demoted = %v, problem = %q; the hub should be active again", h.demoted.Load(), h.dbState.get())
+	}
+	h.rollout.mu.Lock()
+	base := h.rollout.base
+	h.rollout.mu.Unlock()
+	if base.Err() != nil {
+		t.Fatal("the timers did not start again")
+	}
+	// A second hub still cannot start.
+	if second, err := storage.OpenHub(context.Background(), cfg.Storage()); !errors.Is(err, storage.ErrHubActive) {
+		if second != nil {
+			_ = second.Close()
+		}
+		t.Fatalf("a second hub: error = %v, want ErrHubActive", err)
+	}
+}

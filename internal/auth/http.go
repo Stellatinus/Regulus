@@ -61,7 +61,7 @@ func (s *Service) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, sess, err := s.sessionOf(r)
 		if err != nil {
-			writeError(w, http.StatusUnauthorized, ErrUnauthenticated.Error())
+			writeFail(w, http.StatusUnauthorized, ErrUnauthenticated)
 			return
 		}
 		if s.MustEnroll(r.Context(), user) && !strings.HasPrefix(r.URL.Path, twoFactorPath) {
@@ -193,22 +193,22 @@ func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request, user User,
 		s.setSessionCookie(w, r, token, expires)
 		writeJSON(w, http.StatusOK, user)
 	case errors.Is(err, ErrInvalidCredentials):
-		writeError(w, http.StatusUnauthorized, err.Error())
+		writeFail(w, http.StatusUnauthorized, err)
 	case errors.Is(err, ErrRateLimited):
 		w.Header().Set("Retry-After", "900")
-		writeError(w, http.StatusTooManyRequests, err.Error())
+		writeFail(w, http.StatusTooManyRequests, err)
 	case errors.Is(err, ErrBusy):
 		w.Header().Set("Retry-After", "5")
-		writeError(w, http.StatusServiceUnavailable, err.Error())
+		writeFail(w, http.StatusServiceUnavailable, err)
 	case errors.Is(err, ErrBadSetupToken):
-		writeError(w, http.StatusForbidden, err.Error())
+		writeFail(w, http.StatusForbidden, err)
 	case errors.Is(err, ErrSetupDone):
-		writeError(w, http.StatusConflict, err.Error())
+		writeFail(w, http.StatusConflict, err)
 	case isInputError(err):
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeFail(w, http.StatusBadRequest, err)
 	default:
 		s.log.Error("authentication failed", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal error")
+		writeErrorCode(w, http.StatusInternalServerError, "internal error", codeInternal)
 	}
 }
 
@@ -233,13 +233,13 @@ func RequireJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ct := r.Header.Get("Content-Type")
 		if mt, _, _ := strings.Cut(ct, ";"); strings.TrimSpace(strings.ToLower(mt)) != "application/json" {
-			writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+			writeErrorCode(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json", codeUnsupportedMedia)
 			return
 		}
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
 			if err != nil || u.Host != r.Host {
-				writeError(w, http.StatusForbidden, "cross-origin request refused")
+				writeErrorCode(w, http.StatusForbidden, "cross-origin request refused", codeCrossOrigin)
 				return
 			}
 		}
@@ -257,7 +257,7 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		writeErrorCode(w, http.StatusBadRequest, "invalid JSON body", codeInvalidJSON)
 		return false
 	}
 	return true
@@ -303,6 +303,40 @@ var errorCodes = []struct {
 	{ErrTwoFactorNotStarted, "two_factor_not_started"},
 	{ErrTwoFactorMandatory, "two_factor_mandatory"},
 	{ErrTwoFactorUnavailable, "two_factor_unavailable"},
+	{ErrInvalidCredentials, "invalid_credentials"},
+	{ErrBadSetupToken, "bad_setup_token"},
+	{ErrSetupDone, "setup_done"},
+}
+
+// Codes of answers that no sentinel error carries (#354).
+const (
+	codeInternal         = "internal_error"
+	codeInvalidJSON      = "invalid_json"
+	codeInvalidLimit     = "invalid_limit"
+	codeUnsupportedMedia = "unsupported_media_type"
+	codeCrossOrigin      = "cross_origin"
+)
+
+// ErrorCodes lists every code this package writes (the table above, the
+// constants, the input codes, and the ones written in place: login_expired and
+// reauth_required), for the test that checks the
+// dashboard has a text for each (#354).
+func ErrorCodes() []string {
+	codes := []string{
+		codeInternal, codeInvalidJSON, codeInvalidLimit, codeUnsupportedMedia, codeCrossOrigin,
+		"login_expired", "reauth_required",
+	}
+	codes = append(codes, inputCodes...)
+	for _, c := range errorCodes {
+		codes = append(codes, c.code)
+	}
+	return codes
+}
+
+// inputCodes are the codes of inputErr (service.go), one per validation.
+var inputCodes = []string{
+	"username_invalid", "password_too_short", "password_too_long", "new_password_length", "account_disabled",
+	"role_name_invalid", "role_name_builtin", "role_unknown", "permission_unknown", "role_description_length", "policy_invalid",
 }
 
 // errorCodeOf is the code of err, or "" for an error without one.
@@ -317,6 +351,15 @@ func errorCodeOf(err error) string {
 
 // writeFail answers with err's text and, when it has one, its code.
 func writeFail(w http.ResponseWriter, status int, err error) {
+	var in *inputError
+	if errors.As(err, &in) && in.code != "" {
+		body := map[string]any{"error": err.Error(), "code": in.code}
+		if len(in.args) > 0 {
+			body["args"] = in.args
+		}
+		writeJSON(w, status, body)
+		return
+	}
 	if code := errorCodeOf(err); code != "" {
 		writeErrorCode(w, status, err.Error(), code)
 		return

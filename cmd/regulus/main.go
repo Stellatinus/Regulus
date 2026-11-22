@@ -46,6 +46,8 @@ func main() {
 		os.Exit(runAgent(os.Args[2:]))
 	case "update-apply":
 		os.Exit(runUpdateApply(os.Args[2:]))
+	case "verify-release":
+		os.Exit(runVerifyRelease(os.Args[2:]))
 	case "version":
 		fmt.Println(version)
 	case "help", "-h", "--help":
@@ -75,6 +77,8 @@ Commands:
   update-apply
            install the update the hub downloaded; systemd runs it as root
            (regulus-update.service), you do not need to
+  verify-release
+           check the signature of a release's checksums.txt (install.sh runs it)
   version  print the version
 `)
 }

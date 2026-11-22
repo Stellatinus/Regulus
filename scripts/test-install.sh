@@ -106,16 +106,92 @@ printf 'tampered' >"$dir/regulus_1.0.0_linux_amd64.deb"
 check_not "rejects a changed file" in_subshell verify_checksum "$dir" regulus_1.0.0_linux_amd64.deb
 check_not "rejects a file missing from checksums.txt" in_subshell verify_checksum "$dir" regulus_1.0.0_linux_arm64.deb
 
-# signature: without cosign only --require-signature turns it into an error
-require_signature=0
+# signature (#208): required by default, with the exact tag identity
+version=1.0.0
+file=regulus_1.0.0_linux_amd64.deb
+base_url=https://example.invalid/releases
+allow_unsigned=0
 # shellcheck disable=SC2329 # called by verify_signature
-have() { [ "$1" != cosign ] && command -v "$1" >/dev/null 2>&1; }
-check "warns but goes on without cosign" in_subshell verify_signature "$dir"
-# shellcheck disable=SC2034
-require_signature=1
-check_not "fails without cosign when a signature is required" in_subshell verify_signature "$dir"
+say() { :; }
+# shellcheck disable=SC2329
+warn() { :; }
+# The bundle: fetched into the directory, or missing.
+# shellcheck disable=SC2329 # called by verify_signature
+fetch() { [ "${bundle_available:-1}" = 1 ] && printf 'bundle' >"$2"; }
+bundle_available=0
+check_not "fails when the release has no signature file" in_subshell verify_signature "$dir"
+allow_unsigned=1
+check "--allow-unsigned goes on without a signature" in_subshell verify_signature "$dir"
+allow_unsigned=0
+bundle_available=1
+
+# With cosign: the identity is exactly the release workflow at the tag.
+# shellcheck disable=SC2329 # called by verify_signature
+have() { command -v "$1" >/dev/null 2>&1 || [ "$1" = cosign ]; }
+cosign_log=$tmp/cosign.args
+# shellcheck disable=SC2329
+cosign() {
+	printf '%s\n' "$@" >"$cosign_log"
+	[ "${cosign_ok:-1}" = 1 ]
+}
+cosign_ok=1
+check "accepts a signature cosign verifies" in_subshell verify_signature "$dir"
+check "cosign gets the exact tag identity" grep -qx "https://github.com/$REPO/.github/workflows/release.yml@refs/tags/v1.0.0" "$cosign_log"
+check_not "cosign is not given a regular expression" grep -q -- "identity-regexp" "$cosign_log"
+cosign_ok=0
+check_not "rejects a signature cosign refuses (invalid or another tag)" in_subshell verify_signature "$dir"
+unset -f cosign
 unset -f have
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# Without cosign: regulus verify-release from the package. A fake package whose
+# regulus accepts only the tag v1.0.0 stands in for the real one.
+# shellcheck disable=SC2329 # called by verify_signature
+have() { [ "$1" != cosign ] && command -v "$1" >/dev/null 2>&1; }
+if command -v dpkg-deb >/dev/null 2>&1; then
+	pkg=$tmp/pkg
+	mkdir -p "$pkg/DEBIAN" "$pkg/usr/bin"
+	printf 'Package: regulus\nVersion: 1.0.0\nArchitecture: all\nMaintainer: test\nDescription: test\n' >"$pkg/DEBIAN/control"
+	cat >"$pkg/usr/bin/regulus" <<'FAKE'
+#!/bin/sh
+[ "$1" = verify-release ] && [ "$2" = --tag ] && [ "$3" = v1.0.0 ] && [ -f "$4" ] && [ -f "$5" ]
+FAKE
+	chmod 0755 "$pkg/usr/bin/regulus"
+	vdir=$tmp/verify
+	mkdir -p "$vdir"
+	dpkg-deb -b "$pkg" "$vdir/$file" >/dev/null 2>&1
+	printf 'sums' >"$vdir/checksums.txt"
+	check "accepts a signature the package's verify-release accepts" in_subshell verify_signature "$vdir"
+	version=1.0.1
+	check_not "rejects a signature made for another tag" in_subshell verify_signature "$vdir"
+	version=1.0.0
+	rm -f "$vdir/checksums.txt"
+	check_not "rejects when checksums.txt is missing" in_subshell verify_signature "$vdir"
+	printf 'sums' >"$vdir/checksums.txt"
+	rm -rf "$vdir/verify"
+	printf '#!/bin/sh\nexit 1\n' >"$pkg/usr/bin/regulus"
+	dpkg-deb -b "$pkg" "$vdir/$file" >/dev/null 2>&1
+	check_not "rejects when the package's verify-release refuses" in_subshell verify_signature "$vdir"
+	printf 'not a package' >"$vdir/$file"
+	rm -rf "$vdir/verify"
+	check_not "rejects a file that is not a package" in_subshell verify_signature "$vdir"
+else
+	printf 'skip signature checks through the package: dpkg-deb is not installed\n'
+fi
+# The overrides above replaced functions of the installer: load it again.
+unset -f have say warn fetch
+# shellcheck disable=SC1091
+. "$here/../packaging/install.sh"
+set +e
+
+# fetch: https only, unless a test server is allowed
+# shellcheck disable=SC2329 # called by fetch
+curl() { printf '%s\n' "$@" >"$tmp/curl.args"; }
+fetch_proto='=https'
+fetch https://example.invalid/x "$tmp/x"
+check "downloads with https only and TLS 1.2" grep -qx -- "=https" "$tmp/curl.args"
+check "downloads with TLS 1.2 at least" grep -qx -- "--tlsv1.2" "$tmp/curl.args"
+unset -f curl
 
 # architecture
 # shellcheck disable=SC2329 # called by detect_arch

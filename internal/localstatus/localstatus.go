@@ -53,6 +53,10 @@ type Status struct {
 	// from a hub older than #245.
 	CertSoonest  *Certificate  `json:"cert_soonest,omitempty"`
 	CertWarnings []Certificate `json:"cert_warnings,omitempty"`
+	// UpdateAvailable is the version of a newer release found at the last
+	// check on the hub's channel, empty when there is none or the hub has
+	// not checked (#71). Empty from a hub that does not send it.
+	UpdateAvailable string `json:"update_available,omitempty"`
 }
 
 // Plugin is one plugin of the hub (docs/plugins/runtime.md).

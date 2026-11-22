@@ -57,6 +57,8 @@ export const updates = {
     "Nothing has picked up the request for a few minutes. The unit that installs updates is probably not running:",
   "updates.noStatusSocket":
     "This hub has no local status socket, so `regulus status` shows no live data, and an update from a release that does not yet write running.json (made before the fix of #312) rolls back on it. Updates from this version on work. Reason:",
+  "updates.trustFallback":
+    "The hub could not fetch the current Sigstore trusted root, so it checks releases with the one built into this version. That one does not know about signing keys Sigstore has revoked since. It tries again by itself. Reason:",
   "updates.last.applied": "Updated to {version} {ago}.",
   "updates.last.appliedFrom": "Updated to {version} from {from} {ago}.",
   "updates.last.rolledBack":

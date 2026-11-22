@@ -189,7 +189,7 @@ func (l listenerHandlers) get(w http.ResponseWriter, r *http.Request) {
 	}
 	st, err := l.fleet.AgentListener(r.Context())
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 		return
 	}
 	writeJSONBody(w, http.StatusOK, st)
@@ -210,13 +210,13 @@ func (l listenerHandlers) put(w http.ResponseWriter, r *http.Request) {
 	st, err := l.fleet.EnableAgents(r.Context(), user.Username, req.Port)
 	switch {
 	case errors.Is(err, ErrInvalidPort):
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		writeJSONErr(w, http.StatusBadRequest, err)
 	case errors.Is(err, ErrAgentsOn), errors.Is(err, ErrAgentsInConfig), errors.Is(err, ErrHubNotServing):
-		writeJSONError(w, http.StatusConflict, err.Error())
+		writeJSONErr(w, http.StatusConflict, err)
 	case errors.Is(err, errListenerBlocked):
-		writeJSONError(w, http.StatusConflict, err.Error()+": is another program using it?")
+		writeJSONErrorCode(w, http.StatusConflict, err.Error()+": is another program using it?", codeOfError(err))
 	case err != nil:
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		writeInternal(w)
 	default:
 		writeJSONBody(w, http.StatusOK, st)
 	}

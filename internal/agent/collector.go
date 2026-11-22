@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -48,6 +49,11 @@ type LinuxCollector struct {
 
 	mu      sync.Mutex
 	prevCPU cpuTimes
+	// prevGroup is the last reading of the CPU time of the container's cgroup
+	// (#355); now and hostCPUs are replaced in tests.
+	prevGroup cgroupCPUSample
+	now       func() time.Time
+	hostCPUs  func() int
 
 	// statTimeout is how long a report waits for the disks. A filesystem that
 	// does not answer (a network mount whose server is gone, dead storage) can
@@ -75,12 +81,13 @@ func NewLinuxCollector() *LinuxCollector {
 	c := newLinuxCollector("/proc", diskUsage)
 	if detectContainer("/") != "" {
 		c.cgroup = func() cgroupLimits { return readCgroupLimits("/proc", cgroupRoot) }
+		c.groupCPUUsage(c.cgroup()) // the first reading, to compare the next one with
 	}
 	return c
 }
 
 func newLinuxCollector(proc string, statfs statfsFunc) *LinuxCollector {
-	c := &LinuxCollector{proc: proc, statfs: statfs, statTimeout: defaultStatTimeout, stats: map[string]*statJob{}, hung: map[string]bool{}}
+	c := &LinuxCollector{proc: proc, statfs: statfs, statTimeout: defaultStatTimeout, stats: map[string]*statJob{}, hung: map[string]bool{}, now: time.Now, hostCPUs: runtime.NumCPU}
 	if t, err := parseCPUTimes(c.read("stat")); err == nil {
 		c.prevCPU = t
 	}
@@ -110,13 +117,23 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 	}
 	c.mu.Unlock()
 
+	groupCPU := false
 	mem, memErr := parseMemInfo(c.read("meminfo"))
 	if err != nil && memErr != nil {
 		return nil, fmt.Errorf("cannot read /proc: %w", errors.Join(err, memErr))
 	}
 
-	if c.cgroup != nil && memErr == nil {
-		applyMemoryLimit(mem, c.cgroup())
+	if c.cgroup != nil {
+		lim := c.cgroup()
+		if memErr == nil {
+			applyMemoryLimit(mem, lim)
+			applySwapLimit(mem, lim)
+		}
+		if share, ok := c.groupCPUUsage(lim); ok {
+			// The container's own figure replaces the host's (#355).
+			usage = share
+			groupCPU = true
+		}
 	}
 
 	report := &agentv1.MetricsReport{
@@ -125,7 +142,7 @@ func (c *LinuxCollector) Collect(context.Context) (*agentv1.MetricsReport, error
 		Cpu:         &agentv1.CpuMetrics{UsagePercent: usage},
 		Memory:      mem,
 	}
-	if err != nil {
+	if err != nil && !groupCPU {
 		report.Unavailable = append(report.Unavailable, partCPU)
 	}
 	if loadavg, ok := c.readOK("loadavg"); ok {
@@ -460,4 +477,65 @@ func parseNetDev(content string) []*agentv1.NetworkMetrics {
 		nets = append(nets, &agentv1.NetworkMetrics{Interface: name, RxBytes: rx, TxBytes: tx})
 	}
 	return nets
+}
+
+// cgroupCPUSample is a reading of the CPU time of the container's cgroup.
+type cgroupCPUSample struct {
+	usec uint64
+	at   time.Time
+}
+
+// minGroupInterval is the shortest interval over which the container's CPU
+// share is computed; over less, one scheduler tick reads as a large share.
+const minGroupInterval = time.Second
+
+// groupCPUUsage is the share of its CPUs the container used since the last
+// report, 0 to 100: the CPU time of its cgroup over the interval, divided by
+// the quota, or by the CPUs it may run on when it has no quota (#355). ok is
+// false when the cgroup gives no reading, on the first report (nothing to
+// compare with yet) and over too short an interval; the host's figure from
+// /proc/stat then stays, and the previous reading is kept so the next report
+// covers a longer interval.
+func (c *LinuxCollector) groupCPUUsage(lim cgroupLimits) (float64, bool) {
+	if !lim.HaveCPUUsage {
+		return 0, false
+	}
+	at := c.now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	prev := c.prevGroup
+	if prev.at.IsZero() {
+		c.prevGroup = cgroupCPUSample{usec: lim.CPUUsageUsec, at: at}
+		return 0, false
+	}
+	elapsed := at.Sub(prev.at)
+	if elapsed < minGroupInterval || lim.CPUUsageUsec < prev.usec {
+		if lim.CPUUsageUsec < prev.usec { // the counter went back: a new group
+			c.prevGroup = cgroupCPUSample{usec: lim.CPUUsageUsec, at: at}
+		}
+		return 0, false
+	}
+	cpus := lim.CPUQuota
+	if cpus <= 0 {
+		cpus = float64(c.hostCPUs())
+	}
+	pct := 100 * float64(lim.CPUUsageUsec-prev.usec) / (float64(elapsed.Microseconds()) * cpus)
+	c.prevGroup = cgroupCPUSample{usec: lim.CPUUsageUsec, at: at}
+	return min(max(pct, 0), 100), true
+}
+
+// applySwapLimit replaces the host's swap figures with the container's when
+// its cgroup says how much swap it may use or has used. A group with a swap
+// limit shows that limit (never more than the host has); a group without one
+// keeps the host's total and shows its own use.
+func applySwapLimit(mem *agentv1.MemoryMetrics, lim cgroupLimits) {
+	if mem == nil || !lim.HaveSwapUsed {
+		return
+	}
+	total := mem.SwapTotalBytes
+	if lim.HaveSwapLimit {
+		total = min(total, lim.SwapLimit)
+	}
+	mem.SwapTotalBytes = total
+	mem.SwapUsedBytes = min(lim.SwapUsed, total)
 }
