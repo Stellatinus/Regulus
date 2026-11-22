@@ -26,6 +26,19 @@ type cgroupLimits struct {
 	// CPUQuota is the CPU time the group may use, in CPUs (1.5 for one and a
 	// half), 0 when there is none.
 	CPUQuota float64
+	// CPUUsageUsec is the CPU time the group has used since it was created, in
+	// microseconds (usage_usec of cpu.stat, or cpuacct.usage of v1 over 1000);
+	// HaveCPUUsage says it was read. Two readings give the share of CPU the
+	// group used between them (#355).
+	CPUUsageUsec uint64
+	HaveCPUUsage bool
+	// SwapLimit is the swap the group may use, in bytes; 0 with HaveSwapLimit
+	// means none (the limit is 0), and without HaveSwapLimit there is no limit.
+	// SwapUsed is the swap in use, read when HaveSwapUsed is set.
+	SwapLimit     uint64
+	HaveSwapLimit bool
+	SwapUsed      uint64
+	HaveSwapUsed  bool
 }
 
 // cpuCount is the number of CPUs to report for a host with hostCPUs: the quota
@@ -104,6 +117,18 @@ func readV2(l *cgroupLimits, root, path string) {
 		if q := parseCPUMax(readFile(filepath.Join(dir, "cpu.max"))); q > 0 && (l.CPUQuota == 0 || q < l.CPUQuota) {
 			l.CPUQuota = q
 		}
+		if i == 0 {
+			if usec, ok := statValue(filepath.Join(dir, "cpu.stat"), "usage_usec"); ok {
+				l.CPUUsageUsec, l.HaveCPUUsage = usec, true
+			}
+			if cur, ok := readUintFile(filepath.Join(dir, "memory.swap.current")); ok {
+				l.SwapUsed, l.HaveSwapUsed = cur, true
+			}
+		}
+		// "max" is not a number, so a group without a swap limit is skipped.
+		if max, ok := readUintFile(filepath.Join(dir, "memory.swap.max")); ok && (!l.HaveSwapLimit || max < l.SwapLimit) {
+			l.SwapLimit, l.HaveSwapLimit = max, true
+		}
 	}
 }
 
@@ -127,7 +152,7 @@ func v1Path(self, controller string) string {
 // v1Mount is the directory a v1 controller is mounted at: its own, or one
 // shared with others (cpu,cpuacct).
 func v1Mount(root, controller string) string {
-	for _, name := range []string{controller, controller + ",cpuacct"} {
+	for _, name := range []string{controller, controller + ",cpuacct", "cpu," + controller} {
 		if dir := filepath.Join(root, name); fileExists(dir) {
 			return dir
 		}
@@ -149,7 +174,13 @@ func readV1(l *cgroupLimits, root, self string) {
 						l.MemoryUsed = cur - inactive
 					}
 				}
+				readV1Swap(l, dir)
 			}
+		}
+	}
+	if acct := v1Mount(root, "cpuacct"); acct != "" {
+		if ns, ok := readUintFile(filepath.Join(acct, filepath.Clean("/"+v1Path(self, "cpuacct")), "cpuacct.usage")); ok {
+			l.CPUUsageUsec, l.HaveCPUUsage = ns/1000, true
 		}
 	}
 	if cpu := v1Mount(root, "cpu"); cpu != "" {
@@ -162,6 +193,23 @@ func readV1(l *cgroupLimits, root, self string) {
 				}
 			}
 		}
+	}
+}
+
+// readV1Swap reads the swap of a v1 memory group. v1 counts memory plus swap
+// together (memsw), so the swap is what memsw has beyond the memory figure.
+// Without the memsw files (the kernel was booted without swap accounting)
+// nothing is read.
+func readV1Swap(l *cgroupLimits, dir string) {
+	if memsw, ok := readUintFile(filepath.Join(dir, "memory.memsw.usage_in_bytes")); ok {
+		if mem, ok := readUintFile(filepath.Join(dir, "memory.usage_in_bytes")); ok {
+			l.SwapUsed, l.HaveSwapUsed = memsw-min(memsw, mem), true
+		}
+	}
+	memswMax, ok1 := readUintFile(filepath.Join(dir, "memory.memsw.limit_in_bytes"))
+	memMax, ok2 := readUintFile(filepath.Join(dir, "memory.limit_in_bytes"))
+	if ok1 && ok2 && memswMax < 1<<60 && memMax < 1<<60 {
+		l.SwapLimit, l.HaveSwapLimit = memswMax-min(memswMax, memMax), true
 	}
 }
 
