@@ -163,3 +163,15 @@ func TestSettingErrorsCoverEveryCode(t *testing.T) {
 		}
 	}
 }
+
+// #71: the Health tab says when the running hub found a newer release, and
+// stays quiet (a plain OK) when it did not.
+func TestUpdatesCheck(t *testing.T) {
+	c := updatesCheck(Snapshot{UpdateAvailable: "0.4.0"})
+	if c.Key != "updates" || c.Status != Warn || !strings.Contains(c.Detail, "0.4.0") || !strings.Contains(c.Text, "0.4.0") {
+		t.Errorf("pending: %+v, want a warning that names 0.4.0 in both languages", c)
+	}
+	if c := updatesCheck(Snapshot{}); c.Status != OK || c.Key != "updates" {
+		t.Errorf("none pending: %+v, want OK", c)
+	}
+}

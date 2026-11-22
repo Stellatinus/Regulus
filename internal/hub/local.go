@@ -47,12 +47,14 @@ func (h *Hub) localStatus(ctx context.Context, addr string) localstatus.Status {
 	now := time.Now()
 	// While the database is known not to answer, the certificates are not
 	// asked for: each request would wait localDBTimeout for nothing.
+	dbAnswered := false
 	if st.DatabaseProblem == "" {
 		cctx, cancel := context.WithTimeout(ctx, localDBTimeout)
 		certs, err := h.Certificates(cctx)
 		cancel()
 		switch {
 		case err == nil:
+			dbAnswered = true
 			soonest := toLocalCert(certs.Soonest())
 			st.CertSoonest = &soonest
 			for _, w := range certs.Warnings(now) {
@@ -65,6 +67,15 @@ func (h *Hub) localStatus(ctx context.Context, addr string) localstatus.Status {
 			// not a problem to report.
 			st.DatabaseProblem = storage.Explain(err)
 		}
+	}
+	// Only when the database just answered: a second wait on one that does not
+	// would double the time of the answer (#313).
+	if dbAnswered {
+		uctx, cancel := context.WithTimeout(ctx, localDBTimeout)
+		if us, err := h.updates.Status(uctx); err == nil && us.UpdateAvailable && us.Latest != nil {
+			st.UpdateAvailable = us.Latest.Version
+		}
+		cancel()
 	}
 	for _, a := range h.Agents() {
 		j := toAgentJSON(a, now, h.StaleAfter())

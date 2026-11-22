@@ -198,6 +198,9 @@ var it = strs{
 
 	// --- Plugins in the Health tab (#319).
 	PluginInvalid: "non valido",
+	ChkUpdates:    "Aggiornamenti",
+	UpdPending:    "È disponibile la versione %s: installala dalla pagina Aggiornamenti della dashboard",
+	UpdNone:       "nessuna release più recente trovata all'ultimo controllo",
 	ChkPlugins:    "Plugin",
 	PlgOK:         "%d plugin dell'hub, nessuno fallito o non valido",
 	PlgProblem:    "nessun plugin è in esecuzione: %s",

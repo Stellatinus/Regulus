@@ -7,7 +7,7 @@ Regulus v0.3.0  Hub ● in esecuzione
  ✓  Porta della dashboard   l'hub è in ascolto su :8080
  !  Directory dei dati      testdata/no-such-dir non esiste ancora (viene creata al primo avvio)
  ·  Database                ancora nessuno
-
+ ✓  Aggiornamenti           nessuna release più recente trovata all'ultimo controllo
 
 
 

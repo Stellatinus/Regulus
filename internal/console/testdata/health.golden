@@ -7,7 +7,7 @@ Regulus v0.3.0  Hub ● running
  ✓  Dashboard port    :8080 is served by the hub
  !  Data directory    testdata/no-such-dir does not exist yet (created at the first start)
  ·  Database          none yet
-
+ ✓  Updates           no newer release was found at the last check
 
 
 

@@ -119,6 +119,11 @@ type strs struct {
 	PluginInvalid, ChkPlugins, PlgOK, PlgProblem, PlgBad string
 	// --- end of the plugin health block.
 
+	// --- Pending updates in the Health tab (#71). UpdPending takes the
+	// version of the newer release.
+	ChkUpdates, UpdPending, UpdNone string
+	// --- end of the updates health block.
+
 	// --- Setting errors (#318): why config.Normalize or config.SetFile
 	// refused a value, by config.ErrorCode. Each %s takes the arguments of
 	// config.SettingError.Args, in order (documented in internal/config).
@@ -294,6 +299,9 @@ var en = strs{
 
 	// --- Plugins in the Health tab (#319).
 	PluginInvalid: "invalid",
+	ChkUpdates:    "Updates",
+	UpdPending:    "Version %s is available: install it from the Updates page of the dashboard",
+	UpdNone:       "no newer release was found at the last check",
 	ChkPlugins:    "Plugins",
 	PlgOK:         "%d plugins of the hub, none failed or invalid",
 	PlgProblem:    "no plugin runs: %s",
