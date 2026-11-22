@@ -83,6 +83,10 @@ type Model struct {
 	logErr    string
 	logLevel  int
 	logScroll int // lines up from the end; 0 follows the log
+	// follow is the live stream of the log while the Logs tab is open
+	// (#369); nil when there is none and the tab reloads every tick.
+	follow *logStream
+	gen    int // tells a stream from an older one that ended
 
 	// body scroll of the status and health tabs
 	scroll int
@@ -119,6 +123,12 @@ type (
 	logsMsg     struct {
 		lines []string
 		err   error
+	}
+	// logLinesMsg carries lines of stream gen; closed is true when it ended.
+	logLinesMsg struct {
+		gen    int
+		lines  []string
+		closed bool
 	}
 	opMsg struct {
 		kind string
@@ -161,6 +171,70 @@ func (m Model) loadLogs() tea.Cmd {
 	}
 }
 
+// maxLogLines bounds the lines kept while following.
+const maxLogLines = 2000
+
+// logStream is a running Follow: cancel stops it, ch delivers its lines.
+type logStream struct {
+	cancel context.CancelFunc
+	ch     <-chan string
+	gen    int
+}
+
+// startFollow opens the stream of the log when the system can, and else
+// falls back to reloading the last lines. It cancels any earlier stream.
+func (m *Model) startFollow() tea.Cmd {
+	m.stopFollow()
+	m.logs, m.logErr = nil, ""
+	if m.opt.System.Follow == nil {
+		return m.loadLogs()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := m.opt.System.Follow(ctx, 500)
+	if err != nil {
+		cancel()
+		return m.loadLogs() // shows the reason, and keeps reloading
+	}
+	m.gen++
+	m.follow = &logStream{cancel: cancel, ch: ch, gen: m.gen}
+	return m.waitLines()
+}
+
+// stopFollow ends the stream, if any.
+func (m *Model) stopFollow() {
+	if m.follow != nil {
+		m.follow.cancel()
+		m.follow = nil
+	}
+}
+
+// waitLines waits for a line of the stream, then takes what else is ready.
+func (m Model) waitLines() tea.Cmd {
+	st := m.follow
+	if st == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		line, ok := <-st.ch
+		if !ok {
+			return logLinesMsg{gen: st.gen, closed: true}
+		}
+		lines := []string{line}
+		for len(lines) < 500 {
+			select {
+			case l, ok := <-st.ch:
+				if !ok {
+					return logLinesMsg{gen: st.gen, lines: lines, closed: true}
+				}
+				lines = append(lines, l)
+			default:
+				return logLinesMsg{gen: st.gen, lines: lines}
+			}
+		}
+		return logLinesMsg{gen: st.gen, lines: lines}
+	}
+}
+
 // Update handles input and results.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -168,7 +242,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 	case tickMsg:
 		cmds := []tea.Cmd{m.collect(), m.tick()}
-		if m.tab == tabLogs {
+		if m.tab == tabLogs && m.follow == nil {
 			cmds = append(cmds, m.loadLogs())
 		}
 		return m, tea.Batch(cmds...)
@@ -178,7 +252,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.sel >= len(m.snap.Settings) {
 			m.sel = 0
 		}
+	case logLinesMsg:
+		if m.follow == nil || m.follow.gen != msg.gen {
+			return m, nil
+		}
+		m.logs = append(m.logs, msg.lines...)
+		if len(m.logs) > maxLogLines {
+			m.logs = append([]string(nil), m.logs[len(m.logs)-maxLogLines:]...)
+		}
+		if msg.closed {
+			// journalctl ended: keep the lines and reload them every tick.
+			m.stopFollow()
+			return m, nil
+		}
+		return m, m.waitLines()
 	case logsMsg:
+		if m.follow != nil {
+			return m, nil
+		}
 		m.logs, m.logErr = msg.lines, ""
 		if msg.err != nil {
 			m.logErr = msg.err.Error()
@@ -250,6 +341,7 @@ func (m Model) mouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	k := msg.String()
 	if k == "ctrl+c" {
+		m.stopFollow()
 		return m, tea.Quit
 	}
 	switch {
@@ -260,6 +352,7 @@ func (m Model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k {
 	case "q":
+		m.stopFollow()
 		return m, tea.Quit
 	case "tab", "right", "l":
 		return m.switchTo((m.tab + 1) % tabCount)
@@ -299,8 +392,10 @@ func (m Model) switchTo(t tab) (tea.Model, tea.Cmd) {
 	m.tab, m.scroll = t, 0
 	if t == tabLogs {
 		m.logScroll = 0
-		return m, m.loadLogs()
+		cmd := m.startFollow()
+		return m, cmd
 	}
+	m.stopFollow()
 	return m, nil
 }
 

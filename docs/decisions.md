@@ -300,6 +300,12 @@ Agent certificates were told apart only by `Organization: "Regulus agent"`, whic
 - **The threat models of #154 and #107** start from this rule; a line says so in [regulus-access.md](regulus-access.md) section 3 and [hub-redundancy.md](hub-redundancy.md) section 5.
 - **Verified by tests only** (`internal/pki/kind_test.go`, `TestStreamsNeedAValidCertificate`): a legacy agent of a real older hub reconnecting after the update is not verified on a real machine.
 
+## Console: network reachability and following the log (#369)
+
+- **Reachability is checked as far as the hub's machine can.** A program on the server cannot prove that another host gets through a firewall or a router. The *Network access* check therefore tests what is local (the hub listens on more than loopback and answers on each LAN address of the machine) and says plainly that the firewall is not checked, with the URL to open from another host. A check from another host would need a second machine and stays a manual step.
+- **The log is followed, with the reload as the fallback.** The Logs tab runs `journalctl -f` while it is open and stops it on leaving; if it cannot start or ends, the old reload every two seconds applies, so nothing is lost on systems where it fails. Logs without journald are #375: the hub has no log file setting, which is a design question of its own.
+- Creating the first administrator from the terminal and the background-colour delay were done in the first part of #369 (`regulus hub create-admin`, `COLORFGBG` and `REGULUS_BACKGROUND`).
+
 ## Remote agents from the dashboard
 
 Remote agents can be turned on from the dashboard (#90), so that enrolling a second server needs no terminal on the hub. The choice is kept in the database, because the hub runs as `regulus` and cannot write `/etc/regulus/config.yaml`. `agent_listen` in the configuration always wins: when it is set the dashboard shows it and cannot change it. Turning the listener on needs `servers.manage`, the same permission as making enrollment tokens, since one is useless without the other; it is audited. Turning it off from the dashboard is not offered yet.

@@ -1,11 +1,13 @@
 package console
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,6 +118,13 @@ type System struct {
 	Addrs func() []string
 	// Logs returns the last lines of the hub's log.
 	Logs func(ctx context.Context, n int) ([]string, error)
+	// Follow streams the hub's log like `journalctl -f`: the last n lines,
+	// then each new line, until ctx ends or the source does (#369). Nil
+	// means the console reloads Logs every two seconds instead.
+	Follow func(ctx context.Context, n int) (<-chan string, error)
+	// Dial opens a TCP connection to addr, to see whether the hub answers
+	// on an address of this machine (#369). Nil skips that check.
+	Dial func(ctx context.Context, addr string) error
 }
 
 // HostSystem is the real machine.
@@ -127,6 +136,8 @@ func HostSystem() System {
 		Fetch:        localstatus.Fetch,
 		Addrs:        lanAddrs,
 		Logs:         journalLogs,
+		Follow:       journalFollow,
+		Dial:         dialTCP,
 	}
 }
 
@@ -139,6 +150,47 @@ func systemdState(ctx context.Context) string {
 		return "unknown"
 	}
 	return state
+}
+
+// dialTCP connects to addr and closes the connection at once.
+func dialTCP(ctx context.Context, addr string) error {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	var d net.Dialer
+	c, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return err
+	}
+	return c.Close()
+}
+
+// journalFollow runs `journalctl -f` and sends its lines on the channel,
+// which is closed when the command ends or ctx is done. An error is returned
+// only when the command cannot start.
+func journalFollow(ctx context.Context, n int) (<-chan string, error) {
+	cmd := exec.CommandContext(ctx, "journalctl", "-u", ServiceUnit, "-n", fmt.Sprint(n), "-f", "--no-pager", "-o", "cat")
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	ch := make(chan string, 256)
+	go func() {
+		defer close(ch)
+		defer func() { _ = cmd.Wait() }()
+		sc := bufio.NewScanner(out)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			select {
+			case ch <- sc.Text():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return ch, nil
 }
 
 func journalLogs(ctx context.Context, n int) ([]string, error) {
@@ -232,6 +284,7 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 	if snap.Running {
 		snap.Health = append(snap.Health, updatesCheck(snap))
 	}
+	snap.Health = append(snap.Health, lanCheck(ctx, sys, snap, cfg))
 	return snap
 }
 
@@ -458,4 +511,45 @@ func updatesCheck(snap Snapshot) Check {
 	}
 	d := tr(func(s strs) string { return s.UpdNone })
 	return Check{Name: name(en), Status: OK, Detail: d(en), Key: "updates", Title: name(T), Text: d(T)}
+}
+
+// lanCheck says whether the dashboard can be reached from the network (#369).
+// A program on this machine cannot prove that another host gets through (a
+// firewall or a router may stop it), so it checks what it can: that the hub
+// listens on an address other hosts could use, and that it answers there. The
+// text then tells the person how to try from another host.
+func lanCheck(ctx context.Context, sys System, snap Snapshot, cfg config.Config) Check {
+	name := func(s strs) string { return s.ChkLAN }
+	mk := func(status string, d text) Check {
+		return Check{Name: name(en), Status: status, Detail: d(en), Key: "lan", Title: name(T), Text: d(T)}
+	}
+	host := hostOf(cfg.Listen)
+	if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) {
+		// %s: the listen address.
+		return mk(Info, tr(func(s strs) string { return s.LANLocalOnly }, cfg.Listen, snap.Port))
+	}
+	if len(snap.LANURLs) == 0 {
+		if !isWildcard(host) && host != "" {
+			// A specific address: it is the one to try.
+			return mk(Info, tr(func(s strs) string { return s.LANTry }, snap.URL))
+		}
+		return mk(Info, tr(func(s strs) string { return s.LANNoAddr }))
+	}
+	if !snap.Running || sys.Dial == nil {
+		return mk(Info, tr(func(s strs) string { return s.LANLater }, snap.LANURLs[0]))
+	}
+	var bad []string
+	for _, u := range snap.LANURLs {
+		pu, err := url.Parse(u)
+		if err != nil {
+			continue
+		}
+		if err := sys.Dial(ctx, pu.Host); err != nil {
+			bad = append(bad, pu.Host)
+		}
+	}
+	if len(bad) > 0 {
+		return mk(Warn, tr(func(s strs) string { return s.LANFail }, strings.Join(bad, ", ")))
+	}
+	return mk(OK, tr(func(s strs) string { return s.LANOK }, snap.LANURLs[0]))
 }
