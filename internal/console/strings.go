@@ -15,7 +15,7 @@ type strs struct {
 	Hub, Version, Dashboard, AlsoOn, AgentPort, BuiltinAgent, DataDir, Database, ConfigFile, Uptime string
 	On, Off, None                                                                                   string
 	Agents, NoAgents                                                                                string
-	SetupTitle, SetupText                                                                           string
+	SetupTitle, SetupText, SetupCLI                                                                 string
 
 	SettingHeader  [3]string
 	Default        string
@@ -161,6 +161,7 @@ var en = strs{
 	NoAgents:     "No agent is connected.",
 	SetupTitle:   "First run",
 	SetupText:    "No administrator exists yet. Open the dashboard and enter this one-time setup token:",
+	SetupCLI:     "No browser? Create the administrator here: sudo -u regulus regulus hub create-admin -h",
 
 	SettingHeader:  [3]string{"Setting", "Value", "Source"},
 	Default:        "default",

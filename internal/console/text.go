@@ -85,6 +85,7 @@ func writeStatusText(w io.Writer, snap Snapshot, now time.Time) error {
 
 	if snap.SetupToken != "" {
 		_, _ = fmt.Fprintf(w, "\n%s: %s\n  %s\n", T.SetupTitle, T.SetupText, snap.SetupToken)
+		_, _ = fmt.Fprintf(w, "  %s\n", T.SetupCLI)
 	}
 	if snap.Running {
 		_, _ = fmt.Fprintf(w, "\n%s (%d)\n", T.Agents, len(snap.Agents))

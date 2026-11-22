@@ -15,6 +15,7 @@ import (
 
 	"github.com/CodexCircle/Regulus/internal/console"
 	"github.com/CodexCircle/Regulus/internal/localstatus"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type fixture struct {
@@ -371,5 +372,39 @@ func TestConfigSetErrorsStayEnglish(t *testing.T) {
 	code := configCommand([]string{"set", "listen", "70000", "--config", f.file}, f.env)
 	if code == 0 || !strings.Contains(f.errOut.String(), "listen: the port must be a number from 1 to 65535") {
 		t.Errorf("exit %d, stderr %q", code, f.errOut.String())
+	}
+}
+
+func TestDarkFromColorFGBG(t *testing.T) {
+	for v, want := range map[string]struct{ dark, ok bool }{
+		"15;0":         {true, true},
+		"0;15":         {false, true},
+		"0;default;15": {false, true},
+		"7;8":          {true, true},
+		"":             {false, false},
+		"15":           {false, false},
+		"15;nope":      {false, false},
+	} {
+		dark, ok := darkFromColorFGBG(v)
+		if dark != want.dark || ok != want.ok {
+			t.Errorf("COLORFGBG=%q: dark, ok = %v, %v; want %v, %v", v, dark, ok, want.dark, want.ok)
+		}
+	}
+}
+
+func TestLimitBackgroundQuerySkipsTheQuery(t *testing.T) {
+	for name, tc := range map[string]struct {
+		env  map[string]string
+		dark bool
+	}{
+		"COLORFGBG light":    {map[string]string{"COLORFGBG": "0;15"}, false},
+		"override light":     {map[string]string{"REGULUS_BACKGROUND": "Light"}, false},
+		"override dark":      {map[string]string{"REGULUS_BACKGROUND": "dark"}, true},
+		"Linux text console": {map[string]string{"TERM": "linux"}, true},
+	} {
+		limitBackgroundQuery(func(k string) string { return tc.env[k] })
+		if got := lipgloss.HasDarkBackground(); got != tc.dark {
+			t.Errorf("%s: HasDarkBackground = %v, want %v", name, got, tc.dark)
+		}
 	}
 }
