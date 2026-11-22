@@ -18,6 +18,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -97,6 +98,8 @@ type agentServer struct {
 
 	metrics *metricsStore
 	events  *broker
+	// stats counts the reports for GET /metrics (#389); may be nil.
+	stats *Stats
 
 	// hubVersion is the release of the hub, to judge the release of agents.
 	hubVersion string
@@ -108,6 +111,10 @@ type agentServer struct {
 	// must not wait: it runs on the handshake (the hub queues the write, see
 	// seen.go).
 	seen func(info AgentInfo, at time.Time)
+
+	// gone, if set, is told when an agent has no session any more (not when
+	// it is replaced by a new one). Like seen it must not wait (#382).
+	gone func(agentID string)
 
 	// disks, if set, is told the physical disks an agent reported, when they
 	// changed since its last report (#148). Like seen it must not wait.
@@ -178,9 +185,12 @@ type session struct {
 	pending   map[string]chan *agentv1.CommandResult
 	nextCmd   uint64
 
-	lastReport  time.Time // when the last metrics report was accepted (serve goroutine only)
-	diskSig     string    // the last physical-disk report, to write only a change
-	reportsLogd bool      // a dropped or cut report was already logged for this stream
+	lastReport time.Time // when the last metrics report was accepted (serve goroutine only)
+	diskSig    string    // the last physical-disk report, to write only a change
+	// diskRecheck makes the next report of the disks be written even when it
+	// did not change (set by another goroutine, see recheckDisks).
+	diskRecheck atomic.Bool
+	reportsLogd bool // a dropped or cut report was already logged for this stream
 }
 
 func newAgentServer(log *slog.Logger) *agentServer {
@@ -391,8 +401,10 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		now := time.Now()
 		if reportTooSoon(sess.lastReport, now, s.metricsInterval) {
 			s.logReportProblem(sess, "an agent sends metrics faster than the interval; extra reports are dropped")
+			s.stats.reportRejected()
 			return nil
 		}
+		s.stats.reportReceived()
 		sess.lastReport = now
 		if sanitizeReport(p.Metrics) {
 			s.logReportProblem(sess, "an agent report listed too many disks or interfaces; the rest was cut")
@@ -406,7 +418,7 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 		physical := p.Metrics.GetPhysicalDisks()
 		p.Metrics.PhysicalDisks, p.Metrics.DiskIdentityVersion = nil, 0
 		if s.disks != nil && len(physical) > 0 {
-			if sig := disksSignature(physical); sig != sess.diskSig {
+			if sig := disksSignature(physical); sig != sess.diskSig || sess.diskRecheck.Swap(false) {
 				sess.diskSig = sig
 				s.disks(sess.info.ID, physical, now)
 			}
@@ -485,6 +497,26 @@ func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint3
 	return sess
 }
 
+// connected reports whether the agent has a session now. An agent connected
+// only to be updated sends no disks and does not count.
+func (s *agentServer) connected(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess := s.sessions[id]
+	return sess != nil && !sess.info.UpdateOnly
+}
+
+// recheckDisks makes the agent's next report of its disks be written even if
+// it is the same as the last one (#382).
+func (s *agentServer) recheckDisks(id string) {
+	s.mu.Lock()
+	sess := s.sessions[id]
+	s.mu.Unlock()
+	if sess != nil {
+		sess.diskRecheck.Store(true)
+	}
+}
+
 // disconnect ends the connection of a revoked agent.
 func (s *agentServer) disconnect(id string) {
 	s.mu.Lock()
@@ -519,6 +551,9 @@ func (s *agentServer) unregister(sess *session) {
 	}
 	if gone { // a replaced connection leaves the agent connected through the new one
 		s.events.publish(goneEvent{Type: "agent.disconnected", ID: sess.info.ID})
+		if s.gone != nil {
+			s.gone(sess.info.ID)
+		}
 	}
 }
 

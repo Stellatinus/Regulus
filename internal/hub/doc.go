@@ -13,7 +13,11 @@
 //   - headers.go: the browser security headers (CSP, framing, sniffing, referrer,
 //     HSTS) set on every response.
 //   - disks.go: the physical disks the agents report, matched to an identity
-//     (internal/diskid), and the moves of a disk between servers.
+//     (internal/diskid), the moves of a disk between servers, and a disk that
+//     two connected servers report at once, which is a conflict and not a move.
+//   - prometheus.go: GET /metrics, the hub's figures and each connected
+//     server's latest in the Prometheus text format, written by hand, off unless
+//     prometheus.enabled and served only for a bearer token (not the login).
 //   - api.go, openapi.go, layout.go, updates_api.go: the HTTP API and its
 //     OpenAPI description.
 //   - agents.go, agent_net.go, local.go: the server side of the agent-hub

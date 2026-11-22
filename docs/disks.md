@@ -26,10 +26,23 @@ The report is not kept in the metrics history. When the disks of an agent change
 
 Both need **`inventory.read`**, a permission of its own: serial numbers identify hardware. `admin` and `operator` have it, `viewer` does not, and the serial is not in the metrics a viewer reads.
 
+## One disk reported by two servers (#382)
+
+When a server reports a disk that the hub has from another server **that is connected and still reports it**, the disk cannot be in two places: a cloned disk, an agent that lies, or a move that has not settled yet. The hub keeps the disk with the server that had it, names the second one (`contested_by` in the API, a new column `disks.contested_by`), flags the disk as **contested** on both servers' pages, and writes **no move**, however many reports follow. The flag ends by itself:
+
+- when the server that had the disk stops reporting it, or goes away, the hub asks the other to report its disks again (its report is otherwise written only when it changes) and that report records the move;
+- when the second server stops reporting the disk, the disk is as it was.
+
+The flag is shown only while both servers are connected; a leftover of a server that has gone is not shown. A conflict inside one report (two disks that give the same identifier) is a different thing: both are `duplicate` and not identifiable.
+
+## In the dashboard (#382)
+
+The page of each server (**Servers**, then the server) has a **Physical disks** panel for roles with `inventory.read` (the panel is not drawn, and the API is not asked, for anyone else): for each disk the device, model, serial, size, identity key and its kind (WWN, EUI-64, NGUID or model and serial), and a state (present; not reported now; **not identifiable** with the reason; **conflict** with the other server), then the moves to or from that server. English and Italian. The panel shows the disks of a server that is off too (what it last reported).
+
 ## Limits, and what is not done
 
 - **Not verified on real hardware** (#81). The reading is tested against fake `/sys` trees built from the layouts of SATA, NVMe, virtio and USB disks, not against a real disk moved between two machines: #381.
-- Two servers that report the same disk **at the same time** (a cloned disk, or an agent that lies) show as moves back and forth, not as a conflict: conflicts are detected within one report. Agents are trusted for their own inventory.
-- The identity is not shown in the dashboard: there is no inventory page yet (#62, #382). The API serves it.
+- Agents are trusted for their own inventory. A disk that two **connected** servers report at the same time is flagged (below); a clone that sits in a server that is off is a move when the other one reports it.
+- There is no inventory page yet (#62): the identity is shown on the page of each server (below).
 - The move is recorded in its own table; the event log of the disk (#150) is not built.
 - Serials of cloud volumes (for example an EBS volume reports `vol…` as its serial) are stable but are treated as virtual only when the vendor or model says so.

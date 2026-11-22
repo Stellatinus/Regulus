@@ -22,6 +22,7 @@ import { useT } from "./i18n";
 import { registry } from "./widgets";
 import { widgetTitle } from "./widgets/registry";
 import { metricsSummary } from "./limits";
+import { DisksPanel } from "./DisksPanel";
 
 // The widgets of the page of a server, in order.
 const WIDGETS = ["system", "cpu", "memory", "network", "disk"];
@@ -89,6 +90,7 @@ export function ServerPage({
         <Details
           agent={state.agent}
           canManage={can(session?.user, "servers.manage")}
+          canSeeDisks={can(session?.user, "inventory.read")}
           onChanged={reload}
         />
       )}
@@ -99,10 +101,12 @@ export function ServerPage({
 function Details({
   agent,
   canManage,
+  canSeeDisks,
   onChanged,
 }: {
   agent: Agent;
   canManage: boolean;
+  canSeeDisks: boolean;
   onChanged: () => void;
 }) {
   const t = useT();
@@ -176,6 +180,7 @@ function Details({
       {canManage && agent.id !== "local" && (
         <Manage agent={agent} onChanged={onChanged} />
       )}
+      {canSeeDisks && <DisksPanel serverId={agent.id} />}
       {online ? (
         <div className="server-grid">
           {WIDGETS.map((w) => {

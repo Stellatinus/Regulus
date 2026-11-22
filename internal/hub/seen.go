@@ -41,6 +41,9 @@ type seenRecorder struct {
 	closed  bool
 
 	failing bool // the last write failed (writer goroutine only)
+	// onWrite, if set, is told how long each write took and whether it worked
+	// (GET /metrics, #389). Writer goroutine only.
+	onWrite func(took time.Duration, err error)
 
 	wake      chan struct{}
 	closeOnce sync.Once
@@ -138,8 +141,12 @@ func (r *seenRecorder) drain() {
 		r.mu.Unlock()
 
 		ctx, cancel := context.WithTimeout(context.Background(), r.timeout)
+		began := time.Now()
 		err := w(ctx)
 		cancel()
+		if r.onWrite != nil {
+			r.onWrite(time.Since(began), err)
+		}
 		// One line when writes start failing and one when they work again,
 		// not one per agent and minute during an outage.
 		switch {

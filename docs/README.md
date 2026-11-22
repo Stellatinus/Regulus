@@ -13,6 +13,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | update the hub and the servers | [Updates](updates.md) |
 | know how releases and channels work | [Releases](releases.md) |
 | know which versions of hub, agents and helper work together, and what may change in the protocol | [Versioning](versioning.md) |
+| scrape the hub and its servers with Prometheus | [Metrics for Prometheus](metrics.md) |
 | use the API | [HTTP API](http-api.md) and `internal/hub/openapi.yaml` (also served at `/api/openapi.yaml`) |
 | learn what the dashboard offers | [Dashboard](dashboard.md) |
 | understand how the parts fit together | [Architecture](architecture.md), with diagrams and the code map |

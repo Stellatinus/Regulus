@@ -206,6 +206,21 @@ jobs:
     name: End-to-end (hub and remote agent binaries over mTLS)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # For TestPreviousReleaseServesOnTheCurrentSchema on PostgreSQL (#383).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: regulus
+          POSTGRES_PASSWORD: regulus-ci
+          POSTGRES_DB: regulus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U regulus -d regulus_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -216,6 +231,9 @@ jobs:
           # Lets the test of the previous release read the release list without
           # GitHub's anonymous rate limit.
           GITHUB_TOKEN: ${{ github.token }}
+          # Runs the previous release's program on a PostgreSQL database that
+          # this source migrated (#383); each test run uses a schema of its own.
+          REGULUS_TEST_DATABASE_URL: postgres://regulus:regulus-ci@localhost:5432/regulus_test?sslmode=disable
         run: |
           set -o pipefail
           make e2e 2>&1 | tee e2e.log
@@ -224,8 +242,39 @@ jobs:
           # repository without releases, or GitHub not answering): it says so
           # in the log, and this prints it as a warning. The load test
           # (TestHubUnderRealLoad) runs only with REGULUS_LOAD=1, by hand.
-          if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' -e 'TestHubUnderRealLoad' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+          if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' -e 'TestPreviousReleaseServesOnTheCurrentSchema' -e 'TestUpdateOfAnOlderAgentOverMTLS' -e 'TestHubUnderRealLoad' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
+          if grep -q -e '--- SKIP: TestPreviousReleaseServesOnTheCurrentSchema' e2e.log; then echo "::warning::the test of the previous release on the current schema was skipped (or one of its databases): $(grep -h -e 'no previous release' -e 'to run this on PostgreSQL' e2e.log | head -1)"; fi
+          if grep -q -e '--- SKIP: TestUpdateOfAnOlderAgentOverMTLS' e2e.log; then echo "::warning::the update of an older agent was skipped: $(grep -h -e 'only .* release is published' -e 'does not trust the identity' -e 'no releases to test with' e2e.log | head -1)"; fi
           if grep -q -e '--- SKIP: TestAgentOfAnOlderRelease' e2e.log; then echo "::warning::the test of the previous release was skipped: $(grep -h -e 'no previous release' e2e.log | head -1)"; fi
+
+  browser:
+    name: Browser tests (dashboard in Chromium against the real hub)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      # Playwright is installed outside the dashboard project on purpose: it is
+      # a test tool, and it keeps package.json and its lockfile free of a
+      # browser downloader (#390).
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --global playwright@1.63.0
+          playwright install --with-deps chromium
+      - name: make browser-test
+        run: make browser-test
+      # Screenshots, traces and the console of a failed scenario.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: browser-test-artifacts
+          path: browser-test-artifacts/
+          if-no-files-found: ignore
 
   proto:
     name: Protobuf (generated code up to date)

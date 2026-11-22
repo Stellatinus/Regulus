@@ -64,6 +64,8 @@ func Settings() []Setting {
 		{Key: "log.format", Env: "REGULUS_LOG_FORMAT", Description: "Log format", Choices: []string{"text", "json"}, Restart: true},
 		{Key: "updates.check", Env: "REGULUS_UPDATES_CHECK", Description: "Look for new releases on GitHub every few hours; false keeps the hub from contacting any server for updates", Choices: []string{"true", "false"}, Restart: true},
 		{Key: "updates.apply", Env: "REGULUS_UPDATES_APPLY", Description: "Let the dashboard install downloaded updates through the root helper (regulus-update.path, enabled by the installer)", Choices: []string{"true", "false"}, Restart: true},
+		{Key: "prometheus.enabled", Env: "REGULUS_PROMETHEUS_ENABLED", Description: "Serve GET /metrics in the Prometheus text format (the hub's figures and each server's latest); needs prometheus.token", Choices: []string{"true", "false"}, Restart: true},
+		{Key: "prometheus.token", Env: "REGULUS_PROMETHEUS_TOKEN", Description: "Bearer token a Prometheus scrape sends, at least 32 characters; read only from the environment (/etc/regulus/regulus.env), never shown or written to the configuration file", Restart: true, Secret: true},
 		{Key: "console.tui", Description: "Open the full-screen console when running `regulus` in a terminal", Choices: []string{"true", "false"}},
 	}
 }
@@ -134,6 +136,13 @@ func (c Config) Get(key string) (string, bool) {
 		return strconv.FormatBool(c.Updates.Check), true
 	case "updates.apply":
 		return strconv.FormatBool(c.Updates.Apply), true
+	case "prometheus.enabled":
+		return strconv.FormatBool(c.Prometheus.Enabled), true
+	case "prometheus.token":
+		if c.Prometheus.Token != "" {
+			return Masked, true
+		}
+		return "", true
 	case "console.tui":
 		return strconv.FormatBool(c.Console.TUI), true
 	}
@@ -193,8 +202,10 @@ func normalize(key, raw string) (string, *SettingError) {
 		}
 		return v, nil
 	case "database.password":
-		return "", settingErr("", ErrPasswordInFile)
-	case "builtin_agent", "console.tui", "updates.check", "updates.apply":
+		return "", settingErr("", ErrPasswordInFile, "REGULUS_DATABASE_PASSWORD")
+	case "prometheus.token":
+		return "", settingErr("", ErrPasswordInFile, "REGULUS_PROMETHEUS_TOKEN")
+	case "builtin_agent", "console.tui", "updates.check", "updates.apply", "prometheus.enabled":
 		b, err := strconv.ParseBool(v)
 		if err != nil {
 			return "", settingErr("", ErrBool)

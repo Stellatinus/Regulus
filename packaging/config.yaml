@@ -63,6 +63,13 @@ metrics_budget: 256MiB
 # owned by root and not writable by regulus.
 # plugins_dir: /usr/local/lib/regulus/plugins
 
+# GET /metrics in the Prometheus text format (docs/metrics.md). Off by default.
+# It needs a token of at least 32 characters, which is read only from the
+# environment: put REGULUS_PROMETHEUS_TOKEN=... in /etc/regulus/regulus.env
+# (mode 0640, root:regulus). The hub refuses to start with it on and no token.
+# prometheus:
+#   enabled: true
+
 log:
   level: info # debug, info, warn, error
   format: text # text, json

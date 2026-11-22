@@ -148,10 +148,18 @@ func olderRelease(t *testing.T) (bin, version string) {
 		}
 		return abs, version
 	}
-	rel, err := newestRelease()
+	rels, err := publishedReleases()
 	if err != nil {
 		t.Skipf("no previous release to test against (%v); set REGULUS_E2E_OLD_BIN and REGULUS_E2E_OLD_VERSION to use your own", err)
 	}
+	return downloadRelease(t, rels[0])
+}
+
+// downloadRelease downloads the linux archive of a release for this machine,
+// checks it against the release's checksums.txt, and returns the binary in it
+// and the version, or skips the test.
+func downloadRelease(t *testing.T, rel release) (bin, version string) {
+	t.Helper()
 	version = strings.TrimPrefix(rel.Tag, "v")
 	archive := fmt.Sprintf("regulus_%s_linux_%s.tar.gz", version, runtime.GOARCH)
 	assets := map[string]string{}
@@ -195,10 +203,10 @@ type release struct {
 	} `json:"assets"`
 }
 
-// newestRelease is the newest published release of the project, a
-// pre-release included: the previous release of any channel is what an agent
+// publishedReleases lists the published releases of the project, newest first,
+// pre-releases included: the previous release of any channel is what an agent
 // of an older install runs.
-func newestRelease() (release, error) {
+func publishedReleases() ([]release, error) {
 	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/repos/"+update.Repository+"/releases?per_page=10", nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
@@ -206,22 +214,26 @@ func newestRelease() (release, error) {
 	}
 	res, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return release{}, err
+		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return release{}, fmt.Errorf("GitHub answered %d", res.StatusCode)
+		return nil, fmt.Errorf("GitHub answered %d", res.StatusCode)
 	}
 	var list []release
 	if err := json.NewDecoder(res.Body).Decode(&list); err != nil {
-		return release{}, err
+		return nil, err
 	}
+	var out []release
 	for _, r := range list {
 		if !r.Draft && r.Tag != "" {
-			return r, nil
+			out = append(out, r)
 		}
 	}
-	return release{}, fmt.Errorf("%s has no published release", update.Repository)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%s has no published release", update.Repository)
+	}
+	return out, nil
 }
 
 func download(url string) ([]byte, error) {

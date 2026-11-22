@@ -67,7 +67,11 @@ var sessionRecheck = 30 * time.Second
 // password) or whose user lost the permission is closed. still makes that
 // check for one request; nil means no login is needed. A user has at most
 // maxStreamsPerUser streams open; one more is refused with 429.
-func streamHandler(src AgentSource, still func(*http.Request) func(context.Context) bool) http.HandlerFunc {
+func streamHandler(src AgentSource, still func(*http.Request) func(context.Context) bool, stats ...*Stats) http.HandlerFunc {
+	var st *Stats
+	if len(stats) > 0 {
+		st = stats[0]
+	}
 	slots := &streamSlots{open: map[int64]int{}}
 	return func(w http.ResponseWriter, r *http.Request) {
 		if src == nil {
@@ -94,6 +98,8 @@ func streamHandler(src AgentSource, still func(*http.Request) func(context.Conte
 		if err != nil {
 			return // Accept has already answered
 		}
+		st.streamOpened()
+		defer st.streamClosed()
 		defer func() { _ = conn.CloseNow() }()
 		ctx := conn.CloseRead(r.Context()) // handles pings and the close handshake
 
