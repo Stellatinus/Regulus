@@ -423,3 +423,37 @@ func difference(want, got []string) string {
 	}
 	return b.String()
 }
+
+// On both backends the migrations record what a binary must know to work on
+// the database (#247): the strict default for most, and the declared value
+// for an expand-only migration such as the one that adds the disks tables.
+func TestReaderMinIsRecordedOnTheBackendInUse(t *testing.T) {
+	db := storagetest.Open(t, t.TempDir())
+	defer func() { _ = db.Close() }()
+	rows, err := db.Query(`SELECT version, reader_min FROM schema_migrations ORDER BY version`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	n := 0
+	for rows.Next() {
+		var version, readerMin int
+		if err := rows.Scan(&version, &readerMin); err != nil {
+			t.Fatal(err)
+		}
+		n++
+		switch version {
+		case 16:
+			if readerMin != 15 {
+				t.Errorf("migration 16 (expand-only) has reader_min %d, want 15", readerMin)
+			}
+		case 1:
+			if readerMin != 1 {
+				t.Errorf("migration 1 has reader_min %d, want its own version", readerMin)
+			}
+		}
+	}
+	if n == 0 {
+		t.Fatal("no migrations recorded")
+	}
+}

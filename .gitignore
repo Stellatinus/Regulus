@@ -9,3 +9,6 @@ internal/webui/dist/*
 # Local hub data
 /data/
 /dist/
+
+# Built plugins (docs/plugins/writing-a-plugin.md)
+/plugins/*/bin/

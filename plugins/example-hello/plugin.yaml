@@ -1,10 +1,11 @@
-# The smallest plugin: it serves the plugin contract and says it is healthy.
+# The example plugin: it serves the plugin contract, keeps a count of its starts
+# in its data directory and is healthy while that directory is writable.
 # Build it into bin/ to try it (docs/plugins/writing-a-plugin.md):
 #   go build -o plugins/example-hello/bin/example-hello ./plugins/example-hello
 id: example-hello
 version: 0.1.0
 name: Hello example
-description: An example plugin that only proves it runs. It does nothing else.
+description: An example plugin. It counts its starts in its data directory and shows nothing else.
 api: 1
 requires: ">=0.0.0"
 components:
@@ -12,6 +13,8 @@ components:
     command: bin/example-hello
   hub:
     command: bin/example-hello
+  ui:
+    module: ui/widgets.js
 permissions:
   - id: example-hello.read
     description: See that the example plugin is running.
