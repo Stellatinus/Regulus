@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"os/exec"
@@ -109,10 +108,7 @@ func TestHubUnderRealLoad(t *testing.T) {
 	// The dashboards' users: each has an account and a session. Creating an
 	// account asks for a recent proof of the password.
 	admin.do("POST", "/api/account/reauth", map[string]string{"password": password}, http.StatusOK)
-	type user struct {
-		api *api
-		jar *cookiejar.Jar
-	}
+	type user struct{ api *api }
 	users := make([]user, dashboards)
 	for i := range users {
 		name := fmt.Sprintf("viewer%02d", i)

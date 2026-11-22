@@ -129,7 +129,7 @@ var hasDefault = regexp.MustCompile(`(?i)\bDEFAULT\b`)
 // previous release on the new schema.
 func unsafeForPreviousRelease(stmt string) bool {
 	for _, re := range destructive {
-		if re.MatchString(stmt) && !(strings.Contains(re.String(), "NOT") && hasDefault.MatchString(stmt)) {
+		if re.MatchString(stmt) && (!strings.Contains(re.String(), "NOT") || !hasDefault.MatchString(stmt)) {
 			return true
 		}
 	}
