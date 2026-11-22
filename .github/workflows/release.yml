@@ -37,7 +37,7 @@ jobs:
       contents: read
       actions: read # to read the result of CI on this commit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # GoReleaser builds the changelog from the git history, and the check below needs main
           persist-credentials: false
@@ -65,10 +65,10 @@ jobs:
             exit 1
           fi
           echo "${GITHUB_SHA} is on main and CI passed."
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -76,7 +76,7 @@ jobs:
       - uses: anchore/sbom-action/download-syft@v0
         with:
           syft-version: ${{ env.SYFT_VERSION }}
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: ${{ env.GORELEASER_VERSION }}
           # Builds the archives, packages, SBOMs and checksums.txt. Signing and
@@ -93,7 +93,7 @@ jobs:
           # The installer is published, and signed, with the packages.
           cp packaging/install.sh release/install.sh
           ls -l release
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-files
           path: release/
@@ -112,7 +112,7 @@ jobs:
     steps:
       # The download is checked against the digest of the upload (the action
       # fails on a mismatch). No checkout and no install in this job.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-files
           path: release
