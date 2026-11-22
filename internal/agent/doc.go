@@ -1,8 +1,11 @@
 // Package agent is the client side of the agent-hub contract defined in
 // proto/regulus/agent/v1. It reports the machine (system information,
-// heartbeat, metrics, and the state of the plugins it is given) to a hub and
+// heartbeat, metrics, the identifiers of its physical disks, and the state of
+// the plugins it is given) to a hub and
 // executes the commands the hub sends, such as applying an update. It does not
-// run plugins itself: `regulus agent` hands it the supervisor's status.
+// run plugins itself: `regulus agent` hands it the supervisor's status. It
+// reads the identifiers of a disk (physdisks.go) but does not decide its
+// identity: that is the hub's, through internal/diskid.
 //
 // The same code runs in two places:
 //

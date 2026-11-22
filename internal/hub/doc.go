@@ -12,6 +12,8 @@
 //     at start when that port reaches other machines.
 //   - headers.go: the browser security headers (CSP, framing, sniffing, referrer,
 //     HSTS) set on every response.
+//   - disks.go: the physical disks the agents report, matched to an identity
+//     (internal/diskid), and the moves of a disk between servers.
 //   - api.go, openapi.go, layout.go, updates_api.go: the HTTP API and its
 //     OpenAPI description.
 //   - agents.go, agent_net.go, local.go: the server side of the agent-hub

@@ -80,6 +80,13 @@ func sanitizeReport(r *agentv1.MetricsReport) (cut bool) {
 	if len(r.Unavailable) > maxListEntries {
 		r.Unavailable, cut = r.Unavailable[:maxListEntries], true
 	}
+	if len(r.PhysicalDisks) > maxDisksPerAgent {
+		r.PhysicalDisks, cut = r.PhysicalDisks[:maxDisksPerAgent], true
+	}
+	for _, d := range r.PhysicalDisks {
+		d.Device, d.Vendor, d.Model, d.Serial = cleanText(d.GetDevice()), cleanText(d.GetVendor()), cleanText(d.GetModel()), cleanText(d.GetSerial())
+		d.Wwn, d.WwnKind, d.Transport = cleanText(d.GetWwn()), cleanText(d.GetWwnKind()), cleanText(d.GetTransport())
+	}
 	r.Collector = cleanText(r.GetCollector())
 	for i, u := range r.Unavailable {
 		r.Unavailable[i] = cleanText(u)

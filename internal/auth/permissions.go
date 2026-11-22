@@ -23,6 +23,8 @@ const (
 	PermRolesManage   = "roles.manage"
 	PermAuditRead     = "audit.read"
 	PermCoreUpdate    = "core.update"
+	// PermInventoryRead: what identifies hardware (serial numbers, WWNs).
+	PermInventoryRead = "inventory.read"
 )
 
 var catalogue = []Permission{
@@ -32,6 +34,7 @@ var catalogue = []Permission{
 	{PermUsersManage, "Manage accounts: create, disable, delete, reset passwords and two-factor, and the two-factor policy"},
 	{PermRolesManage, "Create, change and delete roles"},
 	{PermAuditRead, "Read the audit log"},
+	{PermInventoryRead, "See the hardware inventory: the disks of the servers with their serial numbers, and where a disk moved"},
 	{PermCoreUpdate, "See the updates of Regulus, check for them, download them and choose the update mode and channel"},
 }
 
@@ -68,7 +71,7 @@ type builtinRole struct {
 
 var builtinRoles = []builtinRole{
 	{name: RoleAdmin, description: "Everything, including accounts and roles", all: true},
-	{name: RoleOperator, description: "Works with the servers; does not manage accounts", perms: []string{PermServersRead, PermServersManage, PermLayoutEdit}},
+	{name: RoleOperator, description: "Works with the servers; does not manage accounts", perms: []string{PermServersRead, PermServersManage, PermLayoutEdit, PermInventoryRead}},
 	{name: RoleViewer, description: "Read only", perms: []string{PermServersRead, PermLayoutEdit}},
 }
 

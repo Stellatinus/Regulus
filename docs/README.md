@@ -17,6 +17,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | learn what the dashboard offers | [Dashboard](dashboard.md) |
 | understand how the parts fit together | [Architecture](architecture.md), with diagrams and the code map |
 | find my way in the biggest source files | [Code map](code-map.md) |
+| see how a disk keeps one identity between servers (disk identity, `inventory.read`) | [Disks](disks.md) |
 | look up a term | [Glossary](glossary.md) |
 | read the guide to hub promotion, redundancy and failover (skeleton, not implemented) | [Hub redundancy](hub-redundancy.md) |
 | see the kinds of machine in a group (hub, redundant hub, backup node, access gateway…) | [Node types](node-types.md) (design draft) |

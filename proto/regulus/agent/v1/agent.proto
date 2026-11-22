@@ -159,6 +159,39 @@ message MetricsReport {
   // it does not know as it is. Empty when everything was read, and from an
   // agent older than this field. Added in protocol 1 without a new version.
   repeated string unavailable = 10;
+  // The physical disks of the machine with what each drive reports about
+  // itself (#148), so the hub can follow a disk from server to server. They
+  // are raw identifiers: the hub decides which one is the identity key
+  // (docs/disks.md). disk_identity_version is the version of this part, 1 for
+  // the fields of PhysicalDisk below; 0 (and no disks) from an agent older than
+  // this field, or on a system where the agent could not read any. Added in
+  // protocol 1 without a new version: an older hub ignores both.
+  uint32 disk_identity_version = 11;
+  repeated PhysicalDisk physical_disks = 12;
+}
+
+// PhysicalDisk is one drive as the machine reports it. Everything is read
+// from the system (sysfs, udev) without privileges; a field the drive does not
+// report is empty, never guessed.
+message PhysicalDisk {
+  // The kernel name, for example "sda" or "nvme0n1". It identifies the disk
+  // on this server only and changes when the disk is moved or the machine
+  // restarts: never an identity, shown only to say where the disk is now.
+  string device = 1;
+  string vendor = 2;
+  string model = 3;
+  string serial = 4;
+  // The world-wide identifier of the drive: a WWN (SATA, SAS) or an EUI-64 or
+  // NGUID (NVMe), as lowercase hexadecimal without separators or prefix.
+  string wwn = 5;
+  // What wwn is: "wwn", "eui64" or "nguid"; empty when wwn is empty.
+  string wwn_kind = 6;
+  uint64 size_bytes = 7;
+  // "sata", "sas", "nvme", "usb", "virtio", "scsi" or empty when unknown.
+  string transport = 8;
+  // The system says the disk is a virtual one (a hypervisor's disk). Such a
+  // disk usually has a made-up or missing serial.
+  bool virtual = 9;
 }
 
 // PluginStatus is the state of one plugin as the agent's supervisor sees it.
