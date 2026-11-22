@@ -7,6 +7,10 @@
 //     channel and download files.
 //   - signature.go: verify the checksums and the Sigstore signature of a
 //     release.
+//   - index.go: the signed index of releases (latest.json): verify it, refuse
+//     a replayed or expired one, and notice a release the list leaves out.
+//   - policy.go: the local limits (channel, major version) the root helper
+//     enforces on what it installs.
 //   - stage.go: keep verified archives in a local cache.
 //   - manager.go: Manager, the entry point. It holds the settings (mode:
 //     manual, download or automatic; channel; maintenance window), checks for

@@ -34,6 +34,18 @@ export const updates = {
     "This hub has never been able to ask for new releases. It may not know about an update, a security fix included. Check that it can reach api.github.com.",
   "updates.version.lastSuccess": "Last successful check: {ago}.",
 
+  // #263: the signed index of releases (latest.json).
+  "updates.index.expired":
+    "The signed list of releases that this hub last verified expired on {detail}. The release server may be hiding a newer release, a security fix included. Check again later, and look at the releases page of the project.",
+  "updates.index.replayed":
+    "The release server offered a signed list of releases from {detail}, older than one this hub already verified. Someone may be replaying old answers: the hub may not know about a newer release.",
+  "updates.index.hidden":
+    "The signed list of releases names version {detail}, but the release server does not list it. A mirror or proxy may be hiding it: the hub may not know about a newer release.",
+  "updates.index.missing":
+    "The release server no longer offers the signed list of releases that this hub verified before. It may be hiding a newer release, a security fix included.",
+  "updates.index.invalid":
+    "The signed list of releases could not be verified: {detail}. The hub may not know about a newer release.",
+
   "updates.staged.label": "Downloaded update",
   "updates.staged.version": "Version",
   "updates.staged.downloaded": "is downloaded ({size}, {archive}).",
@@ -104,7 +116,8 @@ export const updates = {
     "Updating the servers, {size} at a time. It stops at the first failure.",
   "updates.rollout.progress": "Update progress",
   "updates.rollout.allCurrent": "All servers are up to date ({target}).",
-  "updates.rollout.exceptions": "Except these, which cannot be updated from here:",
+  "updates.rollout.exceptions":
+    "Except these, which cannot be updated from here:",
   "updates.rollout.exceptionsLabel": "Servers that cannot be updated from here",
   "updates.rollout.behindOne": "1 server runs an older version.",
   "updates.rollout.behindMany": "{count} servers run an older version.",
@@ -136,47 +149,83 @@ export const updates = {
   "updates.agent.rowMessage": "{name} ({from}): {status} — {message}",
 
   // #368: what the installer on a server wrote (internal/update/applycode.go).
-  "updates.applyMsg.request_unreadable": "The update request could not be read (it was not a request, was too large or was not a regular file). It was removed.",
-  "updates.applyMsg.invalid_version": "The request names an invalid version: {error}",
-  "updates.applyMsg.not_newer": "Version {version} is not newer than the installed {installed}. Updates never go backwards.",
-  "updates.applyMsg.rolled_back": "{error}. Version {version} was put back.{note}",
-  "updates.applyMsg.rollback_failed": "{error}. Putting {version} back failed: {rollback_error}",
-  "updates.applyMsg.interrupted_stands": "The installer was interrupted. The new version was checked afterwards and stands.",
-  "updates.applyMsg.interrupted_not_installed": "The installer was interrupted before the new version was installed. {version} is still in place.",
-  "updates.applyMsg.interrupted_rolled_back": "The installer was interrupted. Version {version} was put back.{note}",
-  "updates.applyMsg.interrupted_rollback_fail": "The installer was interrupted and putting {version} back failed: {error}",
+  "updates.applyMsg.request_unreadable":
+    "The update request could not be read (it was not a request, was too large or was not a regular file). It was removed.",
+  "updates.applyMsg.invalid_version":
+    "The request names an invalid version: {error}",
+  "updates.applyMsg.not_newer":
+    "Version {version} is not newer than the installed {installed}. Updates never go backwards.",
+  "updates.applyMsg.rolled_back":
+    "{error}. Version {version} was put back.{note}",
+  "updates.applyMsg.rollback_failed":
+    "{error}. Putting {version} back failed: {rollback_error}",
+  "updates.applyMsg.interrupted_stands":
+    "The installer was interrupted. The new version was checked afterwards and stands.",
+  "updates.applyMsg.interrupted_not_installed":
+    "The installer was interrupted before the new version was installed. {version} is still in place.",
+  "updates.applyMsg.interrupted_rolled_back":
+    "The installer was interrupted. Version {version} was put back.{note}",
+  "updates.applyMsg.interrupted_rollback_fail":
+    "The installer was interrupted and putting {version} back failed: {error}",
 
   // #372: the steps that fail with the text of a system error ({error} is that text, in English).
-  "updates.applyMsg.version_unreadable": "The installed version could not be read: {error}",
-  "updates.applyMsg.work_dir_failed": "The installer could not make its working directory: {error}",
-  "updates.applyMsg.fetch_failed": "The downloaded release could not be used: {error}",
-  "updates.applyMsg.extract_failed": "The program could not be taken out of the archive: {error}",
-  "updates.applyMsg.new_binary_mismatch": "The new program does not report version {version} (it reported: {got}).",
-  "updates.applyMsg.backup_failed": "The current program could not be kept for a rollback: {error}",
-  "updates.applyMsg.database_copy_failed": "A copy of the database could not be kept for a rollback: {error}. Nothing was changed.",
-  "updates.applyMsg.pending_write_failed": "The update in progress could not be recorded: {error}",
-  "updates.applyMsg.swap_failed": "The new program could not be put in place: {error}",
-  "updates.applyMsg.marker_unreadable": "The note of an interrupted update could not be read. It was removed.",
-  "updates.applyMsg.marker_outside": "The note of an interrupted update names a file outside the state directory. It was removed.",
-  "updates.applyMsg.boot_not_confirmed": "Version {version} was not confirmed after the machine started {count} times with it. Version {from} was put back.{note}",
-  "updates.applyMsg.boot_not_confirmed_bad": "Version {version} was not confirmed after the machine started {count} times with it, and putting {from} back failed: {error}",
-  "updates.applyMsg.boot_unusable": "The update was interrupted and the program left in place cannot be used. Version {from} was put back.{note}",
-  "updates.applyMsg.boot_unusable_bad": "The update was interrupted and the program left in place cannot be used, and putting {from} back failed: {error}",
-  "updates.applyMsg.boot_database_bad": "The update was interrupted. {from} is in place, but the database could not be restored: {error}",
-  "updates.applyMsg.boot_database_back": "The update was interrupted. Version {from} is in place.{note}",
-  "updates.applyMsg.policy_channel": "Version {version} is on the {channel} channel, and this server's update policy allows at most {max}.",
-  "updates.applyMsg.policy_major": "Version {version} is a new major version, and this server's update policy allows at most {max}.",
-  "updates.applyMsg.policy_unreadable": "The local update policy cannot be used, so nothing is installed: {error}",
+  "updates.applyMsg.version_unreadable":
+    "The installed version could not be read: {error}",
+  "updates.applyMsg.work_dir_failed":
+    "The installer could not make its working directory: {error}",
+  "updates.applyMsg.fetch_failed":
+    "The downloaded release could not be used: {error}",
+  "updates.applyMsg.extract_failed":
+    "The program could not be taken out of the archive: {error}",
+  "updates.applyMsg.new_binary_mismatch":
+    "The new program does not report version {version} (it reported: {got}).",
+  "updates.applyMsg.backup_failed":
+    "The current program could not be kept for a rollback: {error}",
+  "updates.applyMsg.database_copy_failed":
+    "A copy of the database could not be kept for a rollback: {error}. Nothing was changed.",
+  "updates.applyMsg.pending_write_failed":
+    "The update in progress could not be recorded: {error}",
+  "updates.applyMsg.swap_failed":
+    "The new program could not be put in place: {error}",
+  "updates.applyMsg.marker_unreadable":
+    "The note of an interrupted update could not be read. It was removed.",
+  "updates.applyMsg.marker_outside":
+    "The note of an interrupted update names a file outside the state directory. It was removed.",
+  "updates.applyMsg.boot_not_confirmed":
+    "Version {version} was not confirmed after the machine started {count} times with it. Version {from} was put back.{note}",
+  "updates.applyMsg.boot_not_confirmed_bad":
+    "Version {version} was not confirmed after the machine started {count} times with it, and putting {from} back failed: {error}",
+  "updates.applyMsg.boot_unusable":
+    "The update was interrupted and the program left in place cannot be used. Version {from} was put back.{note}",
+  "updates.applyMsg.boot_unusable_bad":
+    "The update was interrupted and the program left in place cannot be used, and putting {from} back failed: {error}",
+  "updates.applyMsg.boot_database_bad":
+    "The update was interrupted. {from} is in place, but the database could not be restored: {error}",
+  "updates.applyMsg.boot_database_back":
+    "The update was interrupted. Version {from} is in place.{note}",
+  "updates.applyMsg.policy_channel":
+    "Version {version} is on the {channel} channel, and this server's update policy allows at most {max}.",
+  "updates.applyMsg.policy_major":
+    "Version {version} is a new major version, and this server's update policy allows at most {max}.",
+  "updates.applyMsg.policy_unreadable":
+    "The local update policy cannot be used, so nothing is installed: {error}",
 
   // #368: the message of a server's step in an update of the servers
   // (internal/hub/rollout.go).
   "updates.rolloutMsg.not_connected": "The server is not connected.",
-  "updates.rolloutMsg.no_archive": "The hub has no archive for this server: {error}",
+  "updates.rolloutMsg.no_archive":
+    "The hub has no archive for this server: {error}",
   "updates.rolloutMsg.stopped": "Stopped.",
-  "updates.rolloutMsg.agent_too_old": "This agent is too old to update itself: update it once with install.sh.",
-  "updates.rolloutMsg.result_unknown": "The update of the servers was stopped before this server's result was known.",
-  "updates.rolloutMsg.rolled_back": "The server connected with version {version}, then came back with version {back}: the installer rolled the update back.",
-  "updates.rolloutMsg.did_not_take": "The server came back with version {back} and not {version} within {wait}: the update did not take or was rolled back.",
-  "updates.rolloutMsg.did_not_stay": "The server connected with version {version} but did not stay connected.",
-  "updates.rolloutMsg.did_not_return": "The server did not connect again within {wait}.",
+  "updates.rolloutMsg.agent_too_old":
+    "This agent is too old to update itself: update it once with install.sh.",
+  "updates.rolloutMsg.result_unknown":
+    "The update of the servers was stopped before this server's result was known.",
+  "updates.rolloutMsg.rolled_back":
+    "The server connected with version {version}, then came back with version {back}: the installer rolled the update back.",
+  "updates.rolloutMsg.did_not_take":
+    "The server came back with version {back} and not {version} within {wait}: the update did not take or was rolled back.",
+  "updates.rolloutMsg.did_not_stay":
+    "The server connected with version {version} but did not stay connected.",
+  "updates.rolloutMsg.did_not_return":
+    "The server did not connect again within {wait}.",
 } as const;

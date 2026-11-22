@@ -247,6 +247,7 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		Log:      log.With("component", "updates"),
 		Source:   src,
 		Stager:   stager,
+		Verifier: ver,
 		Audit:    authn,
 		Version:  h.version,
 		GOOS:     runtime.GOOS,

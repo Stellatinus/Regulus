@@ -21,6 +21,17 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      # Run on a release tag (the "Use workflow from" box), by
+      # refresh-latest.yml or by hand: builds nothing and publishes no release,
+      # only makes a new signed latest.json for that tag and replaces it on the
+      # release (#263). It has to run at a tag because the signature names the
+      # workflow at the tag: only a release tag whose release.yml has this input
+      # can be refreshed.
+      refresh_only:
+        description: "Only refresh latest.json (the signed index of releases); build and publish nothing"
+        type: boolean
+        default: false
 
 # No permission at all unless a job asks for it.
 permissions: {}
@@ -33,7 +44,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && inputs.refresh_only != true
     permissions:
       contents: read
       actions: read # to read the result of CI on this commit
@@ -98,6 +109,36 @@ jobs:
         with:
           name: release-files
           path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # The signed index of releases (latest.json, #263). Like build, this job has
+  # no id-token: it only makes the file. publish-index signs it.
+  index:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Make latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate >releases.json
+          go run ./cmd/make-latest -releases releases.json -tag "$TAG" -o latest.json
+          cat latest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-index
+          path: latest.json
           if-no-files-found: error
           retention-days: 7
 
@@ -176,3 +217,41 @@ jobs:
           files=$(ls | grep -v '^CHANGELOG.md$')
           # shellcheck disable=SC2086
           gh release create "$TAG" $files --verify-tag --title "$TAG" --notes-file ../notes.md "$kind"
+
+  # Signs latest.json with the identity of this workflow at the tag, the one
+  # that signs checksums.txt, and puts it on the release. After a normal release
+  # it runs once the release exists; in a refresh (refresh_only) it replaces the
+  # file of the release the workflow was started on.
+  publish-index:
+    needs: [index, publish]
+    if: ${{ !cancelled() && needs.index.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # upload the assets
+      id-token: write # keyless signing with Sigstore
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-index
+          path: index
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+      - name: Check, sign and upload latest.json
+        working-directory: index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          # What the build job made must be what this run is for: the tag of
+          # this run, issued now-ish and expiring within 90 days.
+          jq -e --arg tag "$TAG" '
+            .tag == $tag
+            and (.issued_at | fromdateiso8601) > (now - 3600)
+            and (.expires | fromdateiso8601) > now
+            and ((.expires | fromdateiso8601) - (.issued_at | fromdateiso8601)) <= 90 * 86400
+            and (.channels | type == "object")' latest.json >/dev/null
+          cosign sign-blob --yes --new-bundle-format --bundle latest.json.sigstore.json latest.json
+          gh release upload "$TAG" latest.json latest.json.sigstore.json --clobber --repo "$GITHUB_REPOSITORY"

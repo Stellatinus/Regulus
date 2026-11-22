@@ -1,6 +1,9 @@
 import { catalogs, type MessageKey } from "./i18n";
 
-type Translate = (key: MessageKey, params?: Record<string, string | number>) => string;
+type Translate = (
+  key: MessageKey,
+  params?: Record<string, string | number>,
+) => string;
 
 // Some texts come from the hub in English and name a thing by an id: the
 // permissions, the built-in roles and the events of the audit log. The
@@ -13,15 +16,21 @@ function known(t: Translate, key: string, fallback: string): string {
 }
 
 // permissionText is what a permission allows, in the language of t.
-export const permissionText = (t: Translate, id: string, hubText: string) => known(t, `users.perm.${id}`, hubText);
+export const permissionText = (t: Translate, id: string, hubText: string) =>
+  known(t, `users.perm.${id}`, hubText);
 
 // roleText is the description of a role: a built-in one comes from the
 // catalog, one made by an administrator is what they wrote.
-export const roleText = (t: Translate, name: string, builtin: boolean, hubText: string) =>
-  builtin ? known(t, `users.roleDesc.${name}`, hubText) : hubText;
+export const roleText = (
+  t: Translate,
+  name: string,
+  builtin: boolean,
+  hubText: string,
+) => (builtin ? known(t, `users.roleDesc.${name}`, hubText) : hubText);
 
 // eventText is the name of an audit event, such as "role created".
-export const eventText = (t: Translate, event: string) => known(t, `users.event.${event}`, event.replace(/_/g, " "));
+export const eventText = (t: Translate, event: string) =>
+  known(t, `users.event.${event}`, event.replace(/_/g, " "));
 
 // The `detail` of an audit entry is free text the hub writes in English from a
 // few fixed forms (internal/auth, internal/hub, internal/update). The hub
@@ -31,34 +40,88 @@ export const eventText = (t: Translate, event: string) => known(t, `users.event.
 // failed, a form added by a newer hub) is shown as the hub wrote it. This is a
 // stopgap: the proper fix is to store a code and arguments with the entry; see
 // docs/decisions.md ("GUI translations").
-const DETAIL_FORMS: { event?: string; re: RegExp; key: string; params?: (m: RegExpMatchArray) => Record<string, string | number> }[] = [
-  { event: "user_created", re: /^role (.+)$/, key: "users.detail.role", params: (m) => ({ role: m[1] }) },
-  { event: "role_changed", re: /^(.+) to (.+)$/, key: "users.detail.fromTo", params: (m) => ({ from: m[1], to: m[2] }) },
-  { event: "update_agent_updated", re: /^(.+) to (.+)$/, key: "users.detail.fromTo", params: (m) => ({ from: m[1], to: m[2] }) },
+const DETAIL_FORMS: {
+  event?: string;
+  re: RegExp;
+  key: string;
+  params?: (m: RegExpMatchArray) => Record<string, string | number>;
+}[] = [
+  {
+    event: "user_created",
+    re: /^role (.+)$/,
+    key: "users.detail.role",
+    params: (m) => ({ role: m[1] }),
+  },
+  {
+    event: "role_changed",
+    re: /^(.+) to (.+)$/,
+    key: "users.detail.fromTo",
+    params: (m) => ({ from: m[1], to: m[2] }),
+  },
+  {
+    event: "update_agent_updated",
+    re: /^(.+) to (.+)$/,
+    key: "users.detail.fromTo",
+    params: (m) => ({ from: m[1], to: m[2] }),
+  },
   { re: /^other sessions ended$/, key: "users.detail.otherSessionsEnded" },
-  { re: /^reset link used, sessions ended$/, key: "users.detail.resetLinkUsed" },
+  {
+    re: /^reset link used, sessions ended$/,
+    key: "users.detail.resetLinkUsed",
+  },
   { re: /^sessions ended$/, key: "users.detail.sessionsEnded" },
   { re: /^first admin$/, key: "users.detail.firstAdmin" },
   { re: /^reset-admin command$/, key: "users.detail.resetAdminCommand" },
   { re: /^wrong second factor$/, key: "users.detail.wrongSecondFactor" },
   { re: /^account disabled$/, key: "users.detail.accountDisabled" },
   { re: /^recovery code$/, key: "users.detail.recoveryCode" },
-  { event: "agents_listener_on", re: /^port (\d+)$/, key: "users.detail.port", params: (m) => ({ port: m[1] }) },
-  { event: "update_rollout_started", re: /^(\d+) servers?, (\d+) at a time$/, key: "users.detail.rolloutStarted", params: (m) => ({ servers: m[1], wave: m[2] }) },
-  { event: "update_rollout_finished", re: /^(stopped|done|failed)$/, key: "users.detail.rolloutState" },
-  { event: "update_apply_requested", re: /^from (.+)$/, key: "users.detail.fromVersion", params: (m) => ({ version: m[1] }) },
-  { event: "role_updated", re: /^renamed from ([^;]+); (.*)$/, key: "users.detail.roleRenamed", params: (m) => ({ name: m[1], permissions: m[2] }) },
+  {
+    event: "agents_listener_on",
+    re: /^port (\d+)$/,
+    key: "users.detail.port",
+    params: (m) => ({ port: m[1] }),
+  },
+  {
+    event: "update_rollout_started",
+    re: /^(\d+) servers?, (\d+) at a time$/,
+    key: "users.detail.rolloutStarted",
+    params: (m) => ({ servers: m[1], wave: m[2] }),
+  },
+  {
+    event: "update_rollout_finished",
+    re: /^(stopped|done|failed)$/,
+    key: "users.detail.rolloutState",
+  },
+  {
+    event: "update_apply_requested",
+    re: /^from (.+)$/,
+    key: "users.detail.fromVersion",
+    params: (m) => ({ version: m[1] }),
+  },
+  {
+    event: "role_updated",
+    re: /^renamed from ([^;]+); (.*)$/,
+    key: "users.detail.roleRenamed",
+    params: (m) => ({ name: m[1], permissions: m[2] }),
+  },
 ];
 
 // auditDetailText is the detail of an audit entry in the language of t, or the
 // hub's own text when it is not one of the known forms.
-export function auditDetailText(t: Translate, event: string, detail: string): string {
+export function auditDetailText(
+  t: Translate,
+  event: string,
+  detail: string,
+): string {
   for (const f of DETAIL_FORMS) {
     if (f.event !== undefined && f.event !== event) continue;
     const m = detail.match(f.re);
     if (!m) continue;
-    if (f.key === "users.detail.rolloutState") return known(t, `users.detail.rollout.${m[1]}`, detail);
-    return f.key in catalogs.en ? t(f.key as MessageKey, f.params?.(m)) : detail;
+    if (f.key === "users.detail.rolloutState")
+      return known(t, `users.detail.rollout.${m[1]}`, detail);
+    return f.key in catalogs.en
+      ? t(f.key as MessageKey, f.params?.(m))
+      : detail;
   }
   return detail;
 }
@@ -69,7 +132,15 @@ export function auditDetailText(t: Translate, event: string, detail: string): st
 // arguments are shown by their texts. An entry with no code, or a code this
 // dashboard does not know (a newer hub's), falls back to the English-form
 // recognition above, and then to the hub's own text.
-export function auditEntryDetail(t: Translate, e: { event: string; detail: string; code?: string; args?: Record<string, string> }): string {
+export function auditEntryDetail(
+  t: Translate,
+  e: {
+    event: string;
+    detail: string;
+    code?: string;
+    args?: Record<string, string>;
+  },
+): string {
   if (e.code && `users.detail.code.${e.code}` in catalogs.en) {
     const args = { ...(e.args ?? {}) };
     if (args.permissions !== undefined) {
@@ -79,13 +150,19 @@ export function auditEntryDetail(t: Translate, e: { event: string; detail: strin
         .map((id) => permissionText(t, id, id))
         .join(", ");
     }
-    if (e.code === "rollout_state") return known(t, `users.detail.rollout.${args.state}`, e.detail);
+    if (e.code === "rollout_state")
+      return known(t, `users.detail.rollout.${args.state}`, e.detail);
     if (args.apply_code !== undefined) {
       // The helper's message of an update that failed or was rolled back
       // (#372): shown from the updates catalog, its arguments prefixed "a_".
       const a: Record<string, string> = {};
-      for (const [k, v] of Object.entries(args)) if (k.startsWith("a_")) a[k.slice(2)] = v;
-      args.message = applyMessageText(t, { code: args.apply_code, args: a, message: args.message });
+      for (const [k, v] of Object.entries(args))
+        if (k.startsWith("a_")) a[k.slice(2)] = v;
+      args.message = applyMessageText(t, {
+        code: args.apply_code,
+        args: a,
+        message: args.message,
+      });
     }
     return t(`users.detail.code.${e.code}` as MessageKey, args);
   }
@@ -96,20 +173,32 @@ export function auditEntryDetail(t: Translate, e: { event: string; detail: strin
 // step's message, in the language of t: from the catalog when it has a code,
 // else as the hub or the helper wrote it (an older helper's, or a failure that
 // has no code).
-export function applyMessageText(t: Translate, m: { message?: string; code?: string; args?: Record<string, string> }): string {
+export function applyMessageText(
+  t: Translate,
+  m: { message?: string; code?: string; args?: Record<string, string> },
+): string {
   const key = `updates.applyMsg.${m.code ?? ""}`;
-  return m.code && key in catalogs.en ? t(key as MessageKey, m.args ?? {}) : (m.message ?? "");
+  return m.code && key in catalogs.en
+    ? t(key as MessageKey, m.args ?? {})
+    : (m.message ?? "");
 }
 
-export function rolloutMessageText(t: Translate, m: { message?: string; code?: string; args?: Record<string, string> }): string {
+export function rolloutMessageText(
+  t: Translate,
+  m: { message?: string; code?: string; args?: Record<string, string> },
+): string {
   const key = `updates.rolloutMsg.${m.code ?? ""}`;
-  return m.code && key in catalogs.en ? t(key as MessageKey, m.args ?? {}) : (m.message ?? "");
+  return m.code && key in catalogs.en
+    ? t(key as MessageKey, m.args ?? {})
+    : (m.message ?? "");
 }
 
 // auditDetailKeys lists the catalog keys the forms above use, for the test that
 // checks both languages have each.
 export const auditDetailKeys = [
-  ...DETAIL_FORMS.map((f) => f.key).filter((k) => k !== "users.detail.rolloutState"),
+  ...DETAIL_FORMS.map((f) => f.key).filter(
+    (k) => k !== "users.detail.rolloutState",
+  ),
   "users.detail.rollout.stopped",
   "users.detail.rollout.done",
   "users.detail.rollout.failed",
