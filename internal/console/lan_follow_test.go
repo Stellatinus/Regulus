@@ -52,7 +52,9 @@ func TestLANCheck(t *testing.T) {
 	}
 
 	stopped := sys
-	stopped.Fetch = func(context.Context, string) (localstatus.Status, error) { return localstatus.Status{}, errors.New("refused") }
+	stopped.Fetch = func(context.Context, string) (localstatus.Status, error) {
+		return localstatus.Status{}, errors.New("refused")
+	}
 	if c := lanSnap(t, ":8080", stopped); c.Status != Info || !strings.Contains(c.Detail, "start the hub") {
 		t.Errorf("stopped: %+v", c)
 	}

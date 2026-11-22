@@ -149,6 +149,7 @@ function PluginTable({ plugins }: { plugins: PluginStatus[] }) {
               <td data-label={t("plugins.column.since")}>{p.since ? formatAgo(p.since, undefined, t) : "–"}</td>
               <td data-label={t("plugins.column.lastError")} className="wrap">
                 {p.last_error || "–"}
+                {p.last_error && <div className="hint">{t("plugins.ownWords")}</div>}
                 {hint && <div className="hint">{hint}</div>}
               </td>
             </tr>

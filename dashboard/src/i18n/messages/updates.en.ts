@@ -146,6 +146,25 @@ export const updates = {
   "updates.applyMsg.interrupted_rolled_back": "The installer was interrupted. Version {version} was put back.{note}",
   "updates.applyMsg.interrupted_rollback_fail": "The installer was interrupted and putting {version} back failed: {error}",
 
+  // #372: the steps that fail with the text of a system error ({error} is that text, in English).
+  "updates.applyMsg.version_unreadable": "The installed version could not be read: {error}",
+  "updates.applyMsg.work_dir_failed": "The installer could not make its working directory: {error}",
+  "updates.applyMsg.fetch_failed": "The downloaded release could not be used: {error}",
+  "updates.applyMsg.extract_failed": "The program could not be taken out of the archive: {error}",
+  "updates.applyMsg.new_binary_mismatch": "The new program does not report version {version} (it reported: {got}).",
+  "updates.applyMsg.backup_failed": "The current program could not be kept for a rollback: {error}",
+  "updates.applyMsg.database_copy_failed": "A copy of the database could not be kept for a rollback: {error}. Nothing was changed.",
+  "updates.applyMsg.pending_write_failed": "The update in progress could not be recorded: {error}",
+  "updates.applyMsg.swap_failed": "The new program could not be put in place: {error}",
+  "updates.applyMsg.marker_unreadable": "The note of an interrupted update could not be read. It was removed.",
+  "updates.applyMsg.marker_outside": "The note of an interrupted update names a file outside the state directory. It was removed.",
+  "updates.applyMsg.boot_not_confirmed": "Version {version} was not confirmed after the machine started {count} times with it. Version {from} was put back.{note}",
+  "updates.applyMsg.boot_not_confirmed_bad": "Version {version} was not confirmed after the machine started {count} times with it, and putting {from} back failed: {error}",
+  "updates.applyMsg.boot_unusable": "The update was interrupted and the program left in place cannot be used. Version {from} was put back.{note}",
+  "updates.applyMsg.boot_unusable_bad": "The update was interrupted and the program left in place cannot be used, and putting {from} back failed: {error}",
+  "updates.applyMsg.boot_database_bad": "The update was interrupted. {from} is in place, but the database could not be restored: {error}",
+  "updates.applyMsg.boot_database_back": "The update was interrupted. Version {from} is in place.{note}",
+
   // #368: the message of a server's step in an update of the servers
   // (internal/hub/rollout.go).
   "updates.rolloutMsg.not_connected": "The server is not connected.",

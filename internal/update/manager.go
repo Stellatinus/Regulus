@@ -500,10 +500,12 @@ func (m *Manager) SetSettings(ctx context.Context, by string, s Settings) (Statu
 	}
 	if old != s {
 		detail := fmt.Sprintf("mode %s, channel %s", s.Mode, s.Channel)
+		actx := auth.WithCode(ctx, auth.CodeUpdateSettings, "mode", string(s.Mode), "channel", string(s.Channel))
 		if s.Mode == ModeAutomatic {
 			detail += fmt.Sprintf(", window %s-%s", s.WindowStart, s.WindowEnd)
+			actx = auth.WithCode(ctx, auth.CodeUpdateSettingsWindow, "mode", string(s.Mode), "channel", string(s.Channel), "from", s.WindowStart, "to", s.WindowEnd)
 		}
-		m.audit(ctx, by, EventSettings, "updates", detail)
+		m.audit(actx, by, EventSettings, "updates", detail)
 	}
 	if old.Channel != s.Channel {
 		select {
@@ -763,13 +765,13 @@ func (m *Manager) doStage(ctx context.Context, by string) error {
 	if err != nil {
 		return m.failed(ctx, by, best.Version.String(), err)
 	}
-	m.audit(ctx, by, EventDownloaded, staged.Version, fmt.Sprintf("%s, sha256 %s, verified by %s", staged.Archive, staged.SHA256, staged.Verified))
+	m.audit(auth.WithCode(ctx, auth.CodeDownloaded, "archive", staged.Archive, "sha256", staged.SHA256, "verified", staged.Verified), by, EventDownloaded, staged.Version, fmt.Sprintf("%s, sha256 %s, verified by %s", staged.Archive, staged.SHA256, staged.Verified))
 	m.opts.Log.Info("update downloaded", "version", staged.Version, "verified", staged.Verified)
 	return nil
 }
 
 func (m *Manager) failed(ctx context.Context, by, version string, err error) error {
-	m.audit(ctx, by, EventDownloadFailed, version, err.Error())
+	m.audit(auth.WithCode(ctx, auth.CodeDownloadFailed, "error", err.Error()), by, EventDownloadFailed, version, err.Error())
 	return err
 }
 
@@ -911,7 +913,17 @@ func (m *Manager) syncApply(ctx context.Context) {
 	detail := "from " + res.From
 	if res.Message != "" {
 		detail += ": " + res.Message
-		ctx = auth.WithCode(ctx, auth.CodeFromVersionMessage, "version", res.From, "message", res.Message)
+		kv := []string{"version", res.From, "message", res.Message}
+		if res.Code != "" {
+			// The dashboard shows the helper's message from its own catalog
+			// (updates.applyMsg.<code>): the code and arguments go along, the
+			// arguments with the prefix "a_" (#372).
+			kv = append(kv, "apply_code", res.Code)
+			for k, v := range res.Args {
+				kv = append(kv, "a_"+k, v)
+			}
+		}
+		ctx = auth.WithCode(ctx, auth.CodeFromVersionMessage, kv...)
 	} else {
 		ctx = auth.WithCode(ctx, auth.CodeFromVersion, "version", res.From)
 	}

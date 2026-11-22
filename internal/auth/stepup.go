@@ -84,7 +84,7 @@ func (s *Service) RequireStepUp(next http.Handler) http.Handler {
 // count toward the same limit as the other checks of a logged-in user, so a
 // stolen session cannot guess the password here either.
 func (s *Service) Reauthenticate(ctx context.Context, u User, tokenHash, password, code string) (time.Time, error) {
-	if err := s.checkPasswordFor(ctx, u, password, "re-authentication"); err != nil {
+	if err := s.checkPasswordFor(ctx, u, password, "re-authentication", CodeReauthentication); err != nil {
 		return time.Time{}, err
 	}
 	if u.TwoFactor {

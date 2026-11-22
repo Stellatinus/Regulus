@@ -181,4 +181,12 @@ export const users = {
   "users.detail.code.rollout_state": "{state}",
   "users.detail.code.role_renamed": "renamed from {name}; {permissions}",
   "users.detail.code.permissions": "{permissions}",
+
+  // #372: details that were English only.
+  "users.detail.code.update_settings": "mode {mode}, channel {channel}",
+  "users.detail.code.update_settings_window": "mode {mode}, channel {channel}, window {from}-{to}",
+  "users.detail.code.update_downloaded": "{archive}, sha256 {sha256}, verified by {verified}",
+  "users.detail.code.update_download_failed": "{error}",
+  "users.detail.code.two_factor_settings": "two-factor settings",
+  "users.detail.code.reauthentication": "re-authentication",
 } as const;

@@ -29,6 +29,7 @@ export const plugins = {
   "plugins.state.stopped": "stopped",
   "plugins.state.invalid": "invalid",
 
+  "plugins.ownWords": "Not translated: these are the words of the plugin or of the plugin runtime.",
   "plugins.state.failedHint": "It stopped too often and is not started again until Regulus restarts.",
   "plugins.state.incompatibleHint": "It does not work with this version of Regulus and is never started.",
   "plugins.state.invalidHint": "This directory is not a usable plugin and is never started: fix or remove it, then restart Regulus.",

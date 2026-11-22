@@ -80,6 +80,13 @@ export function auditEntryDetail(t: Translate, e: { event: string; detail: strin
         .join(", ");
     }
     if (e.code === "rollout_state") return known(t, `users.detail.rollout.${args.state}`, e.detail);
+    if (args.apply_code !== undefined) {
+      // The helper's message of an update that failed or was rolled back
+      // (#372): shown from the updates catalog, its arguments prefixed "a_".
+      const a: Record<string, string> = {};
+      for (const [k, v] of Object.entries(args)) if (k.startsWith("a_")) a[k.slice(2)] = v;
+      args.message = applyMessageText(t, { code: args.apply_code, args: a, message: args.message });
+    }
     return t(`users.detail.code.${e.code}` as MessageKey, args);
   }
   return auditDetailText(t, e.event, e.detail);

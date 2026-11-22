@@ -17,6 +17,28 @@ const (
 	ApplyInterruptedNotInstalled  = "interrupted_not_installed" // version
 	ApplyInterruptedRolledBack    = "interrupted_rolled_back"   // version, note
 	ApplyInterruptedRollbackFails = "interrupted_rollback_fail" // version, error
+
+	// The steps of an installation that can fail with the text of a system
+	// error (#372). Each takes that text as error: it comes from the system
+	// (a file, a signature check, systemctl) in English and is shown as it
+	// is, see docs/decisions.md ("GUI translations").
+	ApplyVersionUnreadable   = "version_unreadable"     // error: asking the installed binary
+	ApplyWorkDirFailed       = "work_dir_failed"        // error
+	ApplyFetchFailed         = "fetch_failed"           // error: copy, signature or checksum
+	ApplyExtractFailed       = "extract_failed"         // error
+	ApplyNewBinaryMismatch   = "new_binary_mismatch"    // version, got
+	ApplyBackupFailed        = "backup_failed"          // error
+	ApplyDatabaseCopyFailed  = "database_copy_failed"   // error
+	ApplyPendingWriteFailed  = "pending_write_failed"   // error
+	ApplySwapFailed          = "swap_failed"            // error
+	ApplyMarkerUnreadable    = "marker_unreadable"      //
+	ApplyMarkerOutside       = "marker_outside"         //
+	ApplyBootNotConfirmed    = "boot_not_confirmed"     // version, count, from, note
+	ApplyBootNotConfirmedBad = "boot_not_confirmed_bad" // version, count, from, error
+	ApplyBootUnusable        = "boot_unusable"          // from, note
+	ApplyBootUnusableBad     = "boot_unusable_bad"      // from, error
+	ApplyBootDatabaseBad     = "boot_database_bad"      // from, error
+	ApplyBootDatabaseBack    = "boot_database_back"     // from, note
 )
 
 // codedError is an error that also says its code and arguments.

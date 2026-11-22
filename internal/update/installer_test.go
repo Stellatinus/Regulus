@@ -758,7 +758,7 @@ func TestUpdateIsRefusedWhenTheDatabaseCannotBeCopied(t *testing.T) {
 	f.request(t, "0.2.0")
 
 	res, err := f.in.Apply(t.Context())
-	if err == nil || res.Outcome != OutcomeFailed || !strings.Contains(res.Message, "copy of the database") {
+	if err == nil || res.Outcome != OutcomeFailed || !strings.Contains(res.Message, "copy of the database") || res.Code != ApplyDatabaseCopyFailed || res.Args["error"] == "" {
 		t.Errorf("result = %+v, err = %v", res, err)
 	}
 	if got := f.installed(t); got != "0.1.0" {

@@ -150,6 +150,25 @@ export const updatesIt: Record<keyof typeof updates, string> = {
   "updates.applyMsg.interrupted_rolled_back": "L'installazione è stata interrotta. È stata rimessa la versione {version}.{note}",
   "updates.applyMsg.interrupted_rollback_fail": "L'installazione è stata interrotta e rimettere la {version} non è riuscito: {error}",
 
+  // #372: i passaggi che falliscono con il testo di un errore di sistema ({error} è quel testo, in inglese).
+  "updates.applyMsg.version_unreadable": "Non è stato possibile leggere la versione installata: {error}",
+  "updates.applyMsg.work_dir_failed": "L'installazione non ha potuto creare la sua cartella di lavoro: {error}",
+  "updates.applyMsg.fetch_failed": "La release scaricata non è utilizzabile: {error}",
+  "updates.applyMsg.extract_failed": "Non è stato possibile estrarre il programma dall'archivio: {error}",
+  "updates.applyMsg.new_binary_mismatch": "Il nuovo programma non indica la versione {version} (ha indicato: {got}).",
+  "updates.applyMsg.backup_failed": "Non è stato possibile conservare il programma attuale per un ripristino: {error}",
+  "updates.applyMsg.database_copy_failed": "Non è stato possibile conservare una copia del database per un ripristino: {error}. Non è stato cambiato nulla.",
+  "updates.applyMsg.pending_write_failed": "Non è stato possibile registrare l'aggiornamento in corso: {error}",
+  "updates.applyMsg.swap_failed": "Non è stato possibile mettere a posto il nuovo programma: {error}",
+  "updates.applyMsg.marker_unreadable": "La nota di un aggiornamento interrotto non si poteva leggere. È stata rimossa.",
+  "updates.applyMsg.marker_outside": "La nota di un aggiornamento interrotto indica un file fuori dalla cartella di stato. È stata rimossa.",
+  "updates.applyMsg.boot_not_confirmed": "La versione {version} non è stata confermata dopo {count} avvii della macchina con essa. È stata rimessa la versione {from}.{note}",
+  "updates.applyMsg.boot_not_confirmed_bad": "La versione {version} non è stata confermata dopo {count} avvii della macchina con essa, e rimettere la {from} non è riuscito: {error}",
+  "updates.applyMsg.boot_unusable": "L'aggiornamento è stato interrotto e il programma rimasto non è utilizzabile. È stata rimessa la versione {from}.{note}",
+  "updates.applyMsg.boot_unusable_bad": "L'aggiornamento è stato interrotto e il programma rimasto non è utilizzabile, e rimettere la {from} non è riuscito: {error}",
+  "updates.applyMsg.boot_database_bad": "L'aggiornamento è stato interrotto. Resta la {from}, ma il database non si è potuto ripristinare: {error}",
+  "updates.applyMsg.boot_database_back": "L'aggiornamento è stato interrotto. Resta la versione {from}.{note}",
+
   // #368: the message of a server's step in an update of the servers
   // (internal/hub/rollout.go).
   "updates.rolloutMsg.not_connected": "Il server non è collegato.",

@@ -177,7 +177,7 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	res.Version = want.String()
 	from, err := in.installedVersion(ctx)
 	if err != nil {
-		return finish(OutcomeFailed, err)
+		return finish(OutcomeFailed, coded(err, ApplyVersionUnreadable, "error", err.Error()))
 	}
 	res.From = from.String()
 	if want.Compare(from) <= 0 {
@@ -188,28 +188,32 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 
 	work, err := os.MkdirTemp(in.StateDir, "apply-")
 	if err != nil {
-		return finish(OutcomeFailed, err)
+		return finish(OutcomeFailed, coded(err, ApplyWorkDirFailed, "error", err.Error()))
 	}
 	defer func() { _ = os.RemoveAll(work) }()
 
 	archive, err := in.fetchVerified(ctx, want, work)
 	if err != nil {
-		return finish(OutcomeFailed, err)
+		return finish(OutcomeFailed, coded(err, ApplyFetchFailed, "error", err.Error()))
 	}
 	binDir := filepath.Dir(in.Binary)
 	candidate := filepath.Join(binDir, ".regulus.update")
 	defer func() { _ = os.Remove(candidate) }()
 	if err := extractBinary(archive, candidate); err != nil {
-		return finish(OutcomeFailed, err)
+		return finish(OutcomeFailed, coded(err, ApplyExtractFailed, "error", err.Error()))
 	}
 	out, err := in.Run(ctx, candidate, "version")
 	if err != nil || strings.TrimSpace(string(out)) != want.String() {
-		return finish(OutcomeFailed, fmt.Errorf("the new binary does not report version %s (got %q, %v)", want, strings.TrimSpace(string(out)), err))
+		got := strings.TrimSpace(string(out))
+		if err != nil {
+			got += " (" + err.Error() + ")"
+		}
+		return finish(OutcomeFailed, coded(fmt.Errorf("the new binary does not report version %s (got %q, %v)", want, strings.TrimSpace(string(out)), err), ApplyNewBinaryMismatch, "version", want.String(), "got", got))
 	}
 
 	backup := filepath.Join(in.StateDir, backupName)
 	if err := copyExecutable(in.Binary, backup); err != nil {
-		return finish(OutcomeFailed, fmt.Errorf("keeping the current binary for a rollback: %w", err))
+		return finish(OutcomeFailed, coded(fmt.Errorf("keeping the current binary for a rollback: %w", err), ApplyBackupFailed, "error", err.Error()))
 	}
 	syncDir(in.StateDir, in.Log)
 	// A new version may migrate the database at its first start, and the old
@@ -221,7 +225,7 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 		snapshot = filepath.Join(in.StateDir, snapshotName)
 		if schemaBefore, err = storage.SnapshotSQLite(ctx, in.DataDir, snapshot); err != nil {
 			_ = os.Remove(snapshot)
-			return finish(OutcomeFailed, fmt.Errorf("keeping a copy of the database for a rollback: %w (nothing was changed)", err))
+			return finish(OutcomeFailed, coded(fmt.Errorf("keeping a copy of the database for a rollback: %w (nothing was changed)", err), ApplyDatabaseCopyFailed, "error", err.Error()))
 		}
 		syncDir(in.StateDir, in.Log)
 	}
@@ -229,11 +233,11 @@ func (in *Installer) Apply(ctx context.Context) (ApplyResult, error) {
 	// runs next knows an update was in flight and what to put back (Recover).
 	if err := in.writePending(Pending{From: from.String(), To: want.String(), Backup: backup, Snapshot: snapshot, SchemaBefore: schemaBefore, Unit: in.Unit, Agent: in.Agent, DataDir: in.DataDir, Started: in.Now().UTC()}); err != nil {
 		in.clearPending()
-		return finish(OutcomeFailed, fmt.Errorf("recording the update in progress: %w", err))
+		return finish(OutcomeFailed, coded(fmt.Errorf("recording the update in progress: %w", err), ApplyPendingWriteFailed, "error", err.Error()))
 	}
 	if err := os.Rename(candidate, in.Binary); err != nil {
 		in.clearPending()
-		return finish(OutcomeFailed, err)
+		return finish(OutcomeFailed, coded(err, ApplySwapFailed, "error", err.Error()))
 	}
 	syncDir(binDir, in.Log)
 	in.Log.Info("binary replaced; restarting", "unit", in.Unit, "from", from, "to", want)

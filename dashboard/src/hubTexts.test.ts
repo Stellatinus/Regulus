@@ -67,6 +67,20 @@ describe("the detail of an audit entry with a code", () => {
     expect(auditEntryDetail(tIn("it"), e)).toContain("Leggere il registro delle attività");
   });
 
+  // #372
+  it("covers the update settings, a failed download and a failed password check", () => {
+    expect(auditEntryDetail(tIn("it"), { event: "update_settings_changed", detail: "x", code: "update_settings_window", args: { mode: "automatic", channel: "stable", from: "02:00", to: "04:00" } })).toBe("modalità automatic, canale stable, finestra 02:00-04:00");
+    expect(auditEntryDetail(tIn("it"), { event: "password_change_failed", detail: "re-authentication", code: "reauthentication" })).toBe("nuova autenticazione");
+    expect(auditEntryDetail(tIn("en"), { event: "update_download_failed", detail: "boom", code: "update_download_failed", args: { error: "boom" } })).toBe("boom");
+  });
+
+  it("shows the helper's message of a failed update from the updates catalog", () => {
+    const e = { event: "update_apply_failed", detail: "from 1.0.0: English", code: "from_version_message", args: { version: "1.0.0", message: "English", apply_code: "swap_failed", a_error: "disk full" } };
+    expect(auditEntryDetail(tIn("it"), e)).toBe("dalla 1.0.0: Non è stato possibile mettere a posto il nuovo programma: disk full");
+    // an old helper's result has no apply_code: the English message stays
+    expect(auditEntryDetail(tIn("it"), { ...e, args: { version: "1.0.0", message: "English" } })).toBe("dalla 1.0.0: English");
+  });
+
   it("falls back to the forms, then to the hub's text, for an entry without a known code", () => {
     expect(auditEntryDetail(tIn("it"), { event: "role_changed", detail: "viewer to admin" })).toBe("viewer → admin");
     expect(auditEntryDetail(tIn("it"), { event: "x", detail: "free text", code: "from_a_newer_hub" })).toBe("free text");

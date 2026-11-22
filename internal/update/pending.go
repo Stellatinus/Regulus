@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -144,7 +145,9 @@ func (in *Installer) Recover(ctx context.Context) (ApplyResult, bool, error) {
 		return ApplyResult{}, false, nil
 	}
 	if perr != nil {
-		return ApplyResult{Outcome: OutcomeFailed, Message: perr.Error(), At: in.Now().UTC()}, true, perr
+		bad := ApplyResult{Outcome: OutcomeFailed, At: in.Now().UTC()}
+		bad.setMessage(perr)
+		return bad, true, perr
 	}
 	dir := ApplyDir(p.DataDir)
 	res := ApplyResult{Version: p.To, From: p.From, At: in.Now().UTC()}
@@ -199,11 +202,11 @@ func (in *Installer) readPending() (p Pending, found bool, err error) {
 	}
 	if err != nil || p.To == "" || p.From == "" || p.Backup == "" {
 		in.clearPending()
-		return Pending{}, true, errors.New("the marker of an interrupted update could not be read: it was removed")
+		return Pending{}, true, coded(errors.New("the marker of an interrupted update could not be read: it was removed"), ApplyMarkerUnreadable)
 	}
 	if filepath.Dir(p.Backup) != filepath.Clean(in.StateDir) || (p.Snapshot != "" && filepath.Dir(p.Snapshot) != filepath.Clean(in.StateDir)) {
 		in.clearPending()
-		return Pending{}, true, errors.New("the marker of an interrupted update names a file outside the state directory: it was removed")
+		return Pending{}, true, coded(errors.New("the marker of an interrupted update names a file outside the state directory: it was removed"), ApplyMarkerOutside)
 	}
 	// What the marker says about the role is what the interrupted run was.
 	in.Unit, in.Agent, in.DataDir = p.Unit, p.Agent, p.DataDir
@@ -239,7 +242,9 @@ func (in *Installer) RecoverBeforeStart(ctx context.Context) (res ApplyResult, s
 		return ApplyResult{}, false, nil
 	}
 	if perr != nil {
-		return ApplyResult{Outcome: OutcomeFailed, Message: perr.Error(), At: in.Now().UTC()}, true, perr
+		bad := ApplyResult{Outcome: OutcomeFailed, At: in.Now().UTC()}
+		bad.setMessage(perr)
+		return bad, true, perr
 	}
 	if _, aerr := in.Run(ctx, "systemctl", "is-active", "--quiet", p.Unit); aerr == nil {
 		in.Log.Warn("an update is unsettled but the service is running; leaving it to the confirm step", "unit", p.Unit)
@@ -260,12 +265,16 @@ func (in *Installer) RecoverBeforeStart(ctx context.Context) (res ApplyResult, s
 		in.Log.Info("interrupted update settled before the service starts", "outcome", outcome, "from", p.From, "to", p.To, "err", err)
 		return res, true, err
 	}
-	putBack := func(why string) (ApplyResult, bool, error) {
+	// putBack undoes the update; why says why in English and is the text of
+	// the error, while code and args (without the outcome of the put back,
+	// added here) are what the dashboard shows: ok is the code when it worked,
+	// bad when it did not (args: from, note or error, then the given ones).
+	putBack := func(why, ok, bad string, kv ...string) (ApplyResult, bool, error) {
 		note, rerr := in.putBack(ctx, p.Backup, p.From, p.Snapshot, p.SchemaBefore, false)
 		if rerr != nil {
-			return finish(OutcomeFailed, fmt.Errorf("%s and putting %s back failed: %v", why, p.From, rerr))
+			return finish(OutcomeFailed, coded(fmt.Errorf("%s and putting %s back failed: %v", why, p.From, rerr), bad, append(kv, "from", p.From, "error", rerr.Error())...))
 		}
-		return finish(OutcomeRolledBack, fmt.Errorf("%s; version %s was put back%s", why, p.From, note))
+		return finish(OutcomeRolledBack, coded(fmt.Errorf("%s; version %s was put back%s", why, p.From, note), ok, append(kv, "from", p.From, "note", note)...))
 	}
 
 	in.Log.Warn("the machine started with an update unsettled", "from", p.From, "to", p.To, "boot_attempts", len(p.BootAttempts))
@@ -277,20 +286,20 @@ func (in *Installer) RecoverBeforeStart(ctx context.Context) (res ApplyResult, s
 		if p.Snapshot != "" {
 			var derr error
 			if note, derr = in.restoreDatabase(ctx, p.Snapshot, p.SchemaBefore, false); derr != nil {
-				return finish(OutcomeFailed, fmt.Errorf("the update was interrupted, %s is in place, but %v", p.From, derr))
+				return finish(OutcomeFailed, coded(fmt.Errorf("the update was interrupted, %s is in place, but %v", p.From, derr), ApplyBootDatabaseBad, "from", p.From, "error", derr.Error()))
 			}
 		}
 		if note != "" {
-			return finish(OutcomeRolledBack, fmt.Errorf("the update was interrupted; version %s is in place%s", p.From, note))
+			return finish(OutcomeRolledBack, coded(fmt.Errorf("the update was interrupted; version %s is in place%s", p.From, note), ApplyBootDatabaseBack, "from", p.From, "note", note))
 		}
-		return finish(OutcomeFailed, fmt.Errorf("the update was interrupted before the new version was installed; %s is still in place", p.From))
+		return finish(OutcomeFailed, coded(fmt.Errorf("the update was interrupted before the new version was installed; %s is still in place", p.From), ApplyInterruptedNotInstalled, "version", p.From))
 	case verr == nil && v.String() == p.To:
 		now := in.Now().UTC()
 		if n := len(p.BootAttempts); n >= maxBootAttempts {
 			// A clock that went backwards counts as "just now": the case this
 			// guards against is a machine that cannot stay up.
 			if since := now.Sub(p.BootAttempts[n-maxBootAttempts]); since < bootAttemptWindow {
-				return putBack(fmt.Sprintf("version %s was not confirmed after the machine started %d times with it", p.To, n))
+				return putBack(fmt.Sprintf("version %s was not confirmed after the machine started %d times with it", p.To, n), ApplyBootNotConfirmed, ApplyBootNotConfirmedBad, "version", p.To, "count", strconv.Itoa(n))
 			}
 		}
 		p.BootAttempts = append(p.BootAttempts, now)
@@ -301,7 +310,7 @@ func (in *Installer) RecoverBeforeStart(ctx context.Context) (res ApplyResult, s
 		}
 		return res, false, nil
 	}
-	return putBack("the update was interrupted and the executable left in place cannot be used")
+	return putBack("the update was interrupted and the executable left in place cannot be used", ApplyBootUnusable, ApplyBootUnusableBad)
 }
 
 // LockState takes the lock of the state directory, so that two helpers (an
