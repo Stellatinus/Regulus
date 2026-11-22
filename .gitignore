@@ -6,6 +6,9 @@ dashboard/node_modules/
 internal/webui/dist/*
 !internal/webui/dist/.gitkeep
 
+# Screenshots and traces of a failed browser test (make browser-test)
+/browser-test-artifacts/
+
 # Local hub data
 /data/
 /dist/

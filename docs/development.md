@@ -10,6 +10,7 @@ make test-postgres    # the database tests on PostgreSQL too (needs REGULUS_TEST
 make lint             # golangci-lint and ESLint
 make smoke            # start bin/regulus and check it end to end (after make build)
 make e2e              # hub and remote agent binaries end to end over mTLS (about 30 s; no dashboard build needed)
+make browser-test     # the dashboard in Chromium against the real hub and agents (builds first; needs Playwright, see below)
 make fuzz             # run each fuzz target for 30s (FUZZTIME=2m for longer)
 scripts/test-install.sh   # tests of the install script (also part of make test)
 ```
@@ -40,9 +41,34 @@ A second test, `TestAgentOfAnOlderRelease` (#341), downloads the agent of the ne
 
 It skips, saying why, when there is no release to download (no network, GitHub's rate limit, a repository without releases); CI passes `GITHUB_TOKEN` to avoid the limit and accepts this one skip as a warning. `REGULUS_E2E_OLD_BIN` and `REGULUS_E2E_OLD_VERSION` (for example `0.2.0-alpha.1`) run it with a binary you have, offline.
 
+A third test, `TestPreviousReleaseServesOnTheCurrentSchema` (#383), runs the **program** of that same release on a database that this source migrated, the way a rollback does (the migration tests in `internal/storage` run only the old release's migrations):
+
+11. **The old release starts** on an empty database, then **this source** starts on it, migrates it and creates the first account, then the old release starts **again** on the migrated database. If every migration since is expand-only for it (`reader_min` not above the old release's schema version) it must serve: `/healthz` answers and the account signs in. If one is strict, the old release must refuse with "created by a newer version", and the test logs which migrations are strict (a rollback past them needs the backup). It runs on SQLite, and on PostgreSQL when `REGULUS_TEST_DATABASE_URL` is set (CI sets it with a PostgreSQL 16 service; each run uses a schema of its own). It skips with the same reasons and the same override as the one above, and the PostgreSQL part skips when the variable is not set. Both outcomes were run by hand against real binaries built from older commits; the PostgreSQL part has not run on a real machine (#239).
+
+A fourth test, `TestUpdateOfAnOlderAgentOverMTLS` (#384), needs two published releases: the real agent of the older one connects to a hub built from this source with the newer one's version, a rollout makes the hub download the newer release and check its Sigstore signature, and the old agent fetches it over mTLS, verifies it and leaves its request for the helper (`update.ApplyDir` of its data directory). Nothing installs it (the helper is a systemd unit), so the agent stays old and the rollout stays `running`. It skips, saying why, with fewer than two releases and **when the old agent does not trust the identity that signed the newer release**, which is the case for the two published today (v0.1.0-alpha.1 was signed as `CodexCircle/Regulus`, v0.2.0-alpha.1 as `Stellatinus/Regulus`: #392). **So the hand-over itself has not run against real releases**; the same flow is covered in process by `TestRolloutUpdatesAnAgentBehind`.
+
 Every process log is printed when the test fails, and a `DATA RACE` in any of them fails it. Breaking the pinning (`verifyPinned` accepting anything), the revocation of the live stream (`agentServer.disconnect`) or the revocation check at connection (`requireAgent` without `fleet.Authorize`) makes it fail; this was checked by hand when the test was written.
 
-**Not covered:** an update sent over the stream (`ApplyUpdate` needs a hub that trusts a signed release, and a hub binary trusts only the project's Sigstore identity, so a test cannot make one; #341 stays open for it), a hub CA that has expired, PostgreSQL as the hub database, and anything that needs systemd (the restart policy on status 3 is only asserted as the exit status). Nothing here replaces a run on a real machine (#81).
+**Not covered:** an update **installed** over the stream (the fourth test stops at the request for the helper, and skips until two releases signed by one identity exist, #392; #341 stays open for it), a hub CA that has expired, PostgreSQL as the hub database (except the schema test above), and anything that needs systemd (the restart policy on status 3 is only asserted as the exit status). Nothing here replaces a run on a real machine (#81).
+
+## Browser tests (the dashboard in a real browser, #390)
+
+`make browser-test` (the **Browser tests** job of CI, on every pull request) builds the binary with the dashboard in it and runs `scripts/browser-test/dashboard.test.mjs` with Node's test runner and Playwright's Chromium. The hub is the real binary on loopback with a temporary data directory, and the agents are real `regulus agent` processes enrolled through the API, as in `internal/e2e`. The scenarios share one hub and run in order; each has a browser context of its own with a Playwright trace:
+
+1. **First admin:** the setup page refuses a wrong setup token with a sentence, then creates the admin with the right one.
+2. **Live stream:** the Servers page is open on the live stream (**Live** in the top bar) before any server exists; an agent that is started and enrolled afterwards appears and turns `online` without a reload.
+3. **Language:** the language select switches to Italian (navigation and `<html lang>`) and back.
+4. **Themes:** Light and Dark set `data-theme` on `<html>` and give a light and a dark page background.
+5. **Phone:** at 390 by 844 with touch, no page scrolls sideways (Dashboard, Servers, a server, Plugins, Users, Updates, Account).
+6. **Refused sign-ins:** with the page in Italian, a `429` shows "Troppi tentativi non riusciti. Riprova tra 2 minuti.", a wrong password through the real hub shows "Nome utente o password errati.", and a `503` with `Retry-After` shows the busy note, waits, asks once more by itself and signs in. (The `429` and the first `503` are made by the test's network interception, not by the hub: the hub's own limits are tested in Go.)
+7. **Two-factor:** turn it on in Account with a code computed in the test (RFC 6238), sign out, and see that sign-in needs the code: a wrong one is refused and the right one signs in.
+8. **No Content-Security-Policy violation** in the console of any page the scenarios visited.
+
+A failed scenario leaves `browser-test-artifacts/<scenario>.png` (full-page screenshot), `.trace.zip` (open it with `npx playwright show-trace`) and `.txt` (the error and the page's console); CI uploads that directory as an artifact only when the job fails. A passing scenario leaves nothing.
+
+**Playwright is not a dependency of the dashboard.** The test uses the `playwright` package that is installed on its own (`npm install --global playwright@1.63.0 && playwright install --with-deps chromium`, as the CI job does; the cloud session of the agents has both), found through `NODE_PATH` as `scripts/browser-load.mjs` does, so `package.json` and its lockfile carry no browser downloader and `make test` is as light as before. The cost is a second place that names the version (the Makefile comment and `ci.yml`). `REGULUS_BROWSER` points at another Chromium, and `REGULUS_BIN` at another binary.
+
+**What stays manual** (the `[Test]` issues name only these now): Firefox and Safari (the CSP and the live stream there, #281; the automated run on Firefox and WebKit is #393); a real phone, with its keyboard, touch and the browser's own chrome (#309); a real reverse proxy and a real network, including the limits behind `trusted_proxies` (#281, #248); a screen reader (#309); the Italian wording, which only a person who reads Italian can judge (#274); plain HTTP on a LAN address (#309); charts over an hour of real data, and the long-`data_dir` note (#353); the hub busy under real load (#329). The scenarios above do not look at layout beyond horizontal scroll, and do not compare screenshots.
 
 ## Load test (hub under 200 agents and 20 dashboards)
 

@@ -1,4 +1,4 @@
-.PHONY: dashboard build lint test test-postgres test-one-connection smoke e2e fuzz proto proto-check proto-breaking clean
+.PHONY: dashboard build lint test test-postgres test-one-connection smoke e2e browser-test fuzz proto proto-check proto-breaking clean
 
 # Build the dashboard into internal/webui/dist so it is embedded in the binary.
 dashboard:
@@ -43,9 +43,25 @@ smoke:
 # with -race by the test) in its own process, over the mTLS agent listener.
 # It needs no dashboard build. See internal/e2e and docs/development.md. One
 # test downloads the previous published release's agent (see
-# TestAgentOfAnOlderRelease); it skips, saying why, when it cannot.
+# TestAgentOfAnOlderRelease); it skips, saying why, when it cannot. The same
+# release's hub is run on a database migrated by this source (TestPreviousRelease
+# ServesOnTheCurrentSchema, #383), on SQLite and, with REGULUS_TEST_DATABASE_URL,
+# on PostgreSQL. TestUpdateOfAnOlderAgentOverMTLS (#384) applies the newer
+# published release to the older one's agent through a rollout; it skips, saying
+# why, with fewer than two releases or when the old agent cannot verify the new one.
 e2e:
 	REGULUS_E2E=1 go test -race -count=1 -timeout 10m -v ./internal/e2e/
+
+# The dashboard in a real browser (Chromium through Playwright) against the real
+# hub binary with the dashboard built into it and real agents (#390): first
+# admin, sign-in with two factors, the live stream, language, themes, a phone
+# layout, refused sign-ins, no Content-Security-Policy violation. Needs the
+# `playwright` package, resolvable through NODE_PATH, and a Chromium for it:
+#   npm install --global playwright@1.63.0 && playwright install --with-deps chromium
+# A failed scenario leaves a screenshot, a trace and its console in
+# browser-test-artifacts/. See docs/development.md.
+browser-test: build
+	NODE_PATH="$${NODE_PATH:-$$(npm root -g)}" REGULUS_BIN=bin/regulus node --test scripts/browser-test/dashboard.test.mjs
 
 # Run every fuzz target for FUZZTIME each (the nightly Fuzz workflow uses 30s).
 # A plain `go test` already runs their seed corpora.

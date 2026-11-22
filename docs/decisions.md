@@ -336,6 +336,36 @@ Agent certificates were told apart only by `Organization: "Regulus agent"`, whic
 
 Remote agents can be turned on from the dashboard (#90), so that enrolling a second server needs no terminal on the hub. The choice is kept in the database, because the hub runs as `regulus` and cannot write `/etc/regulus/config.yaml`. `agent_listen` in the configuration always wins: when it is set the dashboard shows it and cannot change it. Turning the listener on needs `servers.manage`, the same permission as making enrollment tokens, since one is useless without the other; it is audited. Turning it off from the dashboard is not offered yet.
 
+## Metrics for Prometheus (#389)
+
+`GET /metrics` serves the hub's figures and the latest figures of each connected server in the Prometheus text format ([Metrics for Prometheus](metrics.md)). Choices:
+
+- **Hand-written, no library.** The text format is a `# HELP` and `# TYPE` line per metric and one `name{labels} value` line per sample; `internal/hub/prometheus.go` writes it in about 60 lines and a test checks every line against the grammar. The official client library would add a dependency tree and a registry for a few dozen figures that the hub already holds in memory; it is worth reconsidering if histograms are ever needed.
+- **Off by default, a separate bearer token.** The endpoint is outside `/api/` and outside the session login, because a scraper cannot sign in. It is served only with `prometheus.enabled` and a token of at least 32 characters in `REGULUS_PROMETHEUS_TOKEN` (the environment only, like the database password: never in the file, masked by `regulus config`, the hub refuses to start without it). The token is compared in constant time (on SHA-256 hashes, so its length does not leak) and a refusal sends nothing but `401`. A scoped API token would be better than one shared secret, but the API token design is not decided; this setting does not block it. The listener is loopback by default, so the port is not open to a network unless the administrator opens it.
+- **Labels: `id` and `server`.** `id` never changes, `server` is the display name for people. Disks add `mount` and `filesystem`, networks `interface`. A rename of a server makes a new series with the same `id`; queries that must survive a rename match on `id`.
+- **Cardinality is bounded in the hub:** at most 32 filesystems and 16 interfaces per server, the first ones of the report, and `regulus_server_series_cut` shows when some were left out. Without a bound one server with hundreds of container mounts would decide the size of the monitoring system.
+- **Counters are per process**, so they restart at 0 with the hub; database latency is the last measured value (the 15-second ping and the once-a-minute presence write), not a histogram: a scrape every 15 to 60 seconds sees a sample of it, not all of it.
+- **Not verified:** a scrape by a real Prometheus. The format is checked by a grammar test, not by `promtool check metrics` (the `[Test]` issue is #394, which also asks whether a scoped token should replace the shared one).
+
+## Updates: a PostgreSQL hub is not refused without a backup (#383)
+
+A hub on PostgreSQL can have its program replaced but not its database put back (the helper cannot copy a server). The question left over from #247 was whether the helper should refuse to update such a hub unless the request says "I have a backup". **Decision: no, it stays the administrator's call.** Reasons:
+
+- The risk exists only when a release has a **strict** migration (one an older program refuses). The project's rule is that a release's migrations are expand-only, a test fails for one that is not, and `TestPreviousReleaseServesOnTheCurrentSchema` (CI) runs the real previous release on the migrated schema (#383). A strict migration is a deliberate, listed exception and belongs in the release notes.
+- A confirmation on every update, whatever its migrations, teaches administrators to tick it. The automatic mode applies updates with nobody there to tick, so the rule would either block automatic updates on PostgreSQL or have an exception that defeats it.
+- The Updates page already says what a rollback does not restore on PostgreSQL ([Updates](updates.md#what-a-rollback-puts-back-and-what-it-does-not)).
+
+**Revisit** when the first strict migration is planned: the release that carries it can make the helper refuse on PostgreSQL unless the request names the backup, because only then is the refusal about a real risk. Until then no code changes.
+
+## Browser tests: Playwright outside the dashboard project (#390)
+
+The dashboard's own tests (vitest, jsdom, a fake `fetch`, fake sockets) do not start the hub, so a broken build, a wrong header or a Content-Security-Policy that blocks the real page is not seen until a person looks. `make browser-test` runs the real hub binary with the dashboard built in, real agents and Chromium ([Development](development.md#browser-tests-the-dashboard-in-a-real-browser-390)). Choices:
+
+- **Node's test runner and the `playwright` library, not `@playwright/test`.** `@playwright/test` as a dev dependency of the dashboard would add the runner, its lockfile entries and a browser download to every `npm ci` (`make test`, `make lint`, the packaging build). The library alone, installed in the CI job and found through `NODE_PATH`, is what `scripts/browser-load.mjs` (#370) already does. What `@playwright/test` gives that this does without: traces and screenshots on failure are written by `keepFailure` in `scripts/browser-test/harness.mjs`; retries and parallelism are not wanted (the scenarios share one hub and run in order, so a flaky one should be fixed, not retried).
+- **One hub, scenarios in order, each in its own browser context.** The first scenario creates the admin through the page, which is itself something to test; the others need that admin. A scenario that fails does not leave state that changes the next one: contexts do not share storage.
+- **Network interception only for what the hub cannot be made to do on demand:** a `429` with `Retry-After` and one `503`. A wrong password and a right one go through the real hub.
+- **Not verified:** Firefox and WebKit (Playwright can run them, but the CSP and the stream differences are what #281 asks a person to look at, and this adds two downloads to CI; worth adding when a browser-specific bug is found: #393), a screenshot comparison (it would need a reviewed baseline per platform), and the job on a real CI runner: it ran locally against the preinstalled Chromium.
+
 ## Verification status
 
 No release has been published yet, and several parts have only been tested by unit and integration tests: the signed release, the `.deb` on a clean Ubuntu system, the agent installer on a second server, and installing and rolling back an update with real systemd. They will be checked together on a VM (#81). Until then, try the first release on a test server.
