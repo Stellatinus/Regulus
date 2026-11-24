@@ -6,6 +6,20 @@
 # directory and no sudo rights.
 set -e
 
+# old_has_loopback_default succeeds when version $1 (1.2.3, 0.3.0-alpha.1,
+# 0.3.0~alpha.1, with an optional epoch or revision) is 0.3.0 or newer, that is
+# when 127.0.0.1:8080 was already its default. Only the numbers before any
+# pre-release text are compared: 0.3.0-alpha.1 is the first release with it.
+# An empty or unreadable version fails, so the caller acts.
+old_has_loopback_default() {
+	v=${1#*:} # drop a Debian epoch
+	v=$(printf '%s' "$v" | sed -n 's/^\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p')
+	[ -n "$v" ] || return 1
+	# shellcheck disable=SC2086 # three numbers
+	set -- $v
+	[ "$1" -gt 0 ] || [ "$2" -ge 3 ]
+}
+
 # keep_old_listen keeps an upgraded hub on the address it used before. Up to
 # the version that made 127.0.0.1:8080 the default (#197), the packaged
 # config.yaml said listen: ":8080", every interface. dpkg replaces a
@@ -13,9 +27,17 @@ set -e
 # applies when the line is missing, so without this an upgrade would quietly
 # take the dashboard off the network. The old address is written to the
 # environment file (it wins over config.yaml), with a note on how to drop it.
-# $1 is the configuration directory.
+# It acts only when the package being replaced is older than 0.3.0, the first
+# release with the loopback default (#397): a later upgrade or a reinstall must
+# not read a deleted or commented "listen" line as the old default and reopen
+# the dashboard to the network. $1 is the configuration directory, $2 the
+# version being replaced (empty when it is not known: then it acts, as it did
+# before this check existed).
 keep_old_listen() {
 	dir=$1
+	if old_has_loopback_default "${2:-}"; then
+		return 0
+	fi
 	[ -f "$dir/config.yaml" ] || return 0
 	if [ -r "$dir/role" ] && [ "$(head -n 1 "$dir/role")" = agent ]; then
 		return 0
@@ -48,10 +70,17 @@ if [ "${REGULUS_PREINSTALL_SOURCED:-}" = 1 ]; then
 	return 0
 fi
 
+# The version being replaced: dpkg passes it as $2; rpm has no argument for it,
+# but the old package is still installed while %pre runs.
 case "${1:-}" in
-	upgrade | 2) keep_old_listen /etc/regulus ;;
+	upgrade | install) old_version=${2:-} ;;
+	2) old_version=$(rpm -q --qf '%{VERSION}' regulus 2>/dev/null || true) ;;
+	*) old_version= ;;
+esac
+case "${1:-}" in
+	upgrade | 2) keep_old_listen /etc/regulus "$old_version" ;;
 	# A package that was removed but not purged left its configuration behind.
-	install) [ -z "${2:-}" ] || keep_old_listen /etc/regulus ;;
+	install) [ -z "${2:-}" ] || keep_old_listen /etc/regulus "$old_version" ;;
 esac
 
 if getent passwd regulus >/dev/null 2>&1; then

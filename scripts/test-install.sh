@@ -293,6 +293,25 @@ rm -f "$up/config.yaml"
 keep_old "$up"
 check_not "a first install writes nothing" test -e "$up/regulus.env"
 
+# The version being replaced decides (#397): from 0.3.0 on the loopback default
+# is the packaged one, so a missing or removed listen line is meant.
+keep_old_v() { (REGULUS_PREINSTALL_SOURCED=1 . "$here/../packaging/scripts/preinstall.sh" && keep_old_listen "$1" "$2") >/dev/null 2>&1; }
+printf 'builtin_agent: true\n' >"$up/config.yaml"
+rm -f "$up/regulus.env"
+keep_old_v "$up" 0.3.0-alpha.1
+check_not "an upgrade from 0.3.0-alpha.1 does not reopen the dashboard" test -e "$up/regulus.env"
+keep_old_v "$up" 1:0.4.2
+check_not "an epoch and a later version do not either" test -e "$up/regulus.env"
+keep_old_v "$up" 0.2.0-alpha.1
+equal "an upgrade from 0.2.0-alpha.1 keeps :8080" "$(grep -c '^REGULUS_LISTEN=:8080$' "$up/regulus.env")" 1
+rm -f "$up/regulus.env"
+keep_old_v "$up" 0.2.0~alpha.1
+equal "the rpm spelling of a pre-release is read" "$(grep -c '^REGULUS_LISTEN=:8080$' "$up/regulus.env")" 1
+rm -f "$up/regulus.env"
+keep_old_v "$up" ""
+equal "an unknown old version acts as before" "$(grep -c '^REGULUS_LISTEN=:8080$' "$up/regulus.env")" 1
+rm -f "$up/regulus.env" "$up/config.yaml"
+
 # the agent role
 equal "adds the default port" "$(normalize_hub hub.example)" hub.example:8443
 equal "keeps the given port" "$(normalize_hub hub.example:9000)" hub.example:9000
