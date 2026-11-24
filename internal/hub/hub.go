@@ -598,7 +598,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
-		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats))},
+		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, auth.RefuseTokens(streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(l.put)))), needsAuth: true},
 		{pattern: "GET /api/enrollment-tokens", handler: need(auth.PermServersManage, http.HandlerFunc(f.listTokens)), needsAuth: true},

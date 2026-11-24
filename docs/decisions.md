@@ -246,6 +246,16 @@ The administrator is told (#338): `GET /api/updates` carries `status_socket`, th
 
 The hub stages releases from two places that can run at once: its own download (the background cycle or the **Download** button, serialised by the manager) and `EnsureRelease`, called when a rollout to the agents starts. Each staging ended with a prune that removed every entry it did not keep, the other staging's `.stage-*` work directory included. The `Stager` now remembers the work directories of the stagings in progress and the prune skips them; the move into place and the prune are one step under a mutex. The downloads themselves are **not** serialised: a slow download of a new release must not hold up a rollout that needs only the archives of the running version. What is still possible, and accepted: two stagings of two versions that are both neither kept (`Keep`, the running version) nor the newest can prune each other's finished directory; the hub never stages two such versions at once.
 
+## API tokens: bearer branch, permission intersection and what a token never does (#406)
+
+The design of #388 (docs/authentication.md) is implemented up to the API. Choices beyond it:
+
+- **Tokens come before the cookie.** `Require` looks for a bearer header first; a request that has one never reads the cookie, so a stolen cookie cannot ride on a token's request and a token's request cannot carry a user's session. This also lets `RequireJSON` skip its same-origin rule for tokens without weakening it for browsers: a browser never adds an `Authorization` header by itself.
+- **A token marks the context, and every guard reads the mark.** `RequireStepUp` refuses a token before it looks for a session, `RefuseTokens` guards the live stream, and `Require` itself refuses `/api/account/`. A new route that must stay out of reach of tokens gets one of these, not a list of paths.
+- **Permissions in tokens are stored, intersections are computed.** The token keeps the permissions it was made with; each request narrows them to what the role of the owner gives at that moment (`permsOfUser`, the same cache as sessions). `tokens.create` and `tokens.manage` can never be in a token, so a token cannot reach `/api/tokens`.
+- **Failed checks and a valid token are limited separately.** A bad token takes one attempt of the address's budget (the counter of failed logins), a good one gives it back (`attempt.succeeded`), and a valid token has its own bucket, kept in memory (a restart gives every token a full burst).
+- **Not done:** the Account page (EN/IT), a `[Test]` behind a reverse proxy, pruning of expired and revoked rows, and tokens on the live stream.
+
 ## Persistent metrics history: storage, flush and pruning (#405)
 
 The design of #387 (docs/architecture.md) is implemented up to the database: table `metric_buckets` on both backends, one batch write a minute, hourly batched pruning and the settings `metrics_retention_1m` and `metrics_retention_15m`. Choices the design left open:

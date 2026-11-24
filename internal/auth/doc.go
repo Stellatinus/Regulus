@@ -10,6 +10,8 @@
 //   - users.go, roles.go, permissions.go: accounts and what each role may do.
 //   - twofactor.go, totp.go: the second factor.
 //   - reset.go: administrator-issued reset links.
+//   - apitoken.go: API tokens (#406): their storage, the bearer branch of
+//     Require, and /api/tokens.
 //   - stepup.go: step-up re-authentication, the recent proof of the password
 //     that sensitive actions need (RequireStepUp, POST /api/account/reauth).
 //   - secret.go: the key (secret.key in the data directory) that protects

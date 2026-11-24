@@ -104,6 +104,10 @@ export const usersIt: Record<keyof typeof users, string> = {
     "Gestire gli account: creare, disabilitare, eliminare, reimpostare password e due fattori, e la politica dei due fattori",
   "users.perm.roles.manage": "Creare, modificare ed eliminare ruoli",
   "users.perm.audit.read": "Leggere il registro delle attività",
+  "users.perm.tokens.create":
+    "Creare, vedere e revocare i propri token API",
+  "users.perm.tokens.manage":
+    "Vedere e revocare i token API di chiunque, e creare token che non scadono mai",
   "users.perm.inventory.read":
     "Vedere l'inventario hardware: i dischi dei server con i loro numeri di serie e dove si è spostato un disco",
   "users.perm.core.update":
@@ -112,6 +116,11 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.roleDesc.operator": "Lavora con i server; non gestisce gli account",
   "users.roleDesc.viewer": "Sola lettura",
   "users.event.agent_enroll_failed": "iscrizione del server non riuscita",
+  "users.event.api_token_auth_failed": "verifica del token API fallita",
+  "users.event.api_token_created": "token API creato",
+  "users.event.api_token_expired": "token API scaduto",
+  "users.event.api_token_revoked": "token API revocato",
+  "users.event.api_token_used": "token API usato",
   "users.event.agent_enrolled": "server iscritto",
   "users.event.agent_renamed": "server rinominato",
   "users.event.agent_revoked": "server revocato",
@@ -211,4 +220,8 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.detail.code.two_factor_settings":
     "impostazioni della verifica in due passaggi",
   "users.detail.code.reauthentication": "nuova autenticazione",
+  "users.detail.code.api_token": "{name}: {permissions}",
+  "users.detail.code.api_token_name": "{name}",
+  "users.detail.code.api_token_request": "{method} {path}",
+  "users.detail.code.api_token_rate_limited": "troppe verifiche di token fallite da questo indirizzo",
 };
