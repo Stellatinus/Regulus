@@ -106,6 +106,26 @@ These sections are the agreed design (each issue is linked in its heading). They
 
 **Implementation issues.** (1) The common contract: `ManagerState` in the agent protocol (add-only), detection and the `backend_changed` rule (M6, depends on #261). (2) The root helper for managers: one entry point, the operation list and the level checks (M6, with #60). (3) The commit-confirmed revert on the agent (M6). (4) The **Managers** section in the dashboard and the console, English and Italian (M6). (5) `[Test]` for the revert on a real server (M6).
 
+### RAID (#285)
+
+**Agreed: observe, do not manage. Build no new redundancy.** "RAID" means two things and they stay apart: **storage redundancy** (disks) is observed here; **server redundancy** is the hub design ([Hub redundancy](hub-redundancy.md), #103) plus the backup node (#166), and nothing more is built for other workloads: keepalived, Pacemaker or the platform's clustering are shown if present, not replaced. A cluster manager is out; per-container redundancy stays in the backlog (#113).
+
+| Technology | Regulus | Why |
+|---|---|---|
+| Linux software RAID (`mdadm`) | **reads** (`/proc/mdstat`, `/sys/block/md*/md/`): array, level, members, `degraded`, rebuild progress, failed member | needs no root, in the collector next to SMART (#149) |
+| LVM mirror or RAID | reads with the storage manager (#293) | LVM is not an alternative to mdadm: it builds volumes on top |
+| ZFS, Btrfs | **reads** pool or filesystem health, scrub state and degraded devices | read-only commands of the tool, through the helper only if root is needed |
+| Hardware controllers | **leaves out** | every vendor has its own tool; not now |
+| Cloud and virtual disks | **reports only** that redundancy is the provider's | nothing to read or do |
+
+- **Managing** (create, add or replace a member, start a rebuild) is **not in this series**. If it is ever built it is level 3 of the model (typed name, a delay, no API token) and a decision of its own; no operation exists until then.
+- **A RAID member** is a disk like any other: it keeps its disk identity (#148), shown on the array; a replaced member is a line in the lifecycle log of #150 (old identity out, new in, rebuild started and finished).
+- **What the administrator sees:** health (`clean`, `degraded`, `rebuilding` with percent, `failed`), the members and their SMART state side by side, and an **alert** when redundancy is lost (`raid_degraded`, a new condition of [alerts](alerts.md), critical).
+
+**Rejected:** managing arrays now; a RAID plugin (see the model); a cluster manager.
+
+**Implementation issues.** (1) The `mdadm` collector and `raid_degraded` data in the report (M6). (2) ZFS and Btrfs health in the collector (backlog). (3) The array view on the Disks page (M6, English and Italian). (4) The `raid_degraded` alert condition (with the alerts work).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
