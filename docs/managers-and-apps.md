@@ -266,6 +266,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The apt observation (pending, security, reboot) (backlog). (2) The window shared with Regulus's own updates (backlog). (3) The apply operations and the one-by-one run (backlog). (4) The warnings for the runtime and the kernel (backlog). (5) dnf (backlog). (6) The section, English and Italian.
 
+### Scheduled jobs (#299)
+
+**Agreed.** Many managers need things to happen on a schedule (backups, wake-ups, system updates in a window), and administrators have jobs of their own. Today a failed cron job is silent. This manager makes **everything scheduled on a server one list**.
+
+- **Backends.** **systemd timers** first (they have a state and a journal), **cron read-only**: the crontabs are listed and **never rewritten by hand**, the manager does not parse or edit them beyond showing them.
+- **Observe first (level 0).** Per server: each timer or cron entry, what it runs, the **last run** (time and result), the **next run**, and the last exit status. A timer whose last run failed, or that did not run when it was due, is marked.
+- **Create and edit** (level 1 or 2) only for **jobs Regulus owns**: unit files named `regulus-job-<id>.service` and `.timer` in `/etc/systemd/system/`, with a marker line (`# Managed by Regulus`), written by the helper. A job that is not Regulus's is **shown, never changed**.
+- **Alerts.** A job that fails or **misses its time** by more than a grace period raises `job_failed` or `job_missed` ([alerts](alerts.md)).
+- **One list for the other managers.** The other managers' schedules **appear in the same list**, whoever runs them: the backup of #295 is a Regulus-owned timer on the server; the wake schedule of #292 and the window of the system updates (#298) live on the hub, so they are shown as hub-side jobs with their next run. The decision is **one view, two places that run**: a server's timers stay on the server (so they run when the hub is down), and the hub's schedules stay on the hub (they need the whole group).
+- **What a job may run.** This is the dangerous part and **it stays out of the first version.** In the first version a Regulus-owned job runs **only the operations of a manager** (a backup, a system update), never a command line. A "custom command" job comes later, with: a dedicated unprivileged user, **never root**, a short list of commands the administrator approves, the audit log, and the level 3 guard for creating it.
+
+**Implementation issues.** (1) Observation of timers and the cron listing (backlog). (2) The list in the dashboard and the console, English and Italian (backlog). (3) Regulus-owned jobs for managers: the unit writer (backlog, with #295). (4) `job_failed` and `job_missed` conditions (with alerts). (5) Hub-side jobs shown in the same list (backlog).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
