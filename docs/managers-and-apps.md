@@ -66,7 +66,7 @@ The design of the model itself (what a manager is in code, how a backend is dete
 
 **Decision (2026-11-19): apps run in containers.** The alternative that was weighed was software installed natively in a dedicated volume as a systemd service. It was not chosen because every program would need its own installation, update and cleanup method, and Regulus would have to know each one. A container gives isolation, a clean removal and one format. The worry about "endless containers" is mostly about appearance: a container costs little, and the dashboard shows an app, not its containers.
 
-What an app is, as proposed (the design is #288):
+What an app is (the agreed design, with the manifest, the layout and the lifecycle, is [Apps](apps.md), #288):
 
 - A **manifest** built on the Compose specification, so that Docker and Podman both read it. Regulus adds what it needs: id, version, title, the Regulus versions it works with, the volumes it declares, the ports, the environment with **secret references** (never secrets in the manifest), the host resources it asks for (a media folder, a GPU) and the permissions it needs.
 - A **data volume** per app, in a directory Regulus owns (for example `<apps dir>/<id>/data`). The volume is where the app's data lives; **removing an app can keep or delete it**, and the administrator chooses.
@@ -289,18 +289,17 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Revisit when:** someone needs a guest that no container or machine can replace, **and** the storage manager (#293), the firewall manager (#290) and the backup manager (#295) exist, because a VM is built on all three. There is **no implementation issue** and no milestone. A server without virtualization support (no `/dev/kvm`) would show it, if the manager is ever built.
 
-<!--SECTIONS-->
 
 ## What exists and what does not
 
 | Part | Issue | Status |
 |---|---|---|
 | Vocabulary: plugin, manager, backend, app | #286 | **decided** (this page, the glossary, [decisions](decisions.md)); not in any code or UI string yet |
-| Model of managers and backends | #287 | design only |
-| Apps: manifest, catalog, lifecycle | #288 | design only |
-| Container manager (Docker, Podman) | #289 | design only |
-| Firewall, VPN, wake | #290, #291, #292 | design only |
-| Storage, shares, backup, reverse proxy, UPS, system updates, scheduled jobs, virtual machines | #293 to #300 | design only, backlog (no milestone) |
+| Model of managers and backends | #287 | scope agreed, not implemented |
+| Apps: manifest, catalog, lifecycle | #288 | design agreed ([Apps](apps.md)), not implemented |
+| Container manager (Docker, Podman) | #289 | scope agreed, not implemented |
+| Firewall, VPN, wake | #290, #291, #292 | scope agreed, not implemented |
+| Storage, shares, backup, reverse proxy, UPS, system updates, scheduled jobs, virtual machines | #293 to #300 | scope agreed (#300: not built), backlog (no milestone) |
 | First apps | #301 | backlog |
 
 Milestones: the model, the apps, the container manager and the three managers named by the maintainer (firewall, VPN, wake) are in **M6**, because they define how plugins are used and need #261 (what a plugin can do) first. The other managers have no milestone yet.

@@ -31,6 +31,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | see open ports and the traffic map of the group (design only) | [Network visibility](network-visibility.md) |
 | know how alerts will tell an administrator that a server is offline or a disk is full (design only) | [Alerts](alerts.md) |
 | know how a hub will be backed up and restored (design only) | [Hub backup and restore](backup.md) |
+| read the design of apps: the manifest, the volume layout, the catalog and the lifecycle (design only) | [Apps](apps.md) |
 | build and test Regulus | [Development](development.md) and [CONTRIBUTING](../CONTRIBUTING.md) |
 | work on Regulus as an AI coding agent | [AGENTS.md](../AGENTS.md) |
 | report a security problem | [SECURITY](../SECURITY.md) |
