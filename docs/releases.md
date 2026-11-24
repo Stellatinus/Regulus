@@ -12,3 +12,16 @@ cosign verify-blob --bundle checksums.txt.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt
 sha256sum --check --ignore-missing checksums.txt
 ```
+
+## Which release can update to which
+
+A server verifies the signature of a release with the signing identity that was current when its own binary was built (`update.Repository`). The repository moved between organizations twice in the alpha series, so:
+
+| Installed | Signed as | Can update itself (hub or agent, from the dashboard) to |
+|---|---|---|
+| `v0.1.0-alpha.1`, `v0.2.0-alpha.1` | `CodexCircle/Regulus` | **nothing newer**: it refuses `v0.3.0-alpha.1` and later (the Updates page and the rollout say the signature is not valid for `Stellatinus/Regulus`) |
+| `v0.3.0-alpha.1` and later | `Stellatinus/Regulus` | every later release signed as `Stellatinus/Regulus` |
+
+A hub of `v0.2.0-alpha.1` is in the same position as an agent of it: its own update fails the same way, because both use the same check. The way out is by hand, once per server: run the installer of the new release (`install.sh --version VERSION`, see [Updates](updates.md#after-the-move-of-the-repository)), which keeps the data and, for an agent, its certificate. A rollout that includes such an agent fails for it with the signature message and stops there; the hub does not hide those servers from the list, because the version number is the only thing it knows about them.
+
+**Moving the repository again.** Do not accept two identities at once as a permanent rule: the old organization may no longer be controlled by the maintainers, and whoever controls it could then sign releases for every server. A move needs a *bridge release* built before it: a release signed by the old identity that already accepts the new one, published and installed everywhere, and only then the first release signed by the new identity (see `docs/decisions.md`, "Signing identity across a move").
