@@ -182,6 +182,20 @@ flowchart LR
 | `update-apply/` | request/result files exchanged with the root update helper | |
 | `running.json` | version and start time of the hub, written each time it starts serving; the update helper reads it when `regulus.sock` cannot be reached (#312) | |
 
+### Persistent metrics history (design, #387, not implemented)
+
+Today the history is **in memory for one hour** and is lost at every restart, including the restart of an update. This design keeps more, on both database backends, without making the live path slower. The raw reports and the one-hour charts do not change.
+
+- **Two stored tiers of buckets, no raw reports.** The hub already averages reports into buckets of a `step` (#320). It now also writes the *completed* buckets to the database: a **1-minute** tier (default retention **3 days**) and a **15-minute** tier (default **90 days**), both settings. A bucket row holds the series a chart needs: CPU, load 1, memory and swap in use, network receive and send rates, the highest disk usage of the server, and the number of reports it averaged. Per-disk history (SMART, bytes written) is **not** here: it has its own tables (#149).
+- **One write a minute.** The hub keeps the minute being filled in memory and, when it completes, writes the buckets of **all agents in one transaction** (a batch insert). That is one write transaction a minute whatever the number of agents, which a single SQLite writer (#219) takes easily; the 15-minute tier is written from the 1-minute buckets, not from the reports.
+- **Size.** About 100 bytes a row with its index. For 200 agents: the 1-minute tier is 200 × 1,440 × 3 ≈ 860,000 rows (≈ 90 MB), the 15-minute tier 200 × 96 × 90 ≈ 1.7 million rows (≈ 170 MB); ten servers are about 13 MB. The sizes are in `docs/database.md` when it is implemented, with the retention settings.
+- **Pruning** is a batched `DELETE` of the rows older than the retention, once an hour, a few thousand rows at a time, like the audit log (#200). A retention of `0` for a tier turns it off.
+- **Time.** The hub keeps stamping a report with the time it **received** it. `collected_at` from the agent is trusted only for a replayed report (#334): when it is not in the future, not older than the replay window (the length of the agent's ring, default 1 hour) and later than the last bucket the hub already has for that agent. Anything else is stamped with the receive time. A clock that is wrong on an agent therefore cannot write into the past of the history.
+- **API.** `GET /api/agents/{id}/metrics` gets `from` and `to` next to `since`. The hub picks the source from `step`: under one minute from memory (as now), from one minute the 1-minute tier, from fifteen minutes the 15-minute tier (a coarser tier when the range needs it), and refuses a request that would return more than **1,000 points**. Nothing is downloaded that the chart cannot draw.
+- **Dashboard.** The range choice offers 10 minutes (the live stream), 1 hour, 24 hours, 7 days and 90 days, the last ones from the stored tiers; the choice is loaded once and refreshed once per bucket, as the one-hour chart is now. A range beyond what is retained says so on the chart.
+- **Restart.** Nothing is read back into memory at start: the charts of the stored ranges read the database, and the last hour of the live ranges fills again from the first reports.
+- **Backup and migration.** This is the largest table. The backup of #253 leaves it out by default (it can be rebuilt by waiting, and nothing depends on it) and the move between databases of #124 copies it in chunks and may skip it.
+
 **In memory only** (lost on hub restart): metrics history, the list of connected agents and their sessions, the rollout state, the broker of live events, the memory of refused agents.
 
 On an agent, the data directory (`/var/lib/regulus-agent` with the package) holds the agent's key, certificate and the CA certificate (`internal/agent/remote.go` `Credentials.save`), plus `updates/` and `update-apply/` when self-update is on.
