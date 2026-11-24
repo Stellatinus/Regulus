@@ -45,6 +45,9 @@ const (
 	CodeAPITokenName    = "api_token_name"         // name
 	CodeAPITokenRequest = "api_token_request"      // method, path
 	CodeAPITokenLimited = "api_token_rate_limited" //
+
+	// Backups (#408).
+	CodeBackupRestored = "backup_restored" // time, version: when the backup was made and by which release
 )
 
 type codeKey struct{}

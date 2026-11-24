@@ -7,6 +7,18 @@ import (
 	"time"
 )
 
+// EventBackupRestored is the audit event that `regulus restore` writes as the
+// first entry of the restored hub.
+const EventBackupRestored = "backup_restored"
+
+// RecordRestore writes the audit entry of a restore: when the backup was made
+// (backupTime) and by which release (version). The actor is the console.
+func RecordRestore(ctx context.Context, db *sql.DB, log *slog.Logger, backupTime time.Time, version string) {
+	s := &Service{store: store{db: db}, log: log, now: time.Now, failures: map[string]*failure{}}
+	when := backupTime.UTC().Format(time.RFC3339)
+	s.RecordCode(ctx, ConsoleActor, EventBackupRestored, "", "restored from a backup made "+when+" by Regulus "+version, CodeBackupRestored, "time", when, "version", version)
+}
+
 // CreateFirstAdmin creates the first admin account straight in the database,
 // for a server where no browser can reach the dashboard (`regulus hub
 // create-admin`, and the console's first run). It follows the rules of

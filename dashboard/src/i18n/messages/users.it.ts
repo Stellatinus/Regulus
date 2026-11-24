@@ -121,6 +121,7 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.event.api_token_expired": "token API scaduto",
   "users.event.api_token_revoked": "token API revocato",
   "users.event.api_token_used": "token API usato",
+  "users.event.backup_restored": "ripristinato da un backup",
   "users.event.agent_enrolled": "server iscritto",
   "users.event.agent_renamed": "server rinominato",
   "users.event.agent_revoked": "server revocato",
@@ -223,5 +224,6 @@ export const usersIt: Record<keyof typeof users, string> = {
   "users.detail.code.api_token": "{name}: {permissions}",
   "users.detail.code.api_token_name": "{name}",
   "users.detail.code.api_token_request": "{method} {path}",
+  "users.detail.code.backup_restored": "backup fatto il {time} dalla versione {version}",
   "users.detail.code.api_token_rate_limited": "troppe verifiche di token fallite da questo indirizzo",
 };

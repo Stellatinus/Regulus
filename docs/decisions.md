@@ -246,6 +246,18 @@ The administrator is told (#338): `GET /api/updates` carries `status_socket`, th
 
 The hub stages releases from two places that can run at once: its own download (the background cycle or the **Download** button, serialised by the manager) and `EnsureRelease`, called when a rollout to the agents starts. Each staging ended with a prune that removed every entry it did not keep, the other staging's `.stage-*` work directory included. The `Stager` now remembers the work directories of the stagings in progress and the prune skips them; the move into place and the prune are one step under a mutex. The downloads themselves are **not** serialised: a slow download of a new release must not hold up a rollout that needs only the archives of the running version. What is still possible, and accepted: two stagings of two versions that are both neither kept (`Keep`, the running version) nor the newest can prune each other's finished directory; the hub never stages two such versions at once.
 
+## Hub backup: export in `storage`, stage first, restore at the backup's schema (#407, #408)
+
+The design of #253 (docs/backup.md) is implemented for the console. Choices beyond it:
+
+- **The dialects stay in `internal/storage`.** `Export` and `Import` list tables, columns and foreign keys for SQLite and PostgreSQL and order tables by their references; `internal/backup` only knows the file. A new table needs nothing in either place.
+- **Stage, then write.** Create stages the parts in a private directory (the manifest, first in the file, needs their checksums); Restore extracts the whole file into a private directory and checks it before it moves or writes anything. The cost is twice the size on disk for the time it runs.
+- **The restore starts at the backup's schema and migrates forward**, instead of importing into the newest schema: a release that renamed or rebuilt a table does not have to keep reading old rows. Importing needs only that tables and columns of the file exist in that schema.
+- **Sessions and pending logins are not backed up**; the metrics history only on request; `password_resets`, `api_tokens` and `alerts` are, because they are part of the hub's state and the file is encrypted.
+- **PostgreSQL is never emptied.** `--force` moves files aside, which a database cannot do; a database with tables is refused.
+- **No dependency on `pg_dump` or on a `psql` client**, as decided; the cost is that a huge table is read through the hub's own connection.
+- **Not done:** the dashboard (download, passphrase dialog), schedules and retention, the `pre-update` backup, `--with-config`, restore from the dashboard, `backup.create` and `backup.restore` permissions and the other audit events (`backup_created`, ...).
+
 ## Alerts: the evaluator is a package of its own, and recovery is counted from the first clean evaluation (#404)
 
 The design of #386 (docs/alerts.md) is implemented up to the evaluator. Choices beyond it:

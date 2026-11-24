@@ -112,6 +112,7 @@ export const users = {
   "users.roleDesc.viewer": "Read only",
   "users.event.agent_enroll_failed": "server enrollment failed",
   "users.event.agent_enrolled": "server enrolled",
+  "users.event.backup_restored": "restored from a backup",
   "users.event.api_token_auth_failed": "API token check failed",
   "users.event.api_token_created": "API token created",
   "users.event.api_token_expired": "API token expired",
@@ -211,5 +212,6 @@ export const users = {
   "users.detail.code.api_token": "{name}: {permissions}",
   "users.detail.code.api_token_name": "{name}",
   "users.detail.code.api_token_request": "{method} {path}",
+  "users.detail.code.backup_restored": "backup made {time} by version {version}",
   "users.detail.code.api_token_rate_limited": "too many failed token checks from this address",
 } as const;
