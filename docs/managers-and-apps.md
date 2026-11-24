@@ -240,6 +240,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The Caddy backend: detect, observe, the generated include (backlog). (2) The app `publish` request and approval (with apps). (3) Certificate end dates in the report (backlog). (4) DNS-01 providers (backlog). (5) The section, English and Italian (backlog). (6) `[Test]` with a real domain (backlog).
 
+### UPS (#297)
+
+**Agreed.** Backend: **NUT** (Network UPS Tools), which also covers a UPS attached to another machine over the network. **Regulus reads and uses NUT; it never talks to UPS hardware** and never replaces `upsmon`.
+
+- **What it shows** (from `upsc`, level 0): on mains or on battery, charge, estimated runtime, load, the UPS model and its status flags (`OL`, `OB`, `LB`). A server that is a NUT *client* shows the same data from the NUT server.
+- **What it does.** Almost nothing by itself: the **clean shutdown of each machine stays `upsmon`'s job**, because it works when the network and the hub do not. Regulus adds two things: **notification** and an optional **shutdown order across servers**, where each server has a priority and the order is *storage last* by default (servers that are NAS or hold data shut down after the ones that use them). The order is a plan the hub starts when the UPS reports `OB` for longer than a configurable time (default 2 minutes) or `LB`; each shutdown is a level 3 operation done by an agent, which may be a server already stopping by its own `upsmon`.
+- **Notification.** An `ups_on_battery` condition ([alerts](alerts.md), critical) goes through the channels, and through the out-of-band channel of #112 because the network may be down too. A hub that is itself on the UPS may not be able to send it: that is why the alert is raised at the **first** `OB`, not at low battery.
+- **When power returns,** servers **wake in an order** through the wake manager (#292), storage first; machines that are only suspended wake, machines that are off need Wake-on-LAN configured, and the page says which are which.
+- **Guard.** Starting the shutdown plan by hand is level 3. **If the hub is on the UPS and the UPS says "low battery"**, the hub **does not try to coordinate**: it sends a last notification and **stops orchestrating**, leaving each machine to its own `upsmon`. A shutdown that would stop the only sender of the notification is the last one in the order.
+- **Not in the first version:** configuring NUT (drivers, `ups.conf`, users). The page says what it expects to find.
+
+**Implementation issues.** (1) The NUT observation (`upsc`) and the state in the registry (backlog). (2) The `ups_on_battery` condition (with alerts). (3) The shutdown plan and its order (backlog, after #292). (4) The section, English and Italian (backlog). (5) `[Test]` with a real UPS.
+
 <!--SECTIONS-->
 
 ## What exists and what does not
