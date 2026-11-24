@@ -29,6 +29,13 @@ func goldenV1() map[string]proto.Message {
 			ProtocolVersion: 1, MinProtocolVersion: 1, AgentVersion: "0.2.0", AgentId: "agent-0123456789abcdef",
 			System: &agentv1.SystemInfo{Hostname: "web1", Os: "linux", OsVersion: "Ubuntu 26.04 LTS", Kernel: "6.17.0", Arch: "amd64", CpuCount: 4, MemoryTotalBytes: 8 << 30},
 		}}},
+		"hello_update_result": &agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Hello{Hello: &agentv1.Hello{
+			ProtocolVersion: 1, MinProtocolVersion: 1, AgentVersion: "0.2.0", AgentId: "agent-0123456789abcdef",
+			UpdateResult: &agentv1.UpdateResult{
+				Version: "0.3.0", From: "0.2.0", Outcome: "rolled_back", Message: "the new version did not report itself",
+				Code: "boot_not_confirmed", Args: map[string]string{"version": "0.3.0"}, At: timestamppb.New(at),
+			},
+		}}},
 		"welcome": &agentv1.HubMessage{Payload: &agentv1.HubMessage_Welcome{Welcome: &agentv1.Welcome{
 			ProtocolVersion: 1, HubVersion: "0.2.0", AgentId: "agent-0123456789abcdef",
 			HeartbeatInterval: durationpb.New(15 * time.Second), MetricsInterval: durationpb.New(10 * time.Second),

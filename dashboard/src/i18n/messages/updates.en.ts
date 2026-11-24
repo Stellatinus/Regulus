@@ -230,4 +230,8 @@ export const updates = {
     "The server connected with version {version} but did not stay connected.",
   "updates.rolloutMsg.did_not_return":
     "The server did not connect again within {wait}.",
+  "updates.rolloutMsg.helper_rolled_back":
+    "The installer on the server rolled the update to {version} back: {detail}",
+  "updates.rolloutMsg.helper_failed":
+    "The installer on the server could not install version {version}: {detail}",
 } as const;

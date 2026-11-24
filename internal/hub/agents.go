@@ -70,6 +70,10 @@ type AgentInfo struct {
 	// "Regulus agent". The hub counts them (#322) to tell when the last one
 	// is gone. False for the built-in agent.
 	LegacyCert bool
+	// UpdateResult is the last outcome the update helper wrote on the agent,
+	// as the agent sent it in Hello (#337); nil when it sent none (an older
+	// agent, or no update was ever installed there).
+	UpdateResult *agentv1.UpdateResult
 	// PluginsEnabled and Plugins are what the agent last reported about its
 	// plugins (MetricsReport.plugins); they are kept here, not in the metrics
 	// history.
@@ -472,6 +476,7 @@ func (s *agentServer) register(id string, hello *agentv1.Hello, negotiated uint3
 			ProtocolVersion: negotiated,
 			Compat:          compat,
 			UpdateOnly:      updateOnly,
+			UpdateResult:    hello.GetUpdateResult(),
 		},
 		out:      make(chan *agentv1.HubMessage),
 		replaced: make(chan struct{}),

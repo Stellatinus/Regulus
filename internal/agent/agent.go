@@ -192,6 +192,7 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 		AgentVersion:       a.opts.Version,
 		AgentId:            a.id,
 		System:             a.system,
+		UpdateResult:       a.lastUpdateResult(),
 	}}}); err != nil && !errors.Is(err, io.EOF) {
 		return false, err
 	} // on EOF the stream was closed by the hub: Recv below returns the reason

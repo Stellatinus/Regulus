@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
@@ -29,6 +31,31 @@ func (a *agent) applyUpdate(ctx context.Context, id string, au *agentv1.ApplyUpd
 	a.log.Info("update handed to the installer", "version", au.GetVersion())
 	res.Success = true
 	return res
+}
+
+// lastUpdateResult is what the update helper last wrote on this machine, for
+// Hello (#337): the hub then judges a rollout by what the helper did. Nil when
+// the agent does not update itself, or no helper has run.
+func (a *agent) lastUpdateResult() *agentv1.UpdateResult {
+	if a.opts.UpdateDir == "" {
+		return nil
+	}
+	res, ok := update.ReadResult(update.ApplyDir(a.opts.UpdateDir))
+	if !ok {
+		return nil
+	}
+	out := &agentv1.UpdateResult{
+		Version: res.Version,
+		From:    res.From,
+		Outcome: res.Outcome,
+		Message: res.Message,
+		Code:    res.Code,
+		Args:    res.Args,
+	}
+	if !res.At.IsZero() {
+		out.At = timestamppb.New(res.At)
+	}
+	return out
 }
 
 func (a *agent) stageUpdate(ctx context.Context, au *agentv1.ApplyUpdate) error {

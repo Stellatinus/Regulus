@@ -235,4 +235,8 @@ export const updatesIt: Record<keyof typeof updates, string> = {
     "Il server si è collegato con la versione {version} ma non è rimasto collegato.",
   "updates.rolloutMsg.did_not_return":
     "Il server non si è ricollegato entro {wait}.",
+  "updates.rolloutMsg.helper_rolled_back":
+    "L'installazione sul server ha annullato l'aggiornamento alla {version}: {detail}",
+  "updates.rolloutMsg.helper_failed":
+    "L'installazione sul server non ha potuto installare la versione {version}: {detail}",
 };
