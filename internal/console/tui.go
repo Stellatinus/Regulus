@@ -914,6 +914,9 @@ func (m Model) logsBody() []string {
 		head += mutedStyle.Render("  " + T.Following)
 	}
 	out := []string{head}
+	if m.logErr == ErrNoJournal.Error() {
+		return append(out, " "+warnStyle.Render(T.LogsNoJournal))
+	}
 	if m.logErr != "" {
 		return append(out, " "+warnStyle.Render(T.LogsUnavailable+": "+m.logErr))
 	}
