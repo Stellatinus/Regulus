@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
@@ -186,13 +187,16 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	// What the hub has been told of the helper's result: Hello's, then each
+	// heartbeat that carried a different one (#411).
+	reported := a.lastUpdateResult()
 	if err := stream.Send(&agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Hello{Hello: &agentv1.Hello{
 		ProtocolVersion:    protocol.Version,
 		MinProtocolVersion: protocol.MinSupported,
 		AgentVersion:       a.opts.Version,
 		AgentId:            a.id,
 		System:             a.system,
-		UpdateResult:       a.lastUpdateResult(),
+		UpdateResult:       reported,
 	}}}); err != nil && !errors.Is(err, io.EOF) {
 		return false, err
 	} // on EOF the stream was closed by the hub: Recv below returns the reason
@@ -275,7 +279,7 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 	reports := make(chan *agentv1.MetricsReport, 1)
 
 	// Report right away so the hub has data without waiting for a full interval.
-	if err := a.sendHeartbeat(stream); err != nil {
+	if err := a.sendHeartbeat(stream, &reported); err != nil {
 		return true, sendErr(err)
 	}
 	// A session that exists only to be updated carries no metrics: the hub
@@ -291,7 +295,7 @@ func (a *agent) session(ctx context.Context) (established bool, err error) {
 	for {
 		select {
 		case <-heartbeat.C:
-			if err := a.sendHeartbeat(stream); err != nil {
+			if err := a.sendHeartbeat(stream, &reported); err != nil {
 				return true, sendErr(err)
 			}
 		case <-metrics.C:
@@ -345,10 +349,21 @@ func (a *agent) startUpdate(ctx context.Context, id string, au *agentv1.ApplyUpd
 	}()
 }
 
-func (a *agent) sendHeartbeat(stream agentv1.AgentService_ConnectClient) error {
-	return stream.Send(&agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Heartbeat{
-		Heartbeat: &agentv1.Heartbeat{SentAt: timestamppb.Now()},
-	}})
+// sendHeartbeat sends a heartbeat. When the update helper's result differs
+// from the one the hub already has (*reported), it goes along (#411): a helper
+// that refuses a request changes nothing and does not restart the agent, so no
+// Hello would tell the hub.
+func (a *agent) sendHeartbeat(stream agentv1.AgentService_ConnectClient, reported **agentv1.UpdateResult) error {
+	hb := &agentv1.Heartbeat{SentAt: timestamppb.Now()}
+	if cur := a.lastUpdateResult(); cur != nil && !proto.Equal(cur, *reported) {
+		hb.UpdateResult = cur
+		if err := stream.Send(&agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Heartbeat{Heartbeat: hb}}); err != nil {
+			return err
+		}
+		*reported = cur
+		return nil
+	}
+	return stream.Send(&agentv1.AgentMessage{Payload: &agentv1.AgentMessage_Heartbeat{Heartbeat: hb}})
 }
 
 // startCollection collects a report beside the loop and hands it back on
