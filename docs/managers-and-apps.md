@@ -279,6 +279,16 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) Observation of timers and the cron listing (backlog). (2) The list in the dashboard and the console, English and Italian (backlog). (3) Regulus-owned jobs for managers: the unit writer (backlog, with #295). (4) `job_failed` and `job_missed` conditions (with alerts). (5) Hub-side jobs shown in the same list (backlog).
 
+### Virtual machines (#300)
+
+**Decision: do not build, for now.** The question was whether virtual machines (libvirt with KVM) are needed, or whether containers and a separate node are enough. They are enough for what the project is for today:
+
+- A **container** covers the software the apps list needs (Plex, Radarr, Sonarr, TriliumNext, Jellyfin, Pi-hole…). What a container cannot do is another **operating system**, a Windows guest or a **router appliance**; those are rare for a home or small-office server and have a good answer in a **separate small machine** that Regulus manages as a node, like any other.
+- A virtual machine is a **large surface**: disks (the storage manager), networks and bridges (the firewall manager), backups of VM disks (the backup manager), live resources, hardware passthrough, and an image catalog. Each of those is already a manager that is not built yet; adding VMs first would multiply the work of all of them.
+- Nothing in the design **assumes containers are the only workload**: the container record of #113 says "machine or container", the managers are one list, and VM support can be added later as one more manager with libvirt as its backend and the same model (observe first, level 2 and 3 guards).
+
+**Revisit when:** someone needs a guest that no container or machine can replace, **and** the storage manager (#293), the firewall manager (#290) and the backup manager (#295) exist, because a VM is built on all three. There is **no implementation issue** and no milestone. A server without virtualization support (no `/dev/kvm`) would show it, if the manager is ever built.
+
 <!--SECTIONS-->
 
 ## What exists and what does not
