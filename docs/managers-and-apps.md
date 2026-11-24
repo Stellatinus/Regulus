@@ -76,6 +76,38 @@ What an app is, as proposed (the design is #288):
 
 The first apps (Plex, Radarr, Sonarr, TriliumNext; then Jellyfin, Pi-hole, AdGuard Home, Nextcloud, Immich) are chosen in #301, after the manifest exists.
 
+## The model and the scope of each manager
+
+These sections are the agreed design (each issue is linked in its heading). They set what each manager observes, what it may change, and the guards; nothing here is implemented.
+
+### The model of managers and backends (#287)
+
+**Agreed.** Every manager follows the same rules, so that none of them invents its own.
+
+1. **A manager is a contract in the core**, not free code: a named set of **observations** (read state) and **operations** (change state), with a typed shape for its data, versioned like the other contracts ([Versioning](versioning.md)): fields are only added. The dashboard and the console show a manager from that data; nothing in the GUI is written per backend.
+2. **A backend is detected on the server**, by the agent: the tool is installed, its service is active, its version is known. The agent reports it as `manager`, `backend`, `version` and `state` (`absent`, `inactive`, `active`) with its other data. **One active backend per manager per server.** When several fit (ufw and firewalld both installed), the administrator chooses and the choice is kept in the hub; Regulus never drives two at once. When the detected tool changes (ufw removed, firewalld installed), the manager shows `backend_changed` and **refuses every change until an administrator confirms the new backend**: the rules the administrator saw belong to another tool.
+3. **Observing is in the core, changing is a closed list of core operations.** Reading state is a collector of the agent (no root where the tool allows it: `/proc/mdstat`, `findmnt`, `ufw status` through the helper only when it must). Changing state is a **named operation with validated arguments** (`firewall.allow_port{port, proto, source}`), executed by the root helper of #60, **never a shell and never a free command line**. Managers do **not** run as plugins in this series: a plugin cannot be isolated enough until #267 and #261 exist, and a manager that changes a firewall is exactly what must not depend on them. The decision is revisited when #267 ships.
+4. **Privilege.** The helper has one entry point per manager and, in it, a list of operations built into the *verified* executable (the same rule as the update helper: it trusts nothing the agent's user could have written). No operation takes a path or a command from the request unless the manager's page names the directory it may touch.
+5. **Guards, by level.** Each operation has a level, fixed in the contract:
+
+   | Level | Meaning | Guard |
+   |---|---|---|
+   | 0 | reads state | the manager's `*.read` permission |
+   | 1 | reversible, cannot lock anyone out (open a port, rename a share) | permission `*.manage`, audit entry |
+   | 2 | can cut the administrator or the agent off (a firewall rule, a VPN leave, a network change) | level 1, **step-up**, and an **automatic revert**: the hub keeps the previous state and restores it unless the administrator confirms within 60 seconds (the `commit-confirmed` pattern); the revert runs on the agent, so it works when the hub cannot be reached |
+   | 3 | destroys data or cannot be undone (wipe a disk, destroy an array, delete a volume, remove an app's data) | level 2 without the revert, plus **typing the name of the target**, a **delay of 60 seconds that can be cancelled**, and never available to an API token (#388) |
+
+   Every level 1 to 3 operation is an audit event with a code and arguments (what, which server, who).
+6. **Observe first.** A manager ships its observation before any operation. Whether and when it gets operations is decided in its own section below, and each starts with level 0 only.
+7. **In the GUI and the console.** A server page has a **Managers** section; a manager is **off until an administrator turns it on for that server** (an agent that reports `absent` shows "not installed" and nothing else). Observations are also in the console, read-only. Every text is in English and Italian; the Italian word for manager is *gestione*. Each manager has its own permissions (`<manager>.read`, `<manager>.manage`), listed in `users.perm.*` like the existing ones.
+8. **What `provides` in the plugin manifest is for** is unchanged and still unused; managers do not use it.
+
+**Rejected:** managers as plugins (above); one generic "run this command" operation (it would move the guard to whoever writes the command); letting a backend be chosen per operation (two tools would disagree about the state); an automatic switch to a newly detected backend.
+
+**Implementation issues.** (1) The common contract: `ManagerState` in the agent protocol (add-only), detection and the `backend_changed` rule (M6, depends on #261). (2) The root helper for managers: one entry point, the operation list and the level checks (M6, with #60). (3) The commit-confirmed revert on the agent (M6). (4) The **Managers** section in the dashboard and the console, English and Italian (M6). (5) `[Test]` for the revert on a real server (M6).
+
+<!--SECTIONS-->
+
 ## What exists and what does not
 
 | Part | Issue | Status |
