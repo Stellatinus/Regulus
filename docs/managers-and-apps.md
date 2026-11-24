@@ -126,6 +126,22 @@ These sections are the agreed design (each issue is linked in its heading). They
 
 **Implementation issues.** (1) The `mdadm` collector and `raid_degraded` data in the report (M6). (2) ZFS and Btrfs health in the collector (backlog). (3) The array view on the Disks page (M6, English and Italian). (4) The `raid_degraded` alert condition (with the alerts work).
 
+### Containers (#289)
+
+**Agreed.** Apps run in containers, and the runtime is a **backend**: **Docker** or **Podman**, one active per server (the rule of the model). The common format is the **Compose specification**. **Out of scope:** Kubernetes and Swarm, until someone needs them (#113 keeps the question).
+
+- **Rootful or rootless.** Docker is normally rootful; Podman can run **rootless**. Regulus runs containers **rootless with Podman when the server has Podman and a user to run them as**, and rootful Docker otherwise. The first is preferred because a container escape then lands in an unprivileged user. Which one is used is shown on the server and chosen by the administrator when both exist.
+- **Privilege.** Access to the Docker socket is root. **The agent never gets the socket**, and neither does an app. Every container operation runs in the root helper of #60 as a **closed list**: list, inspect, start, stop, restart, logs, pull an image, `compose up` and `down` **for a project Regulus created** from a validated definition. There is no `docker run` with free flags. With rootless Podman the same list runs as the dedicated user instead of root.
+- **What an app can never ask for:** `privileged`, the host network, the host PID or IPC namespace, `cap_add` beyond a short list the manifest can name (`NET_BIND_SERVICE`), devices other than the ones a declared resource gives (a GPU), mounting the Docker or Podman socket, or mounting a path outside the volumes and resources it declared. The helper rejects the definition, not only the GUI.
+- **What the dashboard shows and does:** each container and its state, start, stop, restart, logs (the last lines, followed), CPU and memory, the image and whether a newer one exists. No shell into a container in this series (that is the node access design, [Web terminal and file browser](node-access.md)).
+- **What Regulus stores** for a container is the **record of #113**: identifier, runtime, image reference with its digest, the definition, the declared volumes, the restart policy and where it came from (an app, or found on the server). It never stores the data, and a container it did not create is **shown, not managed**.
+- **Firewall.** Docker writes its own rules and a published port can bypass the host firewall. The container manager reports the ports it publishes and the firewall manager (#290) shows them in their own group, "published by containers", so the picture is not wrong by omission.
+- **Installing the runtime.** Regulus **detects** Docker and Podman; it does not install them in this series. Installing a package is the system updates manager's work (#298) and would be a level 2 operation there.
+
+This resolves the first item of #113: the container runtime is a backend chosen per server, Docker or Podman.
+
+**Implementation issues.** (1) Detection and the observation of containers, read only, through the helper (M6). (2) The operation list and the definition validator (M6). (3) The containers section of a server in the dashboard, English and Italian (M6). (4) The ports a container publishes in the report (M6). (5) `[Test]` on a real server with Docker and with rootless Podman (M6).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
