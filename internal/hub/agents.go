@@ -124,6 +124,8 @@ type agentServer struct {
 	// disks, if set, is told the physical disks an agent reported, when they
 	// changed since its last report (#148). Like seen it must not wait.
 	disks func(agentID string, disks []*agentv1.PhysicalDisk, at time.Time)
+	// history, when set, takes every report into the stored history (#405).
+	history *metricsHistory
 
 	mu       sync.Mutex
 	sessions map[string]*session
@@ -445,7 +447,9 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 			s.events.publish(pluginsEvent{Type: "plugins.changed", Source: "agent", ID: sess.info.ID})
 		}
 		if sample, prev := s.metrics.add(sess.info.ID, p.Metrics); sample.Report != nil {
-			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: toPoint(sample, prev)})
+			point := toPoint(sample, prev)
+			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: point})
+			s.history.record(sess.info.ID, sample.At, point)
 		}
 	case *agentv1.AgentMessage_CommandResult:
 		sess.deliver(p.CommandResult)

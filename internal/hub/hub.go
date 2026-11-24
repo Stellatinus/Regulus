@@ -47,6 +47,8 @@ type Hub struct {
 	cfg config.Config
 	log *slog.Logger
 	db  *sql.DB // store.Write
+	// history writes the completed metrics buckets to the database (#405).
+	history *metricsHistory
 	// store holds the database pools; unlockDir releases the lock of the
 	// data directory (see lockDataDir). Close does both.
 	store     *storage.HubDB
@@ -226,6 +228,8 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
+	h.history = newMetricsHistory(db, log, cfg.MetricsRetention1m.Duration(), cfg.MetricsRetention15m.Duration())
+	h.agents.history = h.history
 	if cfg.MetricsBudget > 0 {
 		h.agents.metrics.budget = int64(cfg.MetricsBudget)
 	}

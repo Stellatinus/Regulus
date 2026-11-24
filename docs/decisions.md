@@ -246,6 +246,16 @@ The administrator is told (#338): `GET /api/updates` carries `status_socket`, th
 
 The hub stages releases from two places that can run at once: its own download (the background cycle or the **Download** button, serialised by the manager) and `EnsureRelease`, called when a rollout to the agents starts. Each staging ended with a prune that removed every entry it did not keep, the other staging's `.stage-*` work directory included. The `Stager` now remembers the work directories of the stagings in progress and the prune skips them; the move into place and the prune are one step under a mutex. The downloads themselves are **not** serialised: a slow download of a new release must not hold up a rollout that needs only the archives of the running version. What is still possible, and accepted: two stagings of two versions that are both neither kept (`Keep`, the running version) nor the newest can prune each other's finished directory; the hub never stages two such versions at once.
 
+## Persistent metrics history: storage, flush and pruning (#405)
+
+The design of #387 (docs/architecture.md) is implemented up to the database: table `metric_buckets` on both backends, one batch write a minute, hourly batched pruning and the settings `metrics_retention_1m` and `metrics_retention_15m`. Choices the design left open:
+
+- **The 15-minute tier is made in SQL from the 1-minute rows**, in the transaction that completes its window, and not from an accumulator in memory. A hub that restarts in the middle of a window therefore still makes the whole window; only the minute that was open at the stop is lost. The price is that the 1-minute rows must exist for at least a window: while the 15-minute tier is on they are kept for at least one hour whatever `metrics_retention_1m` says. `INSERT ... ON CONFLICT DO NOTHING` makes both writes safe to repeat.
+- **Weighted means.** A 15-minute value is the mean of the minute values weighted by the reports in each minute, and only over the minutes that have the value (a null CPU or rate is not a zero).
+- **What a row holds**: the memory and swap totals next to what is in use (a chart draws a share), the rates summed over the physical interfaces by the same rule as the dashboard, and the fullest file system as one percentage. Per-disk history stays out.
+- **A failed write keeps its buckets** for the next minute, up to 200,000; the oldest go first. The pruning of a tier set to 0 deletes whatever it holds.
+- **Not done here**: `GET /api/agents/{id}/metrics` with `from`/`to` and the 1,000-point limit, the longer dashboard ranges (#334 depends on them), and the replay of reports kept by an agent. Open issues exist or are to be opened for them.
+
 ## Certificate end dates: kept, shown and warned about (audit issue #245)
 
 Agent certificates last five years and the CA twenty, with no renewal (#128), and nobody was told when one ends. Choices:
