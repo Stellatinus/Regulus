@@ -49,7 +49,18 @@ Two numbers tie them together, both checked when a plugin starts:
 
 ## Dashboard widgets (#21, design)
 
-Plugins ship widgets as JavaScript modules (`components.ui.module` in the manifest), served by the hub and registered at runtime. A broken widget only breaks its own frame (the dashboard already isolates widgets, see [Dashboard](../dashboard.md)).
+Plugins ship widgets as JavaScript modules (`components.ui.module` in the manifest), served by the hub and registered at runtime. A broken widget only breaks its own frame (the dashboard already isolates widgets, see [Dashboard](../dashboard.md)): that is an error boundary, which keeps a crash local, **not a security boundary**.
+
+### How widget code is isolated from the session (#315)
+
+A module served from the hub's own origin passes the Content-Security-Policy and would run with the viewer's cookie, so it could call every API the viewer can (create users, reset two-factor, start updates). The manifest's `permissions` cannot be enforced on code that has that power. So, before any widget loader exists:
+
+- **A widget never runs in the dashboard's page.** It runs in an `<iframe sandbox="allow-scripts">` **without** `allow-same-origin`, which gives it an opaque origin: no cookie, no `localStorage`, no access to the parent's DOM, and `fetch` to the hub arrives without the session. The module is served with its own response header `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'self'` so that opening its URL directly gives it the same empty origin, and with `connect-src 'none'`: the frame cannot call out.
+- **The only door is `postMessage`.** The dashboard answers a small set of messages from the frame (read the metric series the widget declared, read its own plugin's data, show a notification) and forwards each one as an ordinary API call **made by the dashboard for the plugin id**, which the hub checks against the permissions of the manifest the administrator approved, and against the viewer's own permissions as well (the narrower of the two wins). Nothing in this API writes, until a later design adds write operations with their own approval (#261).
+- **No exception for first-party plugins.** A signed first-party plugin would be easier to run in the page, but that makes the rule depend on a list and a signature that #23 has not designed; one mechanism for every plugin keeps the example plugin (#22) honest.
+- **Cost:** a widget cannot share a stylesheet or a React tree with the dashboard. It gets the theme as a few CSS variables sent in the first message and a size from the frame. #21 decides the message format; this section decides that it is not the page.
+
+[Decisions](../decisions.md) records the choice. #21 and #261 must follow it.
 
 ## Repository layout (#22)
 
