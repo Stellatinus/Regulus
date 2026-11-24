@@ -227,6 +227,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The restic backend: create a repository, run, retention, `check` (backlog). (2) The destination list shared with the hub backup (backlog). (3) The sample restore test (backlog). (4) The app manifest's consistency field (with apps). (5) The backup section, English and Italian (backlog).
 
+### Reverse proxy and certificates (#296)
+
+**Agreed.** Backends: **Caddy** first (the simplest, and it gets certificates by itself), **Traefik** second (it reads container labels), **nginx** later; **one per server**. Nothing is published to the Internet without an explicit choice.
+
+- **Certificates.** ACME (Let's Encrypt): the **HTTP-01** challenge in the first version (needs port 80 reachable) and **DNS-01** later, with a provider token that is a secret handled like the VPN auth key (entered once, stored encrypted, never shown). **Private keys stay in the proxy's own data directory**, owned by the proxy's user and `0700`; Regulus never reads, copies or backs up a private key, and the hub never sees one. Regulus reads the **certificate's end date** (to feed `certificate_ending` of [alerts](alerts.md)) and nothing else.
+- **How an app publishes.** In its manifest an app declares `publish: { host, port, path }`, for example `media.example.org` to container port 32400. The manager **shows the request**; the administrator **approves** it (level 1) and picks the **exposure**.
+- **Exposure.** Three values, shown on every published app: `public` (Internet), `lan` (private networks only) and `vpn` (the VPN's network, #291). **The default is `lan`.** `public` needs a typed confirmation that names the host, and is refused when the firewall (#290) does not allow 80 and 443 from the Internet, with the reason.
+- **Regulus itself.** The dashboard behind a proxy is a case of `trusted_proxies` ([Authentication](authentication.md)). The manager **never edits the hub's settings**, not `trusted_proxies`, not `tls_cert`. A published `hub` entry is a suggestion with the lines the administrator would paste, shown once.
+- **Firewall.** Ports 80 and 443 are opened through the firewall manager with the administrator's agreement, for the exposure chosen.
+- **The proxy's own configuration** is generated into files Regulus owns (a `regulus.d` directory the proxy includes), never into the administrator's own Caddyfile or nginx configuration, as for shares.
+
+**Implementation issues.** (1) The Caddy backend: detect, observe, the generated include (backlog). (2) The app `publish` request and approval (with apps). (3) Certificate end dates in the report (backlog). (4) DNS-01 providers (backlog). (5) The section, English and Italian (backlog). (6) `[Test]` with a real domain (backlog).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
