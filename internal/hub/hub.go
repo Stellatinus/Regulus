@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/CodexCircle/Regulus/internal/agent"
+	"github.com/CodexCircle/Regulus/internal/alerts"
 	"github.com/CodexCircle/Regulus/internal/auth"
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/fleet"
@@ -49,6 +50,10 @@ type Hub struct {
 	db  *sql.DB // store.Write
 	// history writes the completed metrics buckets to the database (#405).
 	history *metricsHistory
+	// alerts decides when something is a problem somebody should hear about
+	// (#404, alerts.go); alertEvery is how often it looks.
+	alerts     *alerts.Engine
+	alertEvery time.Duration
 	// store holds the database pools; unlockDir releases the lock of the
 	// data directory (see lockDataDir). Close does both.
 	store     *storage.HubDB
@@ -230,6 +235,11 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	}
 	h.history = newMetricsHistory(db, log, cfg.MetricsRetention1m.Duration(), cfg.MetricsRetention15m.Duration())
 	h.agents.history = h.history
+	engine, err := alerts.New(ctx, db, log, h.alertLog())
+	if err != nil {
+		return fail(err)
+	}
+	h.alerts, h.alertEvery = engine, alertEvery
 	if cfg.MetricsBudget > 0 {
 		h.agents.metrics.budget = int64(cfg.MetricsBudget)
 	}

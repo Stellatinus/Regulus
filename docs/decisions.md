@@ -246,6 +246,17 @@ The administrator is told (#338): `GET /api/updates` carries `status_socket`, th
 
 The hub stages releases from two places that can run at once: its own download (the background cycle or the **Download** button, serialised by the manager) and `EnsureRelease`, called when a rollout to the agents starts. Each staging ended with a prune that removed every entry it did not keep, the other staging's `.stage-*` work directory included. The `Stager` now remembers the work directories of the stagings in progress and the prune skips them; the move into place and the prune are one step under a mutex. The downloads themselves are **not** serialised: a slow download of a new release must not hold up a rollout that needs only the archives of the running version. What is still possible, and accepted: two stagings of two versions that are both neither kept (`Keep`, the running version) nor the newest can prune each other's finished directory; the hub never stages two such versions at once.
 
+## Alerts: the evaluator is a package of its own, and recovery is counted from the first clean evaluation (#404)
+
+The design of #386 (docs/alerts.md) is implemented up to the evaluator. Choices beyond it:
+
+- **`internal/alerts` reads nothing.** The hub hands it a `Snapshot` and it returns changes to a `Notifier`; that keeps the state machine testable on a fake clock and lets delivery (`internal/notify`), the API and the Alerts page be built on `Engine` without touching the rules.
+- **Pending state is in memory, alerts are in the table.** How long a condition has held is not stored: after a restart a condition waits its duration again, which can only delay an alert, never repeat one. What is open is in the database and is not announced again.
+- **Recovery starts at the first evaluation that finds the condition false**, and is at least a minute. An evaluation that does not look at a subject (its server is not reporting) neither counts for nor against it.
+- **Rules are rows, defaults are written once.** An administrator's setting survives an upgrade; the cost is that a changed default does not reach existing installations.
+- **A raise on an acknowledged alert is silent.** The design says an acknowledged alert sends nothing more until it resolves; a person who wants the news of a worse state can read the list. Revisit if it proves wrong.
+- **Not done here**: delivery, the API, the permissions `alerts.*`, the audit events, the Alerts page, `[Test]`.
+
 ## API tokens: bearer branch, permission intersection and what a token never does (#406)
 
 The design of #388 (docs/authentication.md) is implemented up to the API. Choices beyond it:

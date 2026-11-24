@@ -23,7 +23,7 @@ func (h *Hub) startTimers() {
 	h.rollout.base = tctx
 	h.rollout.mu.Unlock()
 
-	h.timersWG.Add(3)
+	h.timersWG.Add(4)
 	go func() {
 		defer h.timersWG.Done()
 		tick := time.NewTicker(5 * time.Minute)
@@ -44,6 +44,10 @@ func (h *Hub) startTimers() {
 	go func() {
 		defer h.timersWG.Done()
 		h.history.run(tctx)
+	}()
+	go func() {
+		defer h.timersWG.Done()
+		h.runAlerts(tctx)
 	}()
 }
 
