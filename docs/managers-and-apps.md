@@ -142,6 +142,21 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) Detection and the observation of containers, read only, through the helper (M6). (2) The operation list and the definition validator (M6). (3) The containers section of a server in the dashboard, English and Italian (M6). (4) The ports a container publishes in the report (M6). (5) `[Test]` on a real server with Docker and with rootless Podman (M6).
 
+### Firewall (#290)
+
+**Agreed: observe first, then manage with a lock-out guard.** This is the host firewall of **one server**. The dedicated node that all outbound traffic goes through is #284 and stays separate.
+
+- **Front-ends.** nftables is the kernel layer; **ufw** and **firewalld** are front-ends on top. Regulus **detects the front-end the distribution uses** (ufw on Debian and Ubuntu, firewalld on RHEL and Fedora) and uses that one; **nftables directly only when there is neither**. **iptables is not supported.** If both ufw and firewalld are active it reports a conflict and does nothing.
+- **Observe (first version).** The enabled state, the default policies, the rules as the front-end lists them (port or service, protocol, source, allow or deny) and the ports that listen, from the open-ports collector (#282), side by side: "listening but not allowed" and "allowed but nothing listens" are the two useful views.
+- **Manage (second step), level 2 operations of the model:** open or close a port, allow or remove a source, enable or disable the firewall. **Never offered remotely:** changing the default inbound policy to deny, or enabling the firewall, **unless the rules that keep the agent's connection and the administrator's source are already in the list** (the helper checks this itself); deleting every rule; and anything on a server where the manager cannot tell which connection is the agent's.
+- **Lock-out protection.** The agent connects **outbound** to the hub, so inbound rules do not cut it, but outbound rules and a default-deny egress would. Every change goes through the revert of the model: the previous rule set is restored by the **agent** after 60 seconds unless the administrator confirms from the dashboard. A change that is confirmed stays.
+- **Docker and Podman** also write firewall rules. The rules they add are shown **in a separate group, "published by containers"**, marked as not managed by this manager; a port in that group cannot be closed from here, and the page says why (the container publishes it).
+- **Open ports and the traffic map (#282, #283):** the same data. A port row in the ports view can offer "allow" or "block" once this manager is on; until then it only shows the state.
+- **Firewall node (#284) and node permissions (#170).** A server behind a firewall node still has its own host firewall; the two are independent and the page says which one a rule belongs to. A node's permission to reach the network (#170) is *not* a firewall rule and is not written here.
+- **What an app may ask.** An app **declares its ports**; the firewall manager opens them **only after the administrator agrees**, in a dialog that lists each port, protocol and source (default: the local network, never "anywhere"). Removing the app offers to close them.
+
+**Implementation issues.** (1) Detection and the observation of rules and policies for ufw, firewalld and nftables (M6). (2) The listening-versus-allowed view (M6). (3) Operations and the helper checks, with the revert (M6, after the model). (4) The firewall section in English and Italian (M6). (5) `[Test]`: a rule that would lock out is reverted, on a real server (M6).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
