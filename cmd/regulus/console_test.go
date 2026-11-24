@@ -375,6 +375,44 @@ func TestConfigSetErrorsStayEnglish(t *testing.T) {
 	}
 }
 
+// The refusal of a data_dir that holds none of the hub's data names --force
+// (#343, found on a real binary in #249): the flag has to be a real flag, in
+// front of or behind KEY and VALUE, not only a word the command looks for
+// after the flags were parsed.
+func TestConfigSetDataDirForce(t *testing.T) {
+	f := newFixture(t, false, false, nil)
+	oldDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(oldDir, "secret.key"), []byte("k"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newDir := filepath.Join(t.TempDir(), "fresh")
+	run := func(args ...string) int {
+		f.out.Reset()
+		f.errOut.Reset()
+		return configCommand(append(args, "--config", f.file), f.env)
+	}
+	if code := run("set", "data_dir", oldDir); code != 0 {
+		t.Fatalf("data_dir to the directory with data: %d %q", code, f.errOut.String())
+	}
+	if code := run("set", "data_dir", newDir); code != 1 || !strings.Contains(f.errOut.String(), "--force") {
+		t.Fatalf("without --force: %d %q", code, f.errOut.String())
+	}
+	for _, args := range [][]string{
+		{"set", "data_dir", newDir, "--force"},
+		{"set", "--force", "data_dir", newDir},
+	} {
+		if code := run("set", "data_dir", oldDir, "--force"); code != 0 {
+			t.Fatalf("reset to the old directory: %d %q", code, f.errOut.String())
+		}
+		if code := run(args...); code != 0 {
+			t.Errorf("%v: exit %d, stderr %q", args, code, f.errOut.String())
+		}
+		if code := run("get", "data_dir"); code != 0 || strings.TrimSpace(f.out.String()) != newDir {
+			t.Errorf("%v: data_dir is %q", args, f.out.String())
+		}
+	}
+}
+
 func TestDarkFromColorFGBG(t *testing.T) {
 	for v, want := range map[string]struct{ dark, ok bool }{
 		"15;0":         {true, true},
