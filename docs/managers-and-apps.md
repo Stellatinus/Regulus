@@ -157,6 +157,18 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) Detection and the observation of rules and policies for ufw, firewalld and nftables (M6). (2) The listening-versus-allowed view (M6). (3) Operations and the helper checks, with the revert (M6, after the model). (4) The firewall section in English and Italian (M6). (5) `[Test]`: a rule that would lock out is reverted, on a real server (M6).
 
+### VPN (#291)
+
+**Agreed.** An optional manager; Regulus never depends on a VPN (a mandatory overlay was rejected, [decisions](decisions.md), "Regulus Access: direction"). **Tailscale first**, because it runs on the host as `tailscaled` and is therefore a backend, not an app; **WireGuard** (`wg`) second; NetBird and Headscale only if someone needs them. **One active VPN backend per server.** A second one needs a reason and a decision.
+
+- **First operations (level 0 and 2).** Observe: connected or not, this server's overlay address, the peers (name, address, online), whether an exit node is in use. Operate (level 2, with the revert, because leaving or changing the exit node can cut the server off): **join** with an auth key, **leave**, **choose or clear the exit node**. **Stays on the command line:** access rules (ACLs), Tailscale SSH, `serve` and `funnel`, subnet routing, key rotation: they decide who can reach what, and that belongs in the VPN's own admin console.
+- **The auth key.** It is a secret that lets a machine join a network. The administrator enters it **once** in a form; the hub holds it **encrypted with `secret.key`**, sends it to the agent over the mTLS stream in the `join` operation, and **forgets it after the operation**: it is never returned by the API, never written to the audit log (which records "joined with a key", not the key) and never logged. A key with an expiry or a single use is recommended on the form. There is no stored "reference" to a key in the first version.
+- **Relation to Regulus Access.** An overlay address is **a candidate in the address list** of #155 (the phone may use it when it can); Regulus does not make the phone or the hub depend on it, and the manager never edits the hub's settings. The access gateway (#161) is unaffected.
+- **Firewall.** A VPN interface may need rules (allow traffic on `tailscale0`); the manager **proposes** them to the firewall manager (#290), and the administrator agrees, as for apps.
+- **Several VPNs.** Not at once in the first version: a server that has both Tailscale and WireGuard active shows both, manages the one the administrator chose, and says the other is not managed.
+
+**Implementation issues.** (1) The Tailscale observation (status, peers, exit node) (M6). (2) Join, leave and exit node as helper operations with the secret handling above (M6). (3) The WireGuard observation (backlog). (4) The VPN section in English and Italian (M6). (5) `[Test]`: join and leave on a real tailnet (M6).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
