@@ -195,6 +195,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The mounts and filesystems collector, with the mount states (M6). (2) The LVM observation through the helper (backlog). (3) ZFS and Btrfs health (backlog). (4) The layered view on a server's Storage page, English and Italian (M6). (5) The `mount_unresponsive` alert condition.
 
+### Shares (#294)
+
+**Agreed: observe first, then manage a file Regulus owns.** Backends: **Samba** (SMB: Windows, macOS, phones) and **NFS** (Linux); one or both on a server.
+
+- **What Regulus manages:** shares, each with a folder, who may read and who may write, and guest access, which is **off by default** and needs a typed confirmation when turned on. **What stays by hand:** everything else in `smb.conf` and `/etc/exports`.
+- **Never overwriting a file it does not own.** Regulus writes **its own include files**: `/etc/samba/regulus-shares.conf` and `/etc/exports.d/regulus.exports`. The first time, it asks to add **one `include =` line** to `smb.conf` (the administrator sees the exact line and agrees, level 2, with the revert); an NFS server reads `exports.d` by itself. A share defined by hand elsewhere is **listed as "not managed"** and never changed. A change is written to a temporary file, checked (`testparm`, `exportfs -r` dry run), then renamed in place.
+- **Users.** Samba has its own password database. **Regulus never copies a Regulus password into it**, and never stores a Samba password. A share names **system users or groups**; setting a user's Samba password is an operation where the password is typed in the dialog and goes to the helper once, as standard input, to `smbpasswd`, and is forgotten. NFS has no passwords: it is **host-based**, and a share lists the hosts or networks that may mount it; `*` is refused.
+- **Apps.** A media app mounts the same folder a share exposes. The manager **shows which apps use a share's folder** and warns when a share and an app disagree about who may write; an app's volume is never shared by default.
+- **Firewall.** The ports a share needs (SMB 445, NFS 2049 and the ports of `rpcbind`) are shown and **opened through the firewall manager (#290), with the administrator's agreement**, never silently, and only for a **local network** source.
+- **Exposure.** **No Internet by default**: the manager **refuses** to open a share port to a source that is not a private address, or to enable guest access on a server whose firewall allows those ports from anywhere, and says why. A VPN network (#291) counts as private only when the administrator marks it so.
+
+**Implementation issues.** (1) Observation of Samba shares (`testparm -s`) and NFS exports (M-none, backlog). (2) The include-file writer with the checks and the revert (backlog). (3) The Samba password operation (backlog). (4) The shares section, English and Italian (backlog). (5) `[Test]` with a Windows client and an NFS client.
+
 <!--SECTIONS-->
 
 ## What exists and what does not
