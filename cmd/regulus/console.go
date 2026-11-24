@@ -393,6 +393,10 @@ func configCommand(args []string, e env) int {
 	var c commonFlags
 	fs := newFlagSet("config "+sub, e, configUsage+strings.Join(config.Keys(), ", ")+".")
 	c.register(fs, false)
+	force := false
+	if sub == "set" {
+		fs.BoolVar(&force, "force", false, "set data_dir to a directory that holds none of the hub's data, to start fresh on purpose")
+	}
 	rest, err := parseInterspersed(fs, args[1:])
 	if errors.Is(err, flag.ErrHelp) {
 		return 0
@@ -445,16 +449,6 @@ func configCommand(args []string, e env) int {
 		v, _ := cfg.Get(rest[0])
 		_, _ = fmt.Fprintln(e.stdout, v)
 	case "set":
-		force := false
-		var operands []string
-		for _, a := range rest {
-			if a == "--force" {
-				force = true
-				continue
-			}
-			operands = append(operands, a)
-		}
-		rest = operands
 		if len(rest) != 2 {
 			return usageErr("usage: regulus config set KEY VALUE [--force]")
 		}
