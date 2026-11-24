@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 const packaged = "../../packaging/config.yaml"
@@ -393,6 +394,38 @@ func TestSetFileFallsBackToWritingInPlace(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); !strings.Contains(string(got), `listen: ":9090"`) {
 		t.Errorf("the value was not written:\n%s", got)
+	}
+}
+
+// A ".config-*" copy left by a killed writer is removed by the next write, but
+// a recent one (a writer that may still be running) and other files stay.
+func TestSetFileRemovesOnlyStaleTemporaryFiles(t *testing.T) {
+	path := copyPackaged(t)
+	dir := filepath.Dir(path)
+	write := func(name string, age time.Duration) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte("database:\n  password: secret\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		when := time.Now().Add(-age)
+		if err := os.Chtimes(p, when, when); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	stale := write(".config-111", time.Hour)
+	fresh := write(".config-222", time.Minute)
+	other := write("keep-me", time.Hour)
+	if _, err := SetFile(path, "listen", "9090"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the stale temporary file is still there (err = %v)", err)
+	}
+	for _, p := range []string{fresh, other} {
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("%s was removed: %v", filepath.Base(p), err)
+		}
 	}
 }
 

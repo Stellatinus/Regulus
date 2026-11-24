@@ -432,6 +432,7 @@ func writeConfig(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
+	removeStaleTemps(filepath.Dir(path), info)
 	tmp, err := createTemp(filepath.Dir(path), ".config-")
 	if err != nil {
 		if errors.Is(err, fs.ErrPermission) {
@@ -466,6 +467,38 @@ func writeConfig(path string, data []byte) error {
 		_ = d.Close()
 	}
 	return nil
+}
+
+// staleTempAge is how old a ".config-*" file must be before writeConfig
+// deletes it. A writer that is still running holds a younger one for a few
+// milliseconds, so ten minutes cannot touch a live write.
+const staleTempAge = 10 * time.Minute
+
+// removeStaleTemps deletes the ".config-*" files that a writer killed between
+// the creation of its temporary file and the rename left behind (SIGKILL and a
+// power cut skip the deferred remove). Each is a copy of the whole
+// configuration, which can hold database.password or prometheus.token. Only
+// regular files older than staleTempAge, with the owner of the configuration
+// file, go; errors are ignored because this is housekeeping.
+func removeStaleTemps(dir string, cfg os.FileInfo) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	cfgUID, _, haveOwner := ownerOf(cfg)
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), ".config-") || !e.Type().IsRegular() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil || time.Since(info.ModTime()) < staleTempAge {
+			continue
+		}
+		if uid, _, ok := ownerOf(info); haveOwner && ok && uid != cfgUID {
+			continue
+		}
+		_ = os.Remove(filepath.Join(dir, e.Name()))
+	}
 }
 
 // stateFiles are what a hub keeps in its data directory: the database (a file
