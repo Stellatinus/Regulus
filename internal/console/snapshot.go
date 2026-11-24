@@ -164,10 +164,19 @@ func dialTCP(ctx context.Context, addr string) error {
 	return c.Close()
 }
 
+// ErrNoJournal is what Logs and Follow return when journalctl is not on this
+// machine (a container, OpenRC or runit, a hub started by hand). The hub has no
+// log file: it writes its log to standard error and leaves it to whatever
+// started it, so the Logs tab says where to look instead (#375, decisions.md).
+var ErrNoJournal = errors.New("journalctl not found")
+
 // journalFollow runs `journalctl -f` and sends its lines on the channel,
 // which is closed when the command ends or ctx is done. An error is returned
 // only when the command cannot start.
 func journalFollow(ctx context.Context, n int) (<-chan string, error) {
+	if _, err := exec.LookPath("journalctl"); err != nil {
+		return nil, ErrNoJournal
+	}
 	cmd := exec.CommandContext(ctx, "journalctl", "-u", ServiceUnit, "-n", fmt.Sprint(n), "-f", "--no-pager", "-o", "cat")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -194,6 +203,9 @@ func journalFollow(ctx context.Context, n int) (<-chan string, error) {
 }
 
 func journalLogs(ctx context.Context, n int) ([]string, error) {
+	if _, err := exec.LookPath("journalctl"); err != nil {
+		return nil, ErrNoJournal
+	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "journalctl", "-u", ServiceUnit, "-n", fmt.Sprint(n), "--no-pager", "-o", "cat").CombinedOutput()

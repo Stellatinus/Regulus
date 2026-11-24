@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/CodexCircle/Regulus/internal/auth"
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
@@ -91,6 +92,10 @@ const (
 	CodeNoTake        = "did_not_take"   // back, version, wait
 	CodeNotStayed     = "did_not_stay"   // version
 	CodeNotReturned   = "did_not_return" // wait
+	// What the update helper on the server wrote (#337): the English detail
+	// is the helper's own message.
+	CodeHelperRolledBack = "helper_rolled_back" // version, detail
+	CodeHelperFailed     = "helper_failed"      // version, detail
 )
 
 // rolloutMsg is the message of a rollout step: the English text, and a code
@@ -511,6 +516,12 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 			}
 		default:
 			newSession = time.Time{}
+			// The helper's own result decides, when the agent reports it
+			// (#337): a rolled-back update is known the moment the agent
+			// reconnects, with the helper's reason.
+			if m := helperVerdict(before, a, h.version); m.Text != "" {
+				return m
+			}
 			if sawNew {
 				return msg(fmt.Sprintf("the server connected with version %s, then came back with version %s: the installer rolled the update back", h.version, a.Version), CodeRolledBack, "version", h.version, "back", a.Version)
 			}
@@ -574,6 +585,30 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 			}
 		}
 	}
+}
+
+// helperVerdict reads the update helper's result in the Hello of a new
+// session (#337). It answers only for a result that is about the target
+// version and that the agent did not already report before the rollout began
+// (an old result.json stays on the machine): the clocks of the agent and the
+// hub are not compared. A message with no text means "no verdict": an older
+// agent, no result, an unfinished one, or the rule by versions and time
+// decides.
+func helperVerdict(before, now AgentInfo, target string) rolloutMsg {
+	r := now.UpdateResult
+	if r == nil || r.GetVersion() != target {
+		return rolloutMsg{}
+	}
+	if old := before.UpdateResult; old != nil && proto.Equal(old, r) {
+		return rolloutMsg{}
+	}
+	switch r.GetOutcome() {
+	case update.OutcomeRolledBack:
+		return msg(fmt.Sprintf("the installer on the server rolled the update back: %s", r.GetMessage()), CodeHelperRolledBack, "version", target, "detail", r.GetMessage())
+	case update.OutcomeFailed:
+		return msg(fmt.Sprintf("the installer on the server could not install version %s: %s", target, r.GetMessage()), CodeHelperFailed, "version", target, "detail", r.GetMessage())
+	}
+	return rolloutMsg{}
 }
 
 func (h *Hub) agentInfo(id string) (AgentInfo, bool) {

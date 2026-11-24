@@ -50,6 +50,7 @@ var it = strs{
 
 	LogsEmpty:       "Nessuna riga di log.",
 	LogsUnavailable: "Impossibile leggere il log",
+	LogsNoJournal:   "journald non è disponibile su questa macchina. L'hub scrive il log sullo standard error: leggilo dove lo conserva ciò che l'ha avviato (docker logs, il terminale di un hub avviato a mano, il supervisore del tuo sistema init).",
 	LogFilters:      [4]string{"tutti i livelli", "info e superiori", "avvisi ed errori", "solo errori"},
 	Following:       "in diretta",
 

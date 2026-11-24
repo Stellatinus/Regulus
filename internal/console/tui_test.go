@@ -721,3 +721,40 @@ func TestSettingErrorWithoutACodeIsShownAsItIs(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Without journald the Logs tab says where to read the log instead of showing
+// a raw error (#375), in both languages.
+func TestLogsTabWithoutJournald(t *testing.T) {
+	for _, lang := range []string{"en", "it"} {
+		t.Run(lang, func(t *testing.T) {
+			if lang == "it" {
+				italian(t)
+			}
+			sys := fakeSystem()
+			sys.Follow = nil
+			sys.Logs = func(context.Context, int) ([]string, error) { return nil, ErrNoJournal }
+			m := New(Options{System: sys, ConfigFile: "testdata/config.yaml", Unicode: true})
+			next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+			m = settle(t, next.(Model), m.collect())
+			m = sendKey(t, m, rune1('3'))
+			body := strings.Join(m.logsBody(), "\n")
+			if !strings.Contains(body, T.LogsNoJournal) {
+				t.Errorf("the tab does not say where to read the log:\n%s", body)
+			}
+			if strings.Contains(body, ErrNoJournal.Error()) {
+				t.Errorf("the raw error is shown:\n%s", body)
+			}
+		})
+	}
+}
+
+// The real sources report ErrNoJournal when journalctl is not on the machine.
+func TestJournalSourcesWithoutJournalctl(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if _, err := journalLogs(context.Background(), 10); !errors.Is(err, ErrNoJournal) {
+		t.Errorf("journalLogs: %v", err)
+	}
+	if _, err := journalFollow(context.Background(), 10); !errors.Is(err, ErrNoJournal) {
+		t.Errorf("journalFollow: %v", err)
+	}
+}

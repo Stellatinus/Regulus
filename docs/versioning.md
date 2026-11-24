@@ -50,6 +50,7 @@ The rules that keep this working:
 The agent sends the range it speaks (`min_protocol_version`, `protocol_version`) and the hub picks the highest version both speak (`protocol.Negotiate`). The agent checks that the version the hub picked is one it speaks, and drops the connection otherwise.
 
 - **Adding** a field, a message, a command kind or an RPC is compatible and needs no new version. `MetricsReport.physical_disks` (#148) is one: its own `disk_identity_version` (1) says what its fields mean, and moves only when they change meaning. A peer that does not know it ignores it (an unknown command is answered "unsupported command").
+- `Hello.update_result` (#337) is another: the last outcome the update helper wrote on the agent (`result.json`: version, from, outcome, message, code and arguments, time). A rollout that finds, in the Hello of the reconnected agent, a result for its target version that the agent did not already report before the rollout started (`rolled_back` or `failed`) fails that server at once with the helper's message. An older agent sends none, and the hub then judges by versions and time as before; an older hub ignores the field. The hub drops a result with an outcome the helper never writes and cuts its texts.
 - **Raising `Version`** is for a change of meaning that an older peer would misread. Keep the old behaviour for agents that negotiate the old version until `MinSupported` is raised.
 - **Raising `MinSupported`** drops full service for old agents. They still reach the update contract.
 

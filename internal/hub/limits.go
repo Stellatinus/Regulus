@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
+	"github.com/CodexCircle/Regulus/internal/update"
 )
 
 // What one agent can make the hub receive, keep and broadcast. An agent is a
@@ -55,6 +56,7 @@ func cleanText(s string) string {
 func sanitizeHello(h *agentv1.Hello) {
 	h.AgentVersion = cleanText(h.GetAgentVersion())
 	h.AgentId = cleanText(h.GetAgentId())
+	sanitizeUpdateResult(h)
 	if sys := h.GetSystem(); sys != nil {
 		sys.Hostname = cleanText(sys.GetHostname())
 		sys.Os = cleanText(sys.GetOs())
@@ -62,6 +64,39 @@ func sanitizeHello(h *agentv1.Hello) {
 		sys.Kernel = cleanText(sys.GetKernel())
 		sys.Arch = cleanText(sys.GetArch())
 		sys.Container = cleanText(sys.GetContainer())
+	}
+}
+
+// sanitizeUpdateResult limits the update helper's result that an agent sends in
+// Hello (#337): the texts are cut and cleaned, a few arguments are kept, and an
+// outcome that is not one the helper writes is dropped with the whole result.
+func sanitizeUpdateResult(h *agentv1.Hello) {
+	r := h.GetUpdateResult()
+	if r == nil {
+		return
+	}
+	switch r.GetOutcome() {
+	case update.OutcomeInstalling, update.OutcomeApplied, update.OutcomeRolledBack, update.OutcomeFailed:
+	default:
+		h.UpdateResult = nil
+		return
+	}
+	r.Version = cleanText(r.GetVersion())
+	r.From = cleanText(r.GetFrom())
+	r.Message = cleanText(r.GetMessage())
+	r.Code = cleanText(r.GetCode())
+	if len(r.Args) > maxListEntries {
+		kept := make(map[string]string, maxListEntries)
+		for k, v := range r.Args {
+			if len(kept) == maxListEntries {
+				break
+			}
+			kept[k] = v
+		}
+		r.Args = kept
+	}
+	for k, v := range r.Args {
+		r.Args[k] = cleanText(v)
 	}
 }
 

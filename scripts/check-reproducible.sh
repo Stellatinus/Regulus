@@ -12,18 +12,37 @@ set -eu
 
 here=$(cd "$(dirname "$0")/.." && pwd)
 cd "$here"
-out=${REPRODUCIBLE_DIR:-$(mktemp -d)}
-mkdir -p "$out"
+# The default directory is removed on exit; one given by REPRODUCIBLE_DIR is kept.
+if [ -n "${REPRODUCIBLE_DIR:-}" ]; then
+	out=$REPRODUCIBLE_DIR
+	mkdir -p "$out"
+else
+	out=$(mktemp -d)
+	trap 'rm -rf "$out"' EXIT
+fi
+# A build makes at least the archives and the packages of two architectures;
+# fewer files means that GoReleaser produced nothing, not that it is reproducible.
+min=${REPRODUCIBLE_MIN_FILES:-4}
 
 build() {
 	go clean -cache
 	rm -rf dist dashboard/dist
-	goreleaser release --snapshot --clean --skip=publish,sign,sbom,announce >/dev/null
+	if ! goreleaser release --snapshot --clean --skip=publish,sign,sbom,announce >"$out/goreleaser.log" 2>&1; then
+		cat "$out/goreleaser.log" >&2
+		echo "goreleaser failed" >&2
+		exit 1
+	fi
 	(cd dist && for f in *.tar.gz *.deb *.rpm; do [ -e "$f" ] && sha256sum "$f"; done) | sort -k2 >"$out/$1"
 }
 
 build first
 build second
+
+count=$(wc -l <"$out/first")
+if [ "$count" -lt "$min" ]; then
+	echo "only $count files were built (at least $min expected): nothing to compare" >&2
+	exit 1
+fi
 
 if ! diff -u "$out/first" "$out/second"; then
 	echo "not reproducible: the files above differ between two builds of $(git rev-parse --short HEAD)" >&2

@@ -279,6 +279,58 @@ func TestRolloutNoticesAnAgentThatCameBackRolledBack(t *testing.T) {
 	}
 }
 
+// When the agent reports the update helper's result in Hello, the rollout
+// fails the server at once with the helper's own reason, without waiting for
+// the return timeout (#337).
+func TestRolloutJudgesByTheHelpersResult(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	h.rollout.returnTimeout = time.Minute // a failure that waited for this would time the test out
+	admin := newAPI(t, h, auth.RoleAdmin)
+	creds := enrollNew(t, h, "web1")
+	dir := t.TempDir()
+	stop := runAgentUpdating(t, h, creds, "9.8.1", dir)
+	waitFor(t, "the agent", func() bool { return len(h.Agents()) == 1 })
+
+	admin.do("POST", "/api/updates/rollout", map[string]any{})
+	waitFor(t, "the request", func() bool { _, ok := update.ReadRequest(update.ApplyDir(dir)); return ok })
+	waitInstalling(t, admin)
+	// The installer rolled back and wrote why; the old agent starts again.
+	_ = os.Remove(filepath.Join(update.ApplyDir(dir), "request.json"))
+	if err := update.WriteResult(update.ApplyDir(dir), update.ApplyResult{
+		Version: "9.9.9", From: "9.8.1", Outcome: update.OutcomeRolledBack,
+		Message: "the new version did not report itself within 90 s", At: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	runAgentUpdating(t, h, creds, "9.8.1", dir)
+
+	st := waitRollout(t, admin, RolloutFailed)
+	a := st.Agents[0]
+	if a.Status != AgentFailed || a.Code != CodeHelperRolledBack || !strings.Contains(a.Message, "did not report itself within 90 s") || a.Args["detail"] == "" {
+		t.Errorf("agent = %+v", a)
+	}
+}
+
+// A result.json left by an earlier update, which the agent already reported
+// before the rollout started, is not a verdict on this one.
+func TestHelperVerdictIgnoresAStaleResult(t *testing.T) {
+	old := &agentv1.UpdateResult{Version: "9.9.9", Outcome: update.OutcomeRolledBack, Message: "earlier"}
+	now := &agentv1.UpdateResult{Version: "9.9.9", Outcome: update.OutcomeRolledBack, Message: "earlier"}
+	if m := helperVerdict(AgentInfo{UpdateResult: old}, AgentInfo{UpdateResult: now}, "9.9.9"); m.Text != "" {
+		t.Errorf("a stale result was a verdict: %+v", m)
+	}
+	if m := helperVerdict(AgentInfo{}, AgentInfo{UpdateResult: &agentv1.UpdateResult{Version: "9.9.8", Outcome: update.OutcomeRolledBack}}, "9.9.9"); m.Text != "" {
+		t.Errorf("a result for another version was a verdict: %+v", m)
+	}
+	if m := helperVerdict(AgentInfo{}, AgentInfo{UpdateResult: &agentv1.UpdateResult{Version: "9.9.9", Outcome: update.OutcomeApplied}}, "9.9.9"); m.Text != "" {
+		t.Errorf("an applied result was a failure: %+v", m)
+	}
+	if m := helperVerdict(AgentInfo{}, AgentInfo{UpdateResult: &agentv1.UpdateResult{Version: "9.9.9", Outcome: update.OutcomeFailed, Message: "x"}}, "9.9.9"); m.Code != CodeHelperFailed {
+		t.Errorf("failed = %+v", m)
+	}
+}
+
 func TestRolloutGivesUpOnAnAgentThatDoesNotReturn(t *testing.T) {
 	h, _ := startRolloutHub(t)
 	h.rollout.returnTimeout = 300 * time.Millisecond

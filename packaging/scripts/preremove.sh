@@ -9,6 +9,13 @@ case "$1" in
 	*) exit 0 ;;
 esac
 
+# The next install of the package must start the hub again, although dpkg will
+# call it an upgrade (it passes the last configured version): see
+# postinstall.sh (#398).
+if [ -d /etc/regulus ]; then
+	: >/etc/regulus/.removed
+fi
+
 if [ -d /run/systemd/system ]; then
 	systemctl disable --now regulus-update.path || true
 	systemctl disable --now regulus-agent-update.path || true

@@ -19,8 +19,9 @@ check=0
 # unpinned prints "file:line:action@ref" for every `uses:` that is not a
 # commit SHA (local actions, ./path, and docker:// are not pinned this way).
 unpinned() {
-	grep -n -E '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[A-Za-z0-9_.-]+/[^@[:space:]]+@' "$workflows"/*.yml |
-		grep -v -E '@[0-9a-f]{40}([[:space:]]|$)' || true
+	# *.yml and *.yaml, and a quoted value: uses: "a/b@v1" (#402).
+	grep -n -E "^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*[\"']?[A-Za-z0-9_.-]+/[^@[:space:]]+@" "$workflows"/*.yml "$workflows"/*.yaml 2>/dev/null |
+		grep -v -E "@[0-9a-f]{40}[\"']?([[:space:]]|$)" || true
 }
 
 if [ "$check" = 1 ]; then
@@ -48,6 +49,9 @@ unpinned | while IFS= read -r line; do
 	rest=${line#*:}
 	action=$(printf '%s' "$rest" | sed -E 's/.*uses:[[:space:]]*([^@[:space:]]+)@([^[:space:]#]+).*/\1/')
 	ref=$(printf '%s' "$rest" | sed -E 's/.*uses:[[:space:]]*([^@[:space:]]+)@([^[:space:]#]+).*/\2/')
+	case "$action" in
+		\"* | \'*) echo "$file: a quoted uses: value cannot be rewritten; pin it by hand: $rest" >&2; exit 1 ;;
+	esac
 	sha=$(sha_of "$action" "$ref")
 	[ -n "$sha" ] || { echo "cannot resolve $action@$ref" >&2; exit 1; }
 	# Replace this action@ref wherever it appears in the file, whatever its

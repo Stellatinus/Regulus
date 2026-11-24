@@ -4,6 +4,14 @@
 # a first install and 2 for an upgrade.
 set -e
 
+# dpkg also calls this script with abort-upgrade, abort-remove and
+# abort-deconfigure, after a failed step elsewhere. Those must not reload units
+# or restart the service (#398).
+case "${1:-}" in
+	configure | 1 | 2) ;;
+	*) exit 0 ;;
+esac
+
 env_file=/etc/regulus/regulus.env
 
 # The installer may have written settings here before the package arrived. They
@@ -48,10 +56,17 @@ fi
 fresh=false
 case "$1" in
 	configure)
-		if [ -z "$2" ]; then fresh=true; fi
+		if [ -z "${2:-}" ]; then fresh=true; fi
 		;;
 	1) fresh=true ;;
 esac
+# After "remove" (not purge) dpkg passes the last configured version on the next
+# install, so it looks like an upgrade. preremove leaves a marker when it
+# disables the units; seeing it makes this a fresh start again (#398).
+if [ -e /etc/regulus/.removed ]; then
+	fresh=true
+	rm -f /etc/regulus/.removed
+fi
 
 if [ ! -d /run/systemd/system ]; then
 	echo "Regulus: systemd is not running, so the service was not started."

@@ -27,6 +27,7 @@ type strs struct {
 	Choices        string
 
 	LogsEmpty, LogsUnavailable string
+	LogsNoJournal              string
 	LogFilters                 [4]string
 	Following                  string
 
@@ -182,6 +183,7 @@ var en = strs{
 
 	LogsEmpty:       "No log lines.",
 	LogsUnavailable: "Cannot read the log",
+	LogsNoJournal:   "journald is not available on this machine. The hub writes its log to standard error: read it where whatever started it keeps it (docker logs, the terminal of a hub started by hand, the supervisor of your init system).",
 	LogFilters:      [4]string{"all levels", "info and above", "warnings and errors", "errors only"},
 	Following:       "following",
 

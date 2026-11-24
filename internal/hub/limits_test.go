@@ -88,3 +88,19 @@ func TestReportTooSoon(t *testing.T) {
 		t.Error("with no interval nothing must be dropped")
 	}
 }
+
+// The update helper's result in Hello comes from a remote machine: an outcome
+// the helper never writes drops it, and the texts are cut (#337).
+func TestSanitizeUpdateResult(t *testing.T) {
+	h := &agentv1.Hello{UpdateResult: &agentv1.UpdateResult{Outcome: "bogus", Message: "x"}}
+	sanitizeHello(h)
+	if h.UpdateResult != nil {
+		t.Errorf("an unknown outcome was kept: %v", h.UpdateResult)
+	}
+	long := strings.Repeat("a", 10*maxTextBytes)
+	h = &agentv1.Hello{UpdateResult: &agentv1.UpdateResult{Outcome: "failed", Message: long + "\x00", Args: map[string]string{"k": long}}}
+	sanitizeHello(h)
+	if len(h.UpdateResult.Message) > maxTextBytes || strings.ContainsRune(h.UpdateResult.Message, 0) || len(h.UpdateResult.Args["k"]) > maxTextBytes {
+		t.Errorf("texts were not limited: %d, %d", len(h.UpdateResult.Message), len(h.UpdateResult.Args["k"]))
+	}
+}

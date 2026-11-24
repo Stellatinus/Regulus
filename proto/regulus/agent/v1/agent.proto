@@ -71,6 +71,33 @@ message Hello {
   // predates this field) means it speaks only protocol_version. The hub picks
   // the highest version both sides speak.
   uint32 min_protocol_version = 5;
+  // The last outcome the update helper wrote on the agent (result.json), so a
+  // rollout judges a server by what the helper did and not only by versions
+  // and time (#337). Absent when the agent has no helper, or none ran.
+  // Added in protocol 1 without a new version (add-only, docs/versioning.md):
+  // an older hub ignores it, an older agent does not send it and the hub then
+  // falls back to the rule by versions and time.
+  UpdateResult update_result = 6;
+}
+
+// UpdateResult is the outcome the root update helper recorded on an agent.
+// It mirrors result.json of the helper (internal/update.ApplyResult); like
+// that file it is only ever extended.
+message UpdateResult {
+  // The version the helper tried to install.
+  string version = 1;
+  // The version it replaced.
+  string from = 2;
+  // "installing", "applied", "rolled_back" or "failed".
+  string outcome = 3;
+  // What the helper says, in English.
+  string message = 4;
+  // A stable code and its arguments for a translation of message (#368); both
+  // are empty when the helper wrote none.
+  string code = 5;
+  map<string, string> args = 6;
+  // When the helper wrote it, by the agent's clock.
+  google.protobuf.Timestamp at = 7;
 }
 
 // SystemInfo describes the machine the agent runs on. It rarely changes.
