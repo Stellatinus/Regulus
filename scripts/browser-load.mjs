@@ -25,6 +25,10 @@ const { chromium } = createRequire(import.meta.url)("playwright");
 
 const base = process.argv[2];
 const seconds = Number(process.argv[3] ?? 60);
+if (!Number.isFinite(seconds) || seconds <= 0) {
+  console.error("seconds must be a positive number");
+  process.exit(2);
+}
 const password = process.env.REGULUS_LOAD_PASSWORD ?? "e2e-test-password";
 if (!base) {
   console.error("usage: node scripts/browser-load.mjs http://127.0.0.1:PORT [seconds]");
@@ -68,6 +72,10 @@ for (let i = 0; i < 120; i++) {
   await page.waitForTimeout(500);
 }
 const ready = Date.now() - t0;
+if (rows === 0) {
+  console.error("the Servers page showed no entries: the page did not load or nobody is connected, so there is nothing to measure");
+  process.exit(1);
+}
 
 await gc();
 const start = await metrics();

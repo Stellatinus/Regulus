@@ -38,7 +38,17 @@ cp "$src/plugin.yaml" "$stage/"
 # Every "command: <path>" of a component is a program to build: bin/<name>
 # comes from the main package of the plugin's directory (one program, as in the
 # example) or of ./<src>/cmd/<name> when that exists.
-for cmd in $(sed -n 's/^[[:space:]]*command:[[:space:]]*//p' "$src/plugin.yaml" | sort -u); do
+# safe_path refuses an absolute path and any ".." in a path the manifest names:
+# the archive and the build must stay inside the plugin's own directory (#402).
+safe_path() {
+	case "$1" in
+		/* | .. | ../* | */../* | */..) echo "the manifest names the path $1, which leaves the plugin directory" >&2; exit 1 ;;
+	esac
+}
+
+commands=$(sed -n 's/^[[:space:]]*command:[[:space:]]*//p' "$src/plugin.yaml" | sort -u)
+for cmd in $commands; do
+	safe_path "$cmd"
 	name=$(basename "$cmd")
 	pkg="./$src"
 	[ -d "$src/cmd/$name" ] && pkg="./$src/cmd/$name"
@@ -48,6 +58,7 @@ done
 
 module=$(sed -n 's/^[[:space:]]*module:[[:space:]]*//p' "$src/plugin.yaml" | head -n 1)
 if [ -n "$module" ]; then
+	safe_path "$module"
 	[ -f "$src/$module" ] || { echo "the manifest names $module, which is not in $src" >&2; exit 1; }
 	mkdir -p "$stage/$(dirname "$module")"
 	cp "$src/$module" "$stage/$module"
@@ -56,6 +67,12 @@ fi
 mkdir -p "$out"
 archive="$out/${id}_${version}_${goos}_${goarch}.tar.gz"
 # A fixed order and time make the same source give the same archive.
-(cd "$work" && find "$id" | LC_ALL=C sort | tar --no-recursion --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf - -T -) >"$archive"
+# Written aside and renamed, so a failed tar leaves no truncated archive.
+if ! (cd "$work" && find "$id" | LC_ALL=C sort | tar --no-recursion --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner -czf - -T -) >"$archive.tmp"; then
+	rm -f "$archive.tmp"
+	echo "tar failed (this script needs GNU tar)" >&2
+	exit 1
+fi
+mv "$archive.tmp" "$archive"
 (cd "$out" && sha256sum "$(basename "$archive")" >"$(basename "$archive").sha256")
 echo "$archive"

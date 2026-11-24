@@ -40,4 +40,11 @@ mkdir -p "$tmp/wrong/other"
 printf 'id: example\nversion: 1.0.0\n' >"$tmp/wrong/other/plugin.yaml"
 check "a directory not named after the id is refused" '! scripts/package-plugin.sh "$tmp/wrong/other" "$tmp/out4" 2>/dev/null'
 
+# A path that leaves the plugin directory is refused (#402).
+for bad in /etc/passwd ../outside ui/../../outside; do
+	mkdir -p "$tmp/bad/example"
+	printf 'id: example\nversion: 1.0.0\nui:\n  module: %s\n' "$bad" >"$tmp/bad/example/plugin.yaml"
+	check "the path $bad in the manifest is refused" '! scripts/package-plugin.sh "$tmp/bad/example" "$tmp/out5" 2>"$tmp/err" && grep -q "leaves the plugin directory" "$tmp/err"'
+done
+
 [ "$failures" -eq 0 ] || { echo "$failures failed"; exit 1; }

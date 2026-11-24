@@ -182,13 +182,15 @@ fingerprint=$(sed -n 's/.*"ca_fingerprint":"\([^"]*\)".*/\1/p' <<<"$grant")
 "$bin" agent --hub "$agent_addr" --token "$enroll_token" --ca-fingerprint "$fingerprint" \
 	--data-dir "$tmp/agent" --enroll-only >"$tmp/enroll.log" 2>&1 || { cat "$tmp/enroll.log" >&2; fail "agent --enroll-only failed"; }
 [[ -s $tmp/agent/agent.key ]] || fail "--enroll-only did not save the credentials"
-[[ -z $(curl -fsS -b "$jar" "http://$addr/api/agents") || $(curl -fsS -b "$jar" "http://$addr/api/agents") == '[]' ]] || fail "--enroll-only left an agent connected"
+listed=$(curl -fsS -b "$jar" "http://$addr/api/agents") || fail "/api/agents request failed"
+[[ -z $listed || $listed == '[]' ]] || fail "--enroll-only left an agent connected"
 # ...and the agent then runs with the saved credentials alone.
 "$bin" agent --hub "$agent_addr" --data-dir "$tmp/agent" >"$tmp/agent.log" 2>&1 &
 agent_pid=$!
 remote_id=
 for _ in $(seq 1 100); do
-	remote_id=$(curl -fsS -b "$jar" "http://$addr/api/agents" | sed -n 's/.*"id":"\(agent-[0-9a-f]*\)".*/\1/p' | head -n1)
+	listed=$(curl -fsS -b "$jar" "http://$addr/api/agents") || fail "/api/agents request failed"
+	remote_id=$(sed -n 's/.*"id":"\(agent-[0-9a-f]*\)".*/\1/p' <<<"$listed" | head -n1 || true)
 	[[ -n $remote_id ]] && break
 	kill -0 "$agent_pid" 2>/dev/null || { cat "$tmp/agent.log" >&2; fail "the remote agent exited"; }
 	sleep 0.1

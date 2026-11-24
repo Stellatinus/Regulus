@@ -26,8 +26,15 @@ settle() {
 
 # runs FILE: true when FILE is a program that answers "version" with something.
 # An empty file is not one, although a shell would "run" it without an error.
+# A hung program must not hold the unit until TimeoutStartSec, so it gets ten
+# seconds when timeout(1) is there (#402).
 runs() {
-	[ -s "$1" ] && [ -n "$("$1" version 2>/dev/null)" ]
+	[ -s "$1" ] || return 1
+	if command -v timeout >/dev/null 2>&1; then
+		[ -n "$(timeout 10 "$1" version 2>/dev/null)" ]
+	else
+		[ -n "$("$1" version 2>/dev/null)" ]
+	fi
 }
 
 if runs "$bin"; then
