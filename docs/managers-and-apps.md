@@ -169,6 +169,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The Tailscale observation (status, peers, exit node) (M6). (2) Join, leave and exit node as helper operations with the secret handling above (M6). (3) The WireGuard observation (backlog). (4) The VPN section in English and Italian (M6). (5) `[Test]`: join and leave on a real tailnet (M6).
 
+### Wake (#292)
+
+**Agreed.** A manager with **no backend to choose**: the magic packet is standard. The **hub asks an agent on the same local network** to send it. A sleeping server is a new state, **asleep**, next to `connected`, `stale` and `offline`: known MAC address, not reachable, and **not an alarm**.
+
+- **How the hub learns where to send.** Each agent reports, with its inventory (#62), the **MAC address and the IPv4 network** (address and prefix) of each interface that has a default route or is up. The hub keeps them per server even while it is off. **A valid sender** for a target is a *connected* agent that has an interface on the **same IPv4 subnet** as the target's last known address; the hub picks the one that was online the longest.
+- **What the administrator can do.** **Wake now** (level 1). **Wake on a schedule** (the schedule lives on the hub and uses the scheduled jobs mechanism of #299). **Suspend or shut down** a server (level 3 of the model, with the typed name and the delay) with a guard of its own: **refused** when the server is the only connected sender for another asleep server, or the only way back in, and the dialog says which.
+- **Several networks, no agent on the target's LAN.** It **does not work**, and the page says so instead of sending a packet nobody receives: a target with no valid sender shows "no agent on its network" and no wake button. The way out is a **small dedicated node** (a Raspberry Pi running an agent) on that network, as sender. Routed or directed broadcasts are not used.
+- **On demand by an app or a user action** (open a media server and the machine starts): **not in the first version.** The first version wakes from a button or a schedule. When built, it needs a **timeout of 5 minutes** after which the server is `failed` to wake, not asleep, and an alert.
+- **UPS and node permissions.** The UPS manager (#297) wakes servers **in an order** when power returns, through this manager. Sending a magic packet is a *node permission* in the sense of #170: only an agent that holds it may send one.
+- **Asleep versus offline** everywhere: a server is `asleep` only when an administrator suspended or shut it down through Regulus, or it reported "going to sleep" in its last message; any other missing server stays `offline` and **does** raise `agent_offline` ([alerts](alerts.md)). The dashboard, the console, the API (`status: asleep`) and the notifications (#112) use the same word.
+
+**Implementation issues.** (1) MAC and network in the inventory report (depends on #62) (M6). (2) The `asleep` state in the registry and the API, with the reason it is asleep (M6). (3) Wake now and the sender choice (M6). (4) Wake on a schedule (with #299). (5) The guard on suspend and shutdown (M6). (6) `[Test]` with a real sleeping machine (M6).
+
 <!--SECTIONS-->
 
 ## What exists and what does not
