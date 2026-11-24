@@ -84,6 +84,9 @@ nfpms:
     overrides:
       deb:
         dependencies: [adduser]
+      # %pre uses useradd and groupadd (#398).
+      rpm:
+        dependencies: [shadow-utils]
 
 checksum:
   name_template: checksums.txt
