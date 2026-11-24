@@ -253,6 +253,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) The NUT observation (`upsc`) and the state in the registry (backlog). (2) The `ups_on_battery` condition (with alerts). (3) The shutdown plan and its order (backlog, after #292). (4) The section, English and Italian (backlog). (5) `[Test]` with a real UPS.
 
+### System updates (#298)
+
+**Agreed.** The packages of the **operating system** around Regulus. This is **not** Regulus's own update system ([Updates](updates.md)): the two have separate pages in the interface (**Updates** is Regulus; **System updates** is the operating system), separate permissions (`core.update` and `system.update`) and separate words ("a Regulus release" and "a package update").
+
+- **Backends:** **apt** (Debian, Ubuntu) first, **dnf** (RHEL, Fedora) second. `unattended-upgrades` and `dnf-automatic` are read as a **signal** (installed, last run) and never configured.
+- **Observe first (level 0).** Per server: the number of pending updates, how many are **security** updates, the list of packages with the old and new versions, **reboot required** (`/var/run/reboot-required`, `needs-restarting -r`), the last time the cache was refreshed, and held packages. Read-only commands (`apt list --upgradable`, `dnf check-update`) run as the agent's user or through the helper where root is needed. The inventory's package list (#62) is the same data.
+- **Apply (level 2).** **Security updates first**, then all, from a **maintenance window** (the same window setting as Regulus's own updates, shared), **one server at a time with a stop at the first failure**, like the rollout of Regulus's own updates ([Updates](updates.md)): a server counts as done when its package manager exits cleanly and, if it rebooted, it is connected again. Dry run (`apt-get -s`) first, shown to the administrator.
+- **Privilege.** Package managers run as root: through the **helper of #60, with fixed operations** (`apt.update`, `apt.upgrade`, `apt.upgrade_security`), no packages named by the request. Never a general root shell.
+- **Reboot.** **Never automatic by default.** The page says a reboot is needed; an administrator may allow a reboot **inside the window**, one server at a time, and the apps on it restart by their restart policy (the container manager, #289). A server that hosts the **hub** is rebooted last and only after the administrator confirms: the dashboard goes away for a moment.
+- **A Regulus-aware rule.** The manager **never upgrades the `regulus` package** (Regulus updates itself, or the administrator installs it with `install.sh`; a package manager replacing it would break the update helper's record, #254), **holds** `regulus`, and **warns before upgrading** the container runtime (`docker-ce`, `podman`), the kernel and `systemd`, naming the apps that would restart. The administrator can accept the warning per update.
+
+**Implementation issues.** (1) The apt observation (pending, security, reboot) (backlog). (2) The window shared with Regulus's own updates (backlog). (3) The apply operations and the one-by-one run (backlog). (4) The warnings for the runtime and the kernel (backlog). (5) dnf (backlog). (6) The section, English and Italian.
+
 <!--SECTIONS-->
 
 ## What exists and what does not
