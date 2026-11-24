@@ -182,6 +182,19 @@ This resolves the first item of #113: the container runtime is a backend chosen 
 
 **Implementation issues.** (1) MAC and network in the inventory report (depends on #62) (M6). (2) The `asleep` state in the registry and the API, with the reason it is asleep (M6). (3) Wake now and the sender choice (M6). (4) Wake on a schedule (with #299). (5) The guard on suspend and shutdown (M6). (6) `[Test]` with a real sleeping machine (M6).
 
+### Storage and volumes (#293)
+
+**Agreed: observe first; changing is level 3 and comes much later.** This is the layer **between** the disks (#147: health, identity, usage) and the apps. RAID is #285 and sits *below* it; LVM is **not** an alternative to mdadm: mdadm builds arrays, LVM builds logical volumes on top of disks or arrays. The picture the page draws, bottom to top: **disk → RAID array → LVM physical volume, group, logical volume → filesystem → mount → app volume.**
+
+- **Observe (first version).** Filesystems and mounts (`findmnt`, `/proc/self/mountinfo`: device, type, options, size, free space and free inodes), LVM volume groups and logical volumes (`lvs`, `vgs`, `pvs` with JSON output, through the helper because they need root), and the **health of ZFS pools and Btrfs filesystems** (the same read-only commands as #285). Filesystem free space is the data `disk_full` of [alerts](alerts.md) reads.
+- **Changing** (create, grow or remove a volume, format, mount) is **destructive and not in this series.** When built: level 3 of the model for anything that removes or formats, level 2 for growing. ZFS and Btrfs get their own pools and **snapshots** later; they are read only now.
+- **Mounts that fail or hang.** A network mount that does not answer must not freeze the collector (the guarantee of #243 already holds: a hung mount is read with a timeout). They show as a mount with state **`unresponsive`** (timeout) or **`failed`** (the mount unit failed), in the same list, and raise a `mount_unresponsive` condition in the alerts when it lasts.
+- **App volumes.** Each app has its data in `<apps dir>/<id>/data` (the design of apps, [Apps](apps.md)). A volume on **another disk** is attached by **mounting that disk under the apps directory**, or by declaring a *resource* (a media directory) in the manifest; the container never gets a bigger part of the filesystem than that. The storage manager shows which app uses which mount and refuses to unmount or remove one that is in use.
+- **Snapshots and quotas:** later, and only where the file system provides them (ZFS, Btrfs, LVM thin). Not in the first version.
+- **Relation to other work.** #147 to #151 stay the source for disks (identity, health, usage per service); this manager reads their data and adds the layers above. #285 supplies the RAID layer. The backup manager (#295) may use a snapshot as a consistent source.
+
+**Implementation issues.** (1) The mounts and filesystems collector, with the mount states (M6). (2) The LVM observation through the helper (backlog). (3) ZFS and Btrfs health (backlog). (4) The layered view on a server's Storage page, English and Italian (M6). (5) The `mount_unresponsive` alert condition.
+
 <!--SECTIONS-->
 
 ## What exists and what does not
