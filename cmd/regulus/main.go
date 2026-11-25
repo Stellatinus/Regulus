@@ -75,7 +75,7 @@ func isVersionArg(a string) bool {
 // printVersion prints the version on one line. packaging/update-recover.sh
 // only checks that `regulus version` answers with something; keep it one line.
 func printVersion(w io.Writer) {
-	fmt.Fprintln(w, version)
+	_, _ = fmt.Fprintln(w, version)
 }
 
 func usage() {
