@@ -437,6 +437,10 @@ The update helper runs as root with `UMask=0077`, and the hub and the agent run 
 
 A check asked for from the dashboard runs detached from the HTTP request (`context.WithoutCancel` in `Manager.Check`), within its own 30-second limit, so a reload or another page does not cut it off half way. A check that is cut off because its caller went away (the hub stopping during the background check) records nothing: `CheckError` and `FailingSince` are only for answers the release server did not give. Before, both showed up as "the last check failed … context canceled". Unit test only.
 
+## Updates: a busy release server is asked again (#456)
+
+GitHub's API answers 502, 503 or 504 now and then for a few seconds. `GitHubSource` asks again after 2 and then 5 seconds for those three answers only; any other error (a refusal, a rate limit, a 404, a network error) is reported at once as before. Two retries at most per page, because each one counts against the 60 anonymous requests an hour. Unit tests only.
+
 ## Verification status
 
 The first signed releases exist (`v0.3.0-alpha.1` is the newest), but several parts have only been tested by unit and integration tests: the `.deb` on a clean Ubuntu system through systemd, the agent installer on a second server, and installing and rolling back an update with real systemd. They are checked together on a VM (#81). A first run on two real VMs was done on 2026-11-24 and covers part of this (the last item of this section says which part). Until the rest is run, try a release on a test server.

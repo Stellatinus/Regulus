@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const releasesJSON = `[
@@ -29,7 +30,7 @@ func newGitHub(t *testing.T, h http.HandlerFunc) *GitHubSource {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
-	return &GitHubSource{Repo: "o/r", BaseURL: srv.URL, UserAgent: "regulus-test", Client: srv.Client()}
+	return &GitHubSource{Repo: "o/r", BaseURL: srv.URL, UserAgent: "regulus-test", Client: srv.Client(), RetryWaits: []time.Duration{time.Millisecond, time.Millisecond}}
 }
 
 func TestGitHubSourceListsTheCoreReleases(t *testing.T) {
@@ -112,6 +113,41 @@ func TestGitHubSourceErrors(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: error = %v, want it to contain %q", name, err, tc.want)
 		}
+	}
+}
+
+// A 504 now and then (GitHub's API behind its gateway) is asked again; a 404
+// or a lasting 504 is not hidden.
+func TestGitHubSourceAsksAgainWhenTheServerIsBusy(t *testing.T) {
+	calls := 0
+	g := newGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		if calls < 3 {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+		_, _ = w.Write([]byte(releasesJSON))
+	})
+	if rels, err := g.Releases(context.Background()); err != nil || len(rels) == 0 || calls != 3 {
+		t.Fatalf("releases = %d, err = %v, calls = %d", len(rels), err, calls)
+	}
+
+	calls = 0
+	g = newGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusGatewayTimeout)
+	})
+	if _, err := g.Releases(context.Background()); err == nil || !strings.Contains(err.Error(), "504") || calls != 3 {
+		t.Errorf("lasting 504: err = %v, calls = %d", err, calls)
+	}
+
+	calls = 0
+	g = newGitHub(t, func(w http.ResponseWriter, _ *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusNotFound)
+	})
+	if _, err := g.Releases(context.Background()); err == nil || calls != 1 {
+		t.Errorf("404: err = %v, calls = %d (not asked again)", err, calls)
 	}
 }
 
