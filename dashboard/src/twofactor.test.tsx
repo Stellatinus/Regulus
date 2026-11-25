@@ -209,7 +209,7 @@ describe("Signing in with two-factor authentication", () => {
 
     await passwordStep(user);
     expect(await screen.findByRole("heading", { name: "Two-factor authentication" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Servers" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Nodes" })).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Authentication code"), "000000");
     await user.click(screen.getByRole("button", { name: "Verify" }));
@@ -219,7 +219,7 @@ describe("Signing in with two-factor authentication", () => {
     await user.type(screen.getByLabelText("Authentication code"), "123456");
     await user.click(screen.getByRole("button", { name: "Verify" }));
 
-    expect(await screen.findByRole("link", { name: "Servers" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Nodes" })).toBeInTheDocument();
     expect(calls.filter((c) => c.path === "/api/auth/login/two-factor").map((c) => c.body)).toEqual([
       { pending_token: "pending-1", code: "000000" },
       { pending_token: "pending-1", code: "123456" },
@@ -269,7 +269,7 @@ describe("Required two-factor authentication", () => {
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Set up two-factor authentication" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Servers" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Nodes" })).not.toBeInTheDocument();
 
     await user.type(await screen.findByLabelText("Your password"), "correct horse battery");
     await user.click(screen.getByRole("button", { name: "Set up two-factor authentication" }));
@@ -278,10 +278,10 @@ describe("Required two-factor authentication", () => {
     await screen.findByRole("status", { name: "Recovery codes" });
 
     // Still on the setup page until the codes are saved.
-    expect(screen.queryByRole("link", { name: "Servers" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Nodes" })).not.toBeInTheDocument();
     await user.click(screen.getByLabelText(/I saved these codes/));
     await user.click(screen.getByRole("button", { name: "Done" }));
-    expect(await screen.findByRole("link", { name: "Servers" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Nodes" })).toBeInTheDocument();
   });
 
   it("asks for the setup when the hub starts requiring it during a session", async () => {

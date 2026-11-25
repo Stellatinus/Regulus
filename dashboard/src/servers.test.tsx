@@ -85,16 +85,20 @@ describe("ServersPage", () => {
     const calls = mockHub({ "GET /api/agents?all=true": () => ({ data: [online, offline, revoked] }) });
     renderAs(viewer, <ServersPage />);
 
-    expect(await screen.findByRole("link", { name: "Web" })).toHaveAttribute("href", "#/servers/web1");
-    expect(screen.getByRole("link", { name: "db1.lan" })).toHaveAttribute("href", "#/servers/db1");
-    expect(screen.getByText("online")).toBeInTheDocument();
-    expect(screen.getByText("offline")).toBeInTheDocument();
-    expect(screen.getByText("revoked")).toBeInTheDocument();
+    const web = await screen.findByRole("link", { name: "Open the node Web" });
+    expect(web).toHaveAttribute("href", "#/servers/web1");
+    const db = screen.getByRole("link", { name: "Open the node db1.lan" });
+    expect(db).toHaveAttribute("href", "#/servers/db1");
+    expect(within(web).getByText("online")).toBeInTheDocument();
+    expect(within(db).getByText("offline")).toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: "Open the node old.lan" })).getByText("revoked")).toBeInTheDocument();
     expect(screen.getAllByText(/^2h .*ago$/)).toHaveLength(2); // offline and revoked
-    expect(calls[0].path).toBe("/api/agents?all=true");
+    // The control bar counts the nodes shown out of all.
+    expect(screen.getByRole("status", { name: "3 of 3 nodes shown" })).toBeInTheDocument();
+    expect(calls.some((c) => c.path === "/api/agents?all=true")).toBe(true);
   });
 
-  it("shows the role of every server, and the hub's own server says hub (#429)", async () => {
+  it("shows the type of every server: the hub's own server is the primary hub (#429)", async () => {
     const hub: Agent = { ...online, id: "local", name: "Hub", role: "hub" };
     const remote: Agent = { ...online, role: "agent" };
     // A hub older than 0.3.0-alpha.2 sends no role: it is derived from the id.
@@ -102,12 +106,12 @@ describe("ServersPage", () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [hub, remote, legacyRemote, { ...online, id: "x", name: "Fancy", role: "redundant-hub" }] }) });
     renderAs(viewer, <ServersPage />);
 
-    await screen.findByRole("link", { name: "Hub" });
-    const rowOf = (name: string) => screen.getByRole("link", { name }).closest("tr") as HTMLElement;
-    expect(within(rowOf("Hub")).getByText("hub")).toBeInTheDocument();
-    expect(within(rowOf("Web")).getByText("agent")).toBeInTheDocument();
-    expect(within(rowOf("Web2")).getByText("agent")).toBeInTheDocument();
-    expect(within(rowOf("Fancy")).getByText("redundant-hub")).toBeInTheDocument();
+    await screen.findByRole("link", { name: "Open the node Hub" });
+    const cardOf = (name: string) => screen.getByRole("link", { name: `Open the node ${name}` });
+    expect(within(cardOf("Hub")).getByText("Primary hub")).toBeInTheDocument();
+    expect(within(cardOf("Web")).getByText("Generic node")).toBeInTheDocument();
+    expect(within(cardOf("Web2")).getByText("Generic node")).toBeInTheDocument();
+    expect(within(cardOf("Fancy")).getByText("Secondary hub")).toBeInTheDocument();
   });
 
   it("tells which servers run another release than the hub", async () => {
@@ -117,17 +121,18 @@ describe("ServersPage", () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [online, behind, ahead, refused] }) });
     renderAs(viewer, <ServersPage />);
 
-    expect(await screen.findByText("behind the hub")).toBeInTheDocument();
-    expect(screen.getByText("ahead of the hub: update the hub")).toBeInTheDocument();
-    expect(screen.getByText("too old for this hub: update it")).toBeInTheDocument();
-    expect(screen.getByText("incompatible")).toBeInTheDocument();
+    // A pill says what to do in a word; its tooltip has the whole sentence.
+    expect(await screen.findByTitle("behind the hub")).toHaveTextContent("Update");
+    expect(screen.getByTitle("ahead of the hub: update the hub")).toHaveTextContent("Ahead of the hub");
+    expect(screen.getByTitle("too old for this hub: update it")).toHaveTextContent("Incompatible");
+    expect(within(screen.getByRole("link", { name: "Open the node r.lan" })).getByText("incompatible")).toBeInTheDocument();
   });
 
   it("says when a server is connected only to be updated", async () => {
     const old: Agent = { ...online, id: "o", name: "Old", compatibility: "too_old", update_only: true, version: "0.1.0" };
     mockHub({ "GET /api/agents?all=true": () => ({ data: [old] }) });
     renderAs(viewer, <ServersPage />);
-    expect(await screen.findByText("too old for this hub: connected only to be updated (Updates page)")).toBeInTheDocument();
+    expect(await screen.findByTitle("too old for this hub: connected only to be updated (Updates page)")).toHaveTextContent("Update");
   });
 
   it("marks a server whose agent cannot read everything", async () => {
@@ -161,15 +166,12 @@ describe("ServersPage", () => {
     expect(screen.getByRole("button", { name: "Add a server" })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("puts the count of servers beside the title, and closes Add a server with Close or Escape (#428)", async () => {
+  it("puts the add button in the control bar, and closes Add a server with Close or Escape (#428)", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [online, offline] }) });
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
-    const title = await screen.findByRole("heading", { name: "Servers", level: 2 });
-    const row = title.parentElement as HTMLElement;
-    expect(within(row).getByText("1 online")).toBeInTheDocument();
-    expect(within(row).getByText("1 offline")).toBeInTheDocument();
+    const row = await screen.findByRole("region", { name: "Search and filters of the nodes" });
     expect(within(row).getByRole("button", { name: "Add a server" })).toBeInTheDocument();
 
     await user.click(within(row).getByRole("button", { name: "Add a server" }));
@@ -484,8 +486,8 @@ describe("ServerPage", () => {
     mockHub({ "GET /api/agents/web1": () => ({ data: online }) });
     renderAs(viewer, <ServerPage id="web1" />);
 
-    expect(await screen.findByRole("heading", { name: /Web/ })).toBeInTheDocument();
-    expect(screen.getByText("web1.lan")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /Web/ })).toBeInTheDocument();
+    expect(screen.getAllByText("web1.lan").length).toBeGreaterThan(0); // header and fact
     expect(screen.getByText("Ubuntu 24.04 amd64")).toBeInTheDocument();
     for (const title of ["System", "CPU", "Memory", "Network", "Disk usage"]) {
       expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
@@ -509,7 +511,7 @@ describe("ServerPage", () => {
 
     expect(await screen.findByRole("status")).toHaveTextContent("offline");
     expect(screen.queryByRole("region", { name: "CPU" })).not.toBeInTheDocument();
-    expect(screen.getByText(/^2h .*ago$/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^2h .*ago$/).length).toBeGreaterThan(0);
   });
 
   it("says at the top that an offline server is offline, since when, and that the data is the last known (#436)", async () => {
@@ -533,7 +535,7 @@ describe("ServerPage", () => {
     const notice = await screen.findByText(/has not received a report/);
     expect(notice).toBeInTheDocument();
     expect(screen.getAllByText(/^stale$/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("heading", { name: /Web/ })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Web/ })).toBeInTheDocument();
   });
 
   it("says the time and the state of a revoked server, and that it was never connected when so (#436)", async () => {
@@ -611,18 +613,20 @@ describe("ServerPage", () => {
     });
     const first = renderAs(viewer, <ServerPage id="local" />);
     expect(await screen.findByText("Role")).toBeInTheDocument();
-    expect(screen.getAllByText("hub").length).toBeGreaterThan(1); // badge and fact
+    expect(screen.getByText("Primary hub")).toBeInTheDocument(); // the type, in the header
+    expect(screen.getByText("hub")).toBeInTheDocument(); // the role, in the facts
     first.unmount();
     renderAs(viewer, <ServerPage id="web1" />);
     await screen.findByText("Role");
     expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.getByText("Generic node")).toBeInTheDocument();
     expect(screen.queryByText("hub")).not.toBeInTheDocument();
   });
 
   it("does not offer to manage the built-in agent", async () => {
     mockHub({ "GET /api/agents/local": () => ({ data: { ...online, id: "local", name: undefined } }) });
     renderAs(admin, <ServerPage id="local" />);
-    await screen.findByRole("heading", { name: /web1\.lan/ });
+    await screen.findByRole("dialog", { name: /web1\.lan/ });
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
   });
 });

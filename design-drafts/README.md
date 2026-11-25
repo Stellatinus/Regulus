@@ -1,5 +1,7 @@
 # Design drafts
 
+The shell, the Nodes page and the node window of the dashboard follow the maintainer's design system v3 instead ([docs/design-system.md](../docs/design-system.md)); the drafts below are older explorations.
+
 Temporary home for dashboard design explorations. Each draft is a single self-contained HTML file: open it in a browser, no build step. They are **prototypes with example data**, not part of the dashboard (`dashboard/`), and they are not wired to the hub API.
 
 When a direction is agreed, it goes through a design issue (see AGENTS.md, "New areas start with a design issue") and is rebuilt in the React dashboard. Then this folder can be removed.

@@ -1,5 +1,5 @@
 // The English texts of the dashboard: the source of truth. A key is a stable
-// dotted name that starts with the area ("nav.servers", "auth.signIn"), never
+// dotted name that starts with the area ("nav.nodes", "auth.signIn"), never
 // the English text. {name} is a placeholder. The texts live in one file per
 // area under messages/, so pull requests that migrate different pages do not
 // touch the same file. Every key needs an Italian text in the matching
@@ -11,9 +11,11 @@ import { updates } from "./messages/updates.en";
 import { users } from "./messages/users.en";
 import { account } from "./messages/account.en";
 import { plugins } from "./messages/plugins.en";
+import { nodes } from "./messages/nodes.en";
+import { settings } from "./messages/settings.en";
 
-export const areas = { core, auth, servers, updates, users, account, plugins } as const;
+export const areas = { core, auth, servers, updates, users, account, plugins, nodes, settings } as const;
 
-export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account, ...plugins } as const;
+export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account, ...plugins, ...nodes, ...settings } as const;
 
 export type MessageKey = keyof typeof en;

@@ -58,7 +58,7 @@ async function signIn(page, code) {
     await page.getByLabel("Authentication code").fill(code);
     await page.getByRole("button", { name: "Verify" }).click();
   }
-  await page.getByRole("link", { name: "Servers" }).waitFor();
+  await page.getByRole("link", { name: "Nodes" }).waitFor();
 }
 
 const luminance = (rgb) => {
@@ -80,15 +80,15 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByText("The setup token is not valid").waitFor();
       await page.getByLabel("Setup token").fill(hub.setupToken);
       await page.getByRole("button", { name: "Create the admin" }).click();
-      await page.getByRole("link", { name: "Servers" }).waitFor();
+      await page.getByRole("link", { name: "Nodes" }).waitFor();
     }));
 
   it("shows a connected agent live, without a reload", () =>
     scenario("live stream", async (page, context) => {
       await signIn(page);
       await page.goto("/#/servers");
-      await page.getByRole("heading", { name: "Servers" }).first().waitFor();
-      assert.equal(await page.getByRole("link", { name: "web1" }).count(), 0, "no server yet");
+      await page.getByRole("heading", { name: "Nodes" }).first().waitFor();
+      assert.equal(await page.getByRole("link", { name: "Open the node web1" }).count(), 0, "no server yet");
       // The page is open on a live stream (a WebSocket) before the agent exists.
       await page.getByText("Online", { exact: true }).waitFor();
 
@@ -98,26 +98,29 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       const { token } = await res.json();
       await startAgent(hub, "web1", token);
 
-      // The row appears and turns online by itself: the page was not reloaded.
-      await page.getByRole("link", { name: "web1" }).waitFor({ timeout: 30000 });
+      // The card appears and turns online by itself: the page was not reloaded.
+      await page.getByRole("link", { name: "Open the node web1" }).waitFor({ timeout: 30000 });
       await page.getByText("online", { exact: true }).waitFor({ timeout: 30000 });
     }));
 
   it("switches between English and Italian", () =>
     scenario("language", async (page) => {
       await signIn(page);
+      // The language is chosen in Settings, behind the cog of the notch.
+      await page.getByRole("link", { name: "Settings" }).click();
       await page.getByLabel("Language").selectOption("it");
-      await page.getByRole("link", { name: "Aggiornamenti" }).waitFor();
-      assert.equal(await page.getByRole("link", { name: "Updates" }).count(), 0);
+      await page.getByRole("link", { name: "Nodi" }).waitFor();
+      assert.equal(await page.getByRole("link", { name: "Nodes" }).count(), 0);
       assert.equal(await page.locator("html").getAttribute("lang"), "it");
       await page.getByLabel("Lingua").selectOption("en");
-      await page.getByRole("link", { name: "Updates" }).waitFor();
+      await page.getByRole("link", { name: "Nodes" }).waitFor();
       assert.equal(await page.locator("html").getAttribute("lang"), "en");
     }));
 
   it("has a light and a dark theme", () =>
     scenario("themes", async (page) => {
       await signIn(page);
+      await page.getByRole("link", { name: "Settings" }).click();
       const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       await page.getByRole("button", { name: "Light" }).click();
       assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
@@ -133,7 +136,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       "phone layout",
       async (page) => {
         await signIn(page);
-        const routes = ["/", "/servers", "/plugins", "/users", "/updates", "/account"];
+        const routes = ["/", "/servers", "/plugins", "/users", "/updates", "/account", "/settings"];
         for (const r of routes) {
           await page.goto(`/#${r}`);
           await page.waitForLoadState("networkidle");
@@ -142,7 +145,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
         }
         // The page of a server too, with its charts.
         await page.goto("/#/servers");
-        await page.getByRole("link", { name: "web1" }).click();
+        await page.getByRole("link", { name: "Open the node web1" }).click();
         await page.getByRole("heading", { name: "CPU" }).waitFor({ timeout: 30000 });
         // Measure the settled page, as for the other routes: the disks panel
         // (and its badges) arrives from its own request.
@@ -187,7 +190,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
         await page.getByLabel("Password").fill(PASSWORD);
         await page.getByRole("button", { name: "Accedi" }).click();
         await page.getByText("L'hub è occupato a verificare le password.").waitFor();
-        await page.getByRole("link", { name: "Aggiornamenti" }).waitFor({ timeout: 30000 });
+        await page.getByRole("link", { name: "Nodi" }).waitFor({ timeout: 30000 });
         assert.equal(calls, 2, "the page asked again once");
       },
       { locale: "en-US" },
@@ -204,7 +207,8 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByRole("button", { name: "Turn on two-factor authentication" }).click();
       await page.getByText("Recovery codes", { exact: false }).first().waitFor();
 
-      await page.locator("button.signout").click();
+      await page.getByRole("button", { name: /^Account: admin/ }).click();
+      await page.getByRole("menuitem", { name: "Sign out" }).click();
       // Password alone is not enough; the next step of the clock gives a code
       // that was not used to turn it on.
       await page.getByLabel("Username").fill("admin");
@@ -216,7 +220,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByText("The code is not valid").waitFor();
       await page.getByLabel("Authentication code").fill(totp(secret, Date.now() + 30000));
       await page.getByRole("button", { name: "Verify" }).click();
-      await page.getByRole("link", { name: "Servers" }).waitFor();
+      await page.getByRole("link", { name: "Nodes" }).waitFor();
     }));
 
   it("raised no Content-Security-Policy violation in any page it visited", () => {

@@ -63,11 +63,12 @@ describe("the servers pages in Italian", () => {
     mockHub([online, revoked]);
     renderAdmin(<ServersPage />);
 
-    expect(await screen.findByRole("heading", { name: "Server", level: 2 })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Ultimo contatto" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Nodi", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Apri il nodo Web" })).toBeInTheDocument();
     expect(screen.getByText("online")).toBeInTheDocument();
     expect(screen.getByText("revocato")).toBeInTheDocument();
     expect(screen.getByText("mai connesso")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "2 nodi su 2 visualizzati" })).toBeInTheDocument();
     // "Aggiungi un server" is closed until the + button opens it.
     const add = await screen.findByRole("button", { name: "Aggiungi un server" });
     expect(screen.queryByRole("heading", { name: "Aggiungi un server" })).not.toBeInTheDocument();

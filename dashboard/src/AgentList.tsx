@@ -103,6 +103,10 @@ export function versionNote(a: Agent, t: Translator): string {
   return "";
 }
 
+// A node that runs an older Regulus than the hub (or one so old that it is
+// connected only to be updated) has an update to make.
+export const needsUpdate = (a: Agent) => a.compatibility === "behind" || a.compatibility === "too_old" || a.update_only === true;
+
 export const statusLabel = (a: Agent, t: Translator) => t(STATUS_LABEL[a.status]);
 
 // agentRole is the node role of a server. A hub older than 0.3.0-alpha.2 does
