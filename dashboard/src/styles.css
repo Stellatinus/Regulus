@@ -802,8 +802,17 @@ section.panel {
   font-size: 12px;
 }
 
+/* In edit mode the title is the drag handle (Dashboard.tsx, dragConfig): its
+   text must not be selectable, or a drag from the top-left corner selects it
+   (#430). The text in the body of a widget stays selectable. */
 .grid.editing .widget-title {
-  cursor: move;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.grid.editing .widget-title:active {
+  cursor: grabbing;
 }
 
 .grid.editing .widget {

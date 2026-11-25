@@ -3,7 +3,24 @@ import { describe, expect, it } from "vitest";
 
 // An unclosed block in styles.css swallows every rule after it (#425: the
 // step-up dialog lost its overlay and ended up at the bottom of the page).
+// rule returns the declarations of the first rule with exactly this selector.
+function rule(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `rule ${selector}`).toBeGreaterThanOrEqual(0);
+  return css.slice(start, css.indexOf("}", start));
+}
+
 describe("styles.css", () => {
+  it("makes the widget title a drag handle that cannot be selected, in edit mode only (#430)", () => {
+    const css = readFileSync("src/styles.css", "utf8");
+    const handle = rule(css, ".grid.editing .widget-title");
+    expect(handle).toContain("user-select: none");
+    expect(handle).toContain("-webkit-user-select: none");
+    expect(handle).toContain("cursor: grab");
+    expect(rule(css, ".widget-title")).not.toContain("user-select");
+    expect(rule(css, ".widget-body")).not.toContain("user-select");
+  });
+
   it("has balanced braces", () => {
     const css = readFileSync("src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
     let depth = 0;
