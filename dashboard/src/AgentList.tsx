@@ -91,6 +91,19 @@ export function versionNote(a: Agent, t: Translator): string {
 
 export const statusLabel = (a: Agent, t: Translator) => t(STATUS_LABEL[a.status]);
 
+// agentRole is the node role of a server. A hub older than 0.3.0-alpha.2 does
+// not send it: the built-in agent ("local") is then the hub, the rest agents.
+export const agentRole = (a: Agent) => a.role ?? (a.id === "local" ? "hub" : "agent");
+
+// roleLabel is the word for the role; a role the dashboard does not know is
+// shown as the hub names it.
+export function roleLabel(a: Agent, t: Translator): string {
+  const role = agentRole(a);
+  if (role === "hub") return t("servers.role.hub");
+  if (role === "agent") return t("servers.role.agent");
+  return role;
+}
+
 // lastContact says when the hub last heard from a server.
 export function lastContact(a: Agent, t: Translator): string {
   if (a.status === "connected" || a.status === "stale") return formatAgo(a.last_heartbeat, undefined, t);
@@ -123,6 +136,7 @@ function AgentTable({ agents }: { agents: Agent[] }) {
       <thead>
         <tr>
           <th>{t("servers.fact.server")}</th>
+          <th>{t("servers.fact.role")}</th>
           <th>{t("servers.fact.system")}</th>
           <th>{t("servers.list.version")}</th>
           <th>{t("servers.fact.status")}</th>
@@ -139,6 +153,11 @@ function AgentTable({ agents }: { agents: Agent[] }) {
                   {displayName(a)}
                 </a>
                 {a.name && a.hostname && a.name !== a.hostname ? <span className="muted"> {a.hostname}</span> : null}
+              </span>
+            </td>
+            <td data-label={t("servers.fact.role")}>
+              <span className={agentRole(a) === "hub" ? "status hub" : "muted"}>
+                {roleLabel(a, t)}
               </span>
             </td>
             <td data-label={t("servers.fact.system")}>{[a.os_version ?? a.os, a.arch].filter(Boolean).join(" ") || "-"}</td>

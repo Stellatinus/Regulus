@@ -73,7 +73,10 @@ export const servers = {
   "servers.server.revokeConfirm": "Revoke {name}? It will be disconnected and can never connect again.",
   "servers.server.revokeYes": "Revoke the server",
   "servers.server.manage": "Manage",
-  "servers.server.hubBadge": "hub",
+  // The node role (docs/glossary.md): the hub's own server is the hub, every other one is an agent.
+  "servers.fact.role": "Role",
+  "servers.role.hub": "hub",
+  "servers.role.agent": "agent",
 
   // Remote agents are off (ServersPage).
   "servers.remoteOff.title": "Remote agents are off",

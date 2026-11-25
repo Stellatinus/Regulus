@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, User } from "./api";
@@ -91,6 +91,22 @@ describe("ServersPage", () => {
     expect(screen.getByText("revoked")).toBeInTheDocument();
     expect(screen.getAllByText(/^2h .*ago$/)).toHaveLength(2); // offline and revoked
     expect(calls[0].path).toBe("/api/agents?all=true");
+  });
+
+  it("shows the role of every server, and the hub's own server says hub (#429)", async () => {
+    const hub: Agent = { ...online, id: "local", name: "Hub", role: "hub" };
+    const remote: Agent = { ...online, role: "agent" };
+    // A hub older than 0.3.0-alpha.2 sends no role: it is derived from the id.
+    const legacyRemote: Agent = { ...online, id: "w2", name: "Web2" };
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [hub, remote, legacyRemote, { ...online, id: "x", name: "Fancy", role: "redundant-hub" }] }) });
+    renderAs(viewer, <ServersPage />);
+
+    await screen.findByRole("link", { name: "Hub" });
+    const rowOf = (name: string) => screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+    expect(within(rowOf("Hub")).getByText("hub")).toBeInTheDocument();
+    expect(within(rowOf("Web")).getByText("agent")).toBeInTheDocument();
+    expect(within(rowOf("Web2")).getByText("agent")).toBeInTheDocument();
+    expect(within(rowOf("Fancy")).getByText("redundant-hub")).toBeInTheDocument();
   });
 
   it("tells which servers run another release than the hub", async () => {
@@ -409,6 +425,21 @@ describe("ServerPage", () => {
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Revoke the server" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+  });
+
+  it("shows the role on the page of a server (#429)", async () => {
+    mockHub({
+      "GET /api/agents/local": () => ({ data: { ...online, id: "local", name: "Hub", role: "hub" } }),
+      "GET /api/agents/web1": () => ({ data: { ...online, role: "agent" } }),
+    });
+    const first = renderAs(viewer, <ServerPage id="local" />);
+    expect(await screen.findByText("Role")).toBeInTheDocument();
+    expect(screen.getAllByText("hub").length).toBeGreaterThan(1); // badge and fact
+    first.unmount();
+    renderAs(viewer, <ServerPage id="web1" />);
+    await screen.findByText("Role");
+    expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.queryByText("hub")).not.toBeInTheDocument();
   });
 
   it("does not offer to manage the built-in agent", async () => {

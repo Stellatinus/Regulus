@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/CodexCircle/Regulus/internal/config"
+	"github.com/CodexCircle/Regulus/internal/fleet"
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
 )
 
@@ -155,6 +156,27 @@ func TestAgentsEndpointListsBuiltinAgent(t *testing.T) {
 	}
 	if agents[0].LastHeartbeat == nil || agents[0].UptimeSeconds == nil {
 		t.Fatalf("missing heartbeat or uptime: %+v", agents[0])
+	}
+	if agents[0].Role != "hub" {
+		t.Errorf("role of the built-in agent = %q, want hub (#429)", agents[0].Role)
+	}
+}
+
+func TestAgentsHaveTheirRole(t *testing.T) {
+	now := time.Now()
+	src := fakeSource{staleAfter: time.Minute, agents: []AgentInfo{
+		{ID: BuiltinAgentID, ConnectedAt: now},
+		{ID: "agent-1", ConnectedAt: now},
+	}}
+	got := map[string]string{}
+	for _, a := range getAgents(t, src) {
+		got[a.ID] = a.Role
+	}
+	if got[BuiltinAgentID] != "hub" || got["agent-1"] != "agent" {
+		t.Errorf("roles = %v, want local=hub and agent-1=agent (#429)", got)
+	}
+	if r := offlineJSON(fleet.Agent{ID: "agent-2"}, src).Role; r != "agent" {
+		t.Errorf("role of an enrolled agent that is not connected = %q, want agent", r)
 	}
 }
 

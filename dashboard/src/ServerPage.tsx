@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  agentRole,
   displayName,
   lastContact,
+  roleLabel,
   statusLabel,
   versionNote,
 } from "./AgentList";
@@ -124,8 +126,8 @@ function Details({
         <span className={`status ${agent.status}`}>
           {statusLabel(agent, t)}
         </span>
-        {agent.id === "local" && (
-          <span className="status hub">{t("servers.server.hubBadge")}</span>
+        {agentRole(agent) === "hub" && (
+          <span className="status hub">{roleLabel(agent, t)}</span>
         )}
       </div>
       <ConnectionNotice agent={agent} />
@@ -133,6 +135,10 @@ function Details({
         <div>
           <dt>{t("servers.fact.id")}</dt>
           <dd>{agent.id}</dd>
+        </div>
+        <div>
+          <dt>{t("servers.fact.role")}</dt>
+          <dd>{roleLabel(agent, t)}</dd>
         </div>
         <div>
           <dt>{t("servers.fact.host")}</dt>

@@ -6,6 +6,10 @@ export interface Agent {
   id: string;
   // The name an admin gave the server, if any.
   name?: string;
+  // The node role: "hub" for the hub's own server, "agent" for the others.
+  // Absent from a hub older than 0.3.0-alpha.2 (see agentRole); node types
+  // may refine it later, so an unknown value is shown as it is.
+  role?: string;
   version: string;
   // offline and revoked only come with fetchAgents(.., true): enrolled agents
   // that are not connected.

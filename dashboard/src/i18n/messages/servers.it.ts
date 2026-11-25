@@ -69,7 +69,9 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.server.revokeConfirm": "Revocare {name}? Verrà disconnesso e non potrà mai più connettersi.",
   "servers.server.revokeYes": "Revoca il server",
   "servers.server.manage": "Gestione",
-  "servers.server.hubBadge": "hub",
+  "servers.fact.role": "Ruolo",
+  "servers.role.hub": "hub",
+  "servers.role.agent": "agent",
 
   "servers.remoteOff.title": "Gli agenti remoti sono disattivati",
   "servers.remoteOff.intro":

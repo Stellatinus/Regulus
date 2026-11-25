@@ -10,7 +10,7 @@ These cause the most confusion. Say which one you mean.
 
 | Word | Meaning 1 | Meaning 2 | Meaning 3 |
 |---|---|---|---|
-| **role** | *Node role*: what a Regulus process does on a machine, `hub` or `agent` (chosen by the subcommand `regulus hub` / `regulus agent`; installer option `--role`). Proposed in #104: more states such as redundant hub and pure-hub. | *User role*: a named set of permissions given to a person (`admin`, `operator`, `viewer`, custom ones). Code: `internal/auth`. | |
+| **role** | *Node role*: what a Regulus process does on a machine, `hub` or `agent` (chosen by the subcommand `regulus hub` / `regulus agent`; installer option `--role`). Proposed in #104: more states such as redundant hub and pure-hub. In the GUI and the API (`role` of `GET /api/agents`, #429) the hub's own server is **hub** and every other server is **agent**; "compute node" stays a node type that refines the role, not the word for a plain remote server. | *User role*: a named set of permissions given to a person (`admin`, `operator`, `viewer`, custom ones). Code: `internal/auth`. | |
 | **channel** | *Release channel*: `stable`, `beta` or `alpha`, chosen on the Updates page. Code: `internal/update`. | *Channel between hubs*: the secure link between the active and the redundant hub, proposed in #107. | *Out-of-band channel*: email, Telegram… to reach the administrator when the hubs cannot, proposed in #112. |
 | **node** | Not used in the code, the UI or the current docs. Only the design issues of #103 use it, for "any machine in the group: agent, hub, candidate". | | |
 | **hub** | The process (`regulus hub`). | The machine that runs it. | In #103: the *active* hub or a *redundant* hub; "the hub" then means the active one. |

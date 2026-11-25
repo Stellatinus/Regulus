@@ -366,6 +366,10 @@ The dashboard's own tests (vitest, jsdom, a fake `fetch`, fake sockets) do not s
 - **Network interception only for what the hub cannot be made to do on demand:** a `429` with `Retry-After` and one `503`. A wrong password and a right one go through the real hub.
 - **Not verified:** Firefox and WebKit (Playwright can run them, but the CSP and the stream differences are what #281 asks a person to look at, and this adds two downloads to CI; worth adding when a browser-specific bug is found: #393), a screenshot comparison (it would need a reviewed baseline per platform), and the job on a real CI runner: it ran locally against the preinstalled Chromium.
 
+## The Servers list shows the node role (#429)
+
+The list and the page of a server show the node role, `hub` or `agent`. Decision: the hub's own server is called **hub** and every other server **agent**, in English and in Italian (the word is not translated). The reasons: the glossary already defines the node role as `hub` or `agent` (#104), the process on the remote machine is the agent, and "compute node" is a node type of #160 that will refine the role, so it must not be the name of the plain remote server. The role is a field of the API (`role` on `GET /api/agents`), computed by the hub (`local` is the hub, the rest agents), added without removing anything; a dashboard that talks to a hub without the field derives it from the id, and an unknown role from a newer hub (a node type) is shown as it is. Not checked in a browser.
+
 ## Verification status
 
 No release has been published yet, and several parts have only been tested by unit and integration tests: the signed release, the `.deb` on a clean Ubuntu system, the agent installer on a second server, and installing and rolling back an update with real systemd. They will be checked together on a VM (#81). Until then, try the first release on a test server.
