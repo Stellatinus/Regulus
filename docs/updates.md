@@ -54,7 +54,7 @@ sudo chmod 0755 /usr/bin/regulus
 sudo systemctl restart regulus.service   # regulus-agent.service on an agent
 ```
 
-or install again with `install.sh` (the data is kept). From the first release with the fix the helper sets the mode itself, whatever the umask. An update **from** an older version still runs the older helper, which makes the same mistake: run the `chmod` above after that one update, or update with `install.sh --version` instead.
+or install again with `install.sh` (the data is kept). From **0.3.0-beta.2** the helper sets the mode itself, whatever the umask. An update is installed by the helper of the version already in place, so an update **from** 0.3.0-beta.1 or older still runs the old helper; it does, however, run the new executable as root (`regulus version`, before it puts it in place), and from 0.3.0-beta.2 the executable then gives its own file mode `0755` (`cmd/regulus/execmode.go`). So the update to 0.3.0-beta.2 needs no `chmod` either, as long as the hub can start to ask for it: a machine that is already down needs the two commands above once.
 
 ## If the helper is interrupted
 

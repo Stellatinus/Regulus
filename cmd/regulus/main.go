@@ -24,6 +24,7 @@ import (
 var version = "dev"
 
 func main() {
+	repairExecMode() // #448: an older update helper may have left it 0700
 	if len(os.Args) < 2 {
 		os.Exit(runConsole(nil))
 	}
