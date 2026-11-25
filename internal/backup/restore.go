@@ -198,7 +198,7 @@ func copyKeys(stage, dataDir string) error {
 		if err != nil {
 			return err
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 		dst := filepath.Join(dataDir, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return err

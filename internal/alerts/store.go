@@ -101,7 +101,7 @@ func (s store) rules(ctx context.Context) (map[Condition]Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[Condition]Rule{}
 	for rows.Next() {
 		var (
@@ -172,7 +172,7 @@ func (s store) query(ctx context.Context, q string, args ...any) ([]Alert, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []Alert{}
 	for rows.Next() {
 		a, err := scanAlert(rows)

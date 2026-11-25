@@ -143,7 +143,7 @@ func Create(ctx context.Context, opts CreateOptions, w io.Writer) (Manifest, err
 			if err != nil {
 				return err
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			_, err = io.Copy(w, f)
 			return err
 		})
@@ -175,7 +175,7 @@ func copyIfExists(src, name string, stageFile func(string, func(io.Writer) error
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return stageFile(name, func(w io.Writer) error { _, err := io.Copy(w, f); return err })
 }
 

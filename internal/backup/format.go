@@ -49,15 +49,6 @@ type Manifest struct {
 	Parts  []Part   `json:"parts"`
 }
 
-func (m Manifest) part(name string) (Part, bool) {
-	for _, p := range m.Parts {
-		if p.Name == name {
-			return p, true
-		}
-	}
-	return Part{}, false
-}
-
 // header is the first line of a table file.
 type header struct {
 	Table   string   `json:"table"`
@@ -151,7 +142,7 @@ func newHashingWriter(w io.Writer) *hashingWriter { return &hashingWriter{w: w, 
 
 func (h *hashingWriter) Write(p []byte) (int, error) {
 	n, err := h.w.Write(p)
-	h.h.Write(p[:n])
+	_, _ = h.h.Write(p[:n]) // hash.Hash.Write never returns an error
 	h.n += int64(n)
 	return n, err
 }

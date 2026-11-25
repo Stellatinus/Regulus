@@ -45,7 +45,7 @@ func rows(t *testing.T, m *metricsHistory, agent string, tier int) map[int64]row
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	out := map[int64]row{}
 	for r.Next() {
 		var s int64

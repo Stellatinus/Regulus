@@ -210,7 +210,7 @@ func (s store) listTokens(ctx context.Context, userID int64) ([]APIToken, error)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := []APIToken{}
 	for rows.Next() {
 		t, _, err := scanToken(rows)

@@ -136,7 +136,7 @@ func query(t *testing.T, cfg storage.Config, q string, dest ...any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if err := db.QueryRow(q).Scan(dest...); err != nil {
 		t.Fatalf("%s: %v", q, err)
 	}
@@ -181,7 +181,7 @@ func TestRestoreBringsBackTheHub(t *testing.T) {
 	}
 	// The numbering goes on after the restored ids.
 	db, _ := storage.OpenExisting(context.Background(), target)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	if _, err := db.Exec(`INSERT INTO users (username, password_hash, role, created_at) VALUES ('new', 'h', 'viewer', '2026-02-01T00:00:00Z')`); err != nil {
 		t.Fatal(err)
 	}
