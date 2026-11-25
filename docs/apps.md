@@ -65,7 +65,7 @@ The directory belongs to the **user the app runs as** (a dedicated unprivileged 
 
 ## The catalog
 
-An **index** like the plugin index (#20): a signed JSON list of apps with, for each version, the URL of its manifest, its **SHA-256**, and the **Sigstore signature** of the index and of each manifest, verified with the same rules as releases ([Updates](updates.md)). Every entry has a `source` field so that other catalogs can be added later (the trust model for third parties is #23: not in the first version). **The first catalog is the project's own**, curated by the maintainers: an app is added by a pull request that adds its manifest, reviewed for the rules above, and the first apps are chosen in #301.
+An **index** like the plugin index (regulus-plugins#1): a signed JSON list of apps with, for each version, the URL of its manifest, its **SHA-256**, and the **Sigstore signature** of the index and of each manifest, verified with the same rules as releases ([Updates](updates.md)). Every entry has a `source` field so that other catalogs can be added later (the trust model for third parties is regulus-plugins#3: not in the first version). **The first catalog is the project's own**, curated by the maintainers: an app is added by a pull request that adds its manifest, reviewed for the rules above, and the first apps are chosen in #301.
 
 ## Lifecycle
 
@@ -108,7 +108,7 @@ Each app has **CPU and memory limits** (`x-regulus.limits`, defaults from the ma
 
 - **Compose with `x-regulus`**, not a format of our own: both runtimes read it, and people can read and test an app by hand.
 - **Image by digest.** A tag can move; the manifest pins what was reviewed.
-- **No third-party catalogs yet** (#23), so the trust question is only "does this project's review hold".
+- **No third-party catalogs yet** (regulus-plugins#3), so the trust question is only "does this project's review hold".
 - **Requests, not permissions in the file.** A manifest cannot grant itself anything: it asks, an administrator approves, the audit log records it.
 
 ## Implementation issues

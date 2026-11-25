@@ -11,7 +11,7 @@
 # install it, unpack it in the plugins directory.
 #
 # The name and layout are provisional: the plugin index and the installation
-# from the dashboard are #20, which decides the final ones. Nothing signs the
+# from the dashboard are regulus-plugins#1, which decides the final ones. Nothing signs the
 # archive yet.
 set -eu
 

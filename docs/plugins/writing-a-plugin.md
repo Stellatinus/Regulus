@@ -49,7 +49,7 @@ This is the path the example was checked with. Replace `my-plugin` with your id 
 6. **The widget** (`ui/widgets.js`, named by `components.ui.module`): a JavaScript module inside the plugin directory. Regulus checks the name and that it is inside the plugin; it does **not** load or run it (#21). The file in the example shows the shape the design proposes and will change with that design.
 7. **Build it into `bin/`:** `go build -o plugins/my-plugin/bin/my-plugin ./plugins/my-plugin` (the path of `components.<role>.command`). `plugins/*/bin/` is ignored by git.
 8. **Run it.** Start a hub (or an agent) with the plugins directory: `regulus hub --plugins-dir "$PWD/plugins"` (an agent: `regulus agent --hub HOST:PORT --plugins-dir "$PWD/plugins"`, after enrolling, see [Remote agents](../remote-agents.md)). The log shows `plugin running plugin=my-plugin`, then what your program printed. `regulus status` and `GET /api/plugins` show its state; a plugin that is not valid is listed as `invalid` with the reason. Stop the hub and the plugin stops with it. Its data directory is `<data_dir>/plugins-data/my-plugin/` on the hub.
-9. **Package it:** `scripts/package-plugin.sh plugins/my-plugin` writes `dist/plugins/my-plugin_<version>_<os>_<arch>.tar.gz` and a `.sha256`, with the program built for this machine (`GOOS` and `GOARCH` change that). It holds one directory with `plugin.yaml`, the programs and the widget module. **To install it, unpack it in the plugins directory** (`tar -xzf my-plugin_0.1.0_linux_amd64.tar.gz -C /etc/regulus/plugins`, or wherever `plugins_dir` points, owned by root). The archive name and layout are provisional until the plugin index and installation (#20); nothing signs the archive yet.
+9. **Package it:** `scripts/package-plugin.sh plugins/my-plugin` writes `dist/plugins/my-plugin_<version>_<os>_<arch>.tar.gz` and a `.sha256`, with the program built for this machine (`GOOS` and `GOARCH` change that). It holds one directory with `plugin.yaml`, the programs and the widget module. **To install it, unpack it in the plugins directory** (`tar -xzf my-plugin_0.1.0_linux_amd64.tar.gz -C /etc/regulus/plugins`, or wherever `plugins_dir` points, owned by root). The archive name and layout are provisional until the plugin index and installation (regulus-plugins#1); nothing signs the archive yet.
 
 What was checked: the example builds, is found, validated and run by the supervisor (`TestTheExamplePluginRuns`); it was started by a real hub with `--plugins-dir` and counted its start in the hub's plugins data directory; the packaging script and its archive are tested (`scripts/test-package-plugin.sh`, part of `make test`). **Not checked:** an installed hub or agent under systemd (the unit's hardening may need relaxing for some plugins, see [Runtime](runtime.md)), and the widget, which nothing loads.
 
@@ -70,7 +70,7 @@ sdk.Serve(ctx, sdk.Plugin{
 
 `Serve` listens on `REGULUS_PLUGIN_SOCKET` and returns when the process gets `SIGTERM` (what Regulus sends to stop it) or `SIGINT`. It stops gracefully. Use `sdk.EnvDataDir` (`REGULUS_PLUGIN_DATA_DIR`) for the plugin's own files.
 
-The SDK lives under `internal/`, so only plugins in this repository can import it. That is enough while plugins are internal (#22). A public module comes with third-party plugins (#23).
+The SDK lives under `internal/`, so only plugins in this repository can import it. That is enough while plugins are internal (regulus-plugins#2). A public module comes with third-party plugins (regulus-plugins#3).
 
 ## Other languages
 
