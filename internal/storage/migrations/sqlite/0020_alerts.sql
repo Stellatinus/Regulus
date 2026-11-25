@@ -1,0 +1,51 @@
+-- regulus:reader-min 15
+-- Alerts (#404, docs/alerts.md): the rule of each condition and the alerts the
+-- hub raised. It only adds tables, so the previous release starts on a
+-- database that has them (docs/updates.md).
+--
+-- alert_rules has one row per condition, written with the defaults of the
+-- design the first time the hub runs and never overwritten by it. threshold
+-- and critical_threshold mean a percentage or a number of days, by condition;
+-- a critical_threshold of 0 means none. Times in seconds; recovery_seconds 0
+-- means "as long as duration_seconds" (the hub never uses less than a minute).
+CREATE TABLE alert_rules (
+    condition          TEXT    PRIMARY KEY,
+    enabled            INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    threshold          REAL    NOT NULL DEFAULT 0,
+    critical_threshold REAL    NOT NULL DEFAULT 0,
+    duration_seconds   INTEGER NOT NULL DEFAULT 0,
+    recovery_seconds   INTEGER NOT NULL DEFAULT 0,
+    reminder_seconds   INTEGER NOT NULL DEFAULT 0,
+    severity           TEXT    NOT NULL CHECK (severity IN ('warning', 'critical')),
+    updated_at         TEXT    NOT NULL,
+    updated_by         TEXT    NOT NULL DEFAULT ''
+) STRICT;
+
+-- One row per alert, resolved ones kept as history. subject says what the
+-- alert is about ("agent:web1", "agent:web1:disk:/var", "cert:ca", "hub"),
+-- agent_id the server it belongs to ('' for the hub and its certificates), so
+-- that the alerts of a server that is gone can be resolved. args hold the
+-- values a message is built from, as JSON text.
+CREATE TABLE alerts (
+    id               INTEGER PRIMARY KEY,
+    condition        TEXT    NOT NULL,
+    subject          TEXT    NOT NULL,
+    subject_name     TEXT    NOT NULL DEFAULT '',
+    agent_id         TEXT    NOT NULL DEFAULT '',
+    state            TEXT    NOT NULL CHECK (state IN ('open', 'acknowledged', 'resolved')),
+    severity         TEXT    NOT NULL CHECK (severity IN ('warning', 'critical')),
+    value            REAL,
+    args             TEXT    NOT NULL DEFAULT '',
+    opened_at        TEXT    NOT NULL,
+    updated_at       TEXT    NOT NULL,
+    last_notified_at TEXT    NOT NULL,
+    acknowledged_at  TEXT,
+    acknowledged_by  TEXT    NOT NULL DEFAULT '',
+    resolved_at      TEXT,
+    resolve_reason   TEXT    NOT NULL DEFAULT ''
+) STRICT;
+
+-- At most one alert that is not resolved for a condition and a subject.
+CREATE UNIQUE INDEX alerts_one_active ON alerts (condition, subject) WHERE state <> 'resolved';
+CREATE INDEX alerts_by_state ON alerts (state, opened_at);
+CREATE INDEX alerts_by_agent ON alerts (agent_id);

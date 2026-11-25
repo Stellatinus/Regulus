@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	agentv1 "github.com/CodexCircle/Regulus/internal/gen/regulus/agent/v1"
@@ -123,6 +124,8 @@ type agentServer struct {
 	// disks, if set, is told the physical disks an agent reported, when they
 	// changed since its last report (#148). Like seen it must not wait.
 	disks func(agentID string, disks []*agentv1.PhysicalDisk, at time.Time)
+	// history, when set, takes every report into the stored history (#405).
+	history *metricsHistory
 
 	mu       sync.Mutex
 	sessions map[string]*session
@@ -392,8 +395,16 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 	switch p := msg.GetPayload().(type) {
 	case *agentv1.AgentMessage_Heartbeat:
 		now := time.Now()
+		res := p.Heartbeat.GetUpdateResult()
+		keep := sanitizeUpdateResult(res)
 		s.mu.Lock()
 		sess.info.LastHeartbeat = now
+		if keep && !proto.Equal(sess.info.UpdateResult, res) {
+			// The helper wrote a new result while this session lives (#411):
+			// a rollout waiting for this server reads it as an event.
+			sess.info.UpdateResult = res
+			s.notifyLocked(connEvent{Info: sess.info, Connected: true})
+		}
 		s.mu.Unlock()
 		s.events.publish(heartbeatEvent{Type: "agent.heartbeat", ID: sess.info.ID, At: now.UTC()})
 	case *agentv1.AgentMessage_Metrics:
@@ -436,7 +447,9 @@ func (s *agentServer) handle(sess *session, msg *agentv1.AgentMessage) error {
 			s.events.publish(pluginsEvent{Type: "plugins.changed", Source: "agent", ID: sess.info.ID})
 		}
 		if sample, prev := s.metrics.add(sess.info.ID, p.Metrics); sample.Report != nil {
-			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: toPoint(sample, prev)})
+			point := toPoint(sample, prev)
+			s.events.publish(metricsEvent{Type: "agent.metrics", ID: sess.info.ID, Point: point})
+			s.history.record(sess.info.ID, sample.At, point)
 		}
 	case *agentv1.AgentMessage_CommandResult:
 		sess.deliver(p.CommandResult)

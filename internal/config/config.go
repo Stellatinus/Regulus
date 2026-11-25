@@ -65,6 +65,11 @@ type Config struct {
 	// agents together (#333). A size such as 256MiB. When the estimate goes
 	// over it, the oldest samples of any agent are dropped first.
 	MetricsBudget ByteSize `yaml:"metrics_budget"`
+	// MetricsRetention1m and MetricsRetention15m are how long the hub keeps the
+	// 1-minute and the 15-minute tier of the stored metrics history (#405,
+	// docs/architecture.md). Days such as 3d; 0 turns a tier off.
+	MetricsRetention1m  Retention `yaml:"metrics_retention_1m"`
+	MetricsRetention15m Retention `yaml:"metrics_retention_15m"`
 	// PluginsDir, when set, is the directory of the plugins the hub runs, each
 	// as its own process with the role hub (docs/plugins/runtime.md). Empty:
 	// no plugin is run.
@@ -165,15 +170,17 @@ const DefaultListen = "127.0.0.1:8080"
 // Default returns the built-in defaults.
 func Default() Config {
 	return Config{
-		Listen:          DefaultListen,
-		DataDir:         "data",
-		BuiltinAgent:    true,
-		MetricsInterval: 10 * time.Second,
-		MetricsBudget:   DefaultMetricsBudget,
-		Database:        Database{Type: storage.TypeSQLite, Port: 5432, Name: "regulus", User: "regulus", SSLMode: "prefer"},
-		Log:             Log{Level: "info", Format: "text"},
-		Console:         Console{TUI: true},
-		Updates:         Updates{Check: true},
+		Listen:              DefaultListen,
+		DataDir:             "data",
+		BuiltinAgent:        true,
+		MetricsInterval:     10 * time.Second,
+		MetricsBudget:       DefaultMetricsBudget,
+		MetricsRetention1m:  DefaultRetention1m,
+		MetricsRetention15m: DefaultRetention15m,
+		Database:            Database{Type: storage.TypeSQLite, Port: 5432, Name: "regulus", User: "regulus", SSLMode: "prefer"},
+		Log:                 Log{Level: "info", Format: "text"},
+		Console:             Console{TUI: true},
+		Updates:             Updates{Check: true},
 	}
 }
 
@@ -233,6 +240,9 @@ func (c Config) Validate() error {
 	}
 	if c.MetricsBudget < MinMetricsBudget {
 		return fmt.Errorf("metrics_budget %v is too small (minimum %v)", c.MetricsBudget, MinMetricsBudget)
+	}
+	if c.MetricsRetention1m < 0 || c.MetricsRetention1m > MaxRetention || c.MetricsRetention15m < 0 || c.MetricsRetention15m > MaxRetention {
+		return fmt.Errorf("metrics_retention_1m and metrics_retention_15m must be between 0 and %v", MaxRetention)
 	}
 	if c.Prometheus.Enabled && len(c.Prometheus.Token) < MinMetricsTokenLength {
 		return fmt.Errorf("prometheus.enabled needs a token of at least %d characters in REGULUS_PROMETHEUS_TOKEN (for example the output of `openssl rand -hex 32`), put it in /etc/regulus/regulus.env", MinMetricsTokenLength)
@@ -330,6 +340,18 @@ func LoadWith(name string, args []string, getenv func(string) string, output io.
 			return Config{}, fmt.Errorf("invalid configuration: REGULUS_METRICS_BUDGET %q is not a size (for example 256MiB)", v)
 		}
 		cfg.MetricsBudget = n
+	}
+	for _, e := range []struct {
+		env string
+		to  *Retention
+	}{{"REGULUS_METRICS_RETENTION_1M", &cfg.MetricsRetention1m}, {"REGULUS_METRICS_RETENTION_15M", &cfg.MetricsRetention15m}} {
+		if v := getenv(e.env); v != "" {
+			r, err := ParseRetention(v)
+			if err != nil {
+				return Config{}, fmt.Errorf("invalid configuration: %s %q is not a retention (for example 3d, or 0 to turn the tier off)", e.env, v)
+			}
+			*e.to = r
+		}
 	}
 	if v := getenv("REGULUS_UPDATES_CHECK"); v != "" {
 		b, err := strconv.ParseBool(v)

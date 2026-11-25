@@ -312,6 +312,39 @@ func TestRolloutJudgesByTheHelpersResult(t *testing.T) {
 	}
 }
 
+// A helper that refuses the request changes nothing and does not restart the
+// agent: no new Hello arrives. The agent reports the result in a heartbeat and
+// the rollout fails the server within seconds, with the helper's message, and
+// not when the return timeout ends (#411).
+func TestRolloutJudgesAHelperThatRefusesWithoutARestart(t *testing.T) {
+	h, _ := startRolloutHub(t)
+	h.agents.heartbeatInterval = 100 * time.Millisecond
+	h.rollout.returnTimeout = time.Minute // a failure that waited for this would time the test out
+	admin := newAPI(t, h, auth.RoleAdmin)
+	creds := enrollNew(t, h, "web1")
+	dir := t.TempDir()
+	runAgentUpdating(t, h, creds, "9.8.1", dir)
+	waitFor(t, "the agent", func() bool { return len(h.Agents()) == 1 })
+
+	admin.do("POST", "/api/updates/rollout", map[string]any{})
+	waitFor(t, "the request", func() bool { _, ok := update.ReadRequest(update.ApplyDir(dir)); return ok })
+	waitInstalling(t, admin)
+	// The helper refuses; the agent keeps running, the same session.
+	_ = os.Remove(filepath.Join(update.ApplyDir(dir), "request.json"))
+	if err := update.WriteResult(update.ApplyDir(dir), update.ApplyResult{
+		Version: "9.9.9", From: "9.8.1", Outcome: update.OutcomeFailed,
+		Message: "the signature of the archive does not verify", At: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	st := waitRollout(t, admin, RolloutFailed)
+	a := st.Agents[0]
+	if a.Status != AgentFailed || a.Code != CodeHelperFailed || !strings.Contains(a.Message, "signature of the archive") {
+		t.Errorf("agent = %+v", a)
+	}
+}
+
 // A result.json left by an earlier update, which the agent already reported
 // before the rollout started, is not a verdict on this one.
 func TestHelperVerdictIgnoresAStaleResult(t *testing.T) {

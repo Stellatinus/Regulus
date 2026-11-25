@@ -55,6 +55,7 @@ type Service struct {
 	failures   map[string]*failure
 	policy     Policy
 	rolePerms  map[string]cachedPerms // permissions per role, cleared when a role changes
+	tokens     *tokenState            // what the API tokens keep in memory (apitoken.go)
 
 	dummyOnce sync.Once
 	dummyHash string

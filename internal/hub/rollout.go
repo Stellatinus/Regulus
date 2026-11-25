@@ -509,7 +509,13 @@ func (h *Hub) awaitReturn(ctx context.Context, run *rolloutRun, before AgentInfo
 				newSession = time.Time{}
 			}
 		case a.ConnectedAt.Equal(before.ConnectedAt):
-			// still the session from before the update
+			// Still the session from before the update. A helper that refuses
+			// the request changes nothing and does not restart the agent, so
+			// its result reaches the hub in a heartbeat (#411): a refusal is
+			// known within seconds. "applied" and "installing" decide nothing.
+			if m := helperVerdict(before, a, h.version); m.Text != "" {
+				return m
+			}
 		case a.Version == h.version:
 			if !a.ConnectedAt.Equal(newSession) {
 				newSession, newSince, sawNew = a.ConnectedAt, time.Now(), true

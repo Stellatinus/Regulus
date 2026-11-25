@@ -110,6 +110,7 @@ func (h *Hub) demote() bool {
 	if stop != nil {
 		stop()
 	}
+	go h.alertLockLost() // said at once, by the hub that lost it (#404)
 	return true
 }
 

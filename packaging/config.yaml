@@ -58,6 +58,12 @@ metrics_interval: 10s
 # is full the oldest samples go first. Raise it for a large fleet.
 metrics_budget: 256MiB
 
+# How long the hub keeps the stored history of the metrics, in two tiers: one
+# value a minute and one every 15 minutes. Days (3d) or hours (36h); 0 turns a
+# tier off. The history survives a restart of the hub.
+metrics_retention_1m: 3d
+metrics_retention_15m: 90d
+
 # Plugins the hub runs, each as its own process (docs/plugins/runtime.md). Off
 # by default. Whatever is in this directory runs as the regulus user: keep it
 # owned by root and not writable by regulus.

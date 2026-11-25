@@ -54,6 +54,10 @@ It connects with the configured settings and prints the backend, the server vers
 
 With PostgreSQL the data is in the database, but **the key stays on the hub's disk**: the TOTP secrets are encrypted with a key derived from `secret.key` in `data_dir`, and the certificate authority for agents is in `data_dir/pki`. Back up the database **and** `data_dir` together. A database restored without `secret.key` cannot decrypt two-factor secrets.
 
+## The stored metrics history
+
+The table `metric_buckets` (migration 0018, #405) holds the completed buckets of the metrics history in two tiers, 1 minute and 15 minutes (`metrics_retention_1m`, default 3 days; `metrics_retention_15m`, default 90 days; [Configuration](configuration.md)). The hub writes the buckets of all agents in one transaction a minute and deletes the old rows once an hour, 5,000 at a time. A row is about 100 bytes with its index: with the defaults ten servers use about 13 MB and 200 servers about 260 MB (860,000 rows in the 1-minute tier and 1.7 million in the 15-minute tier). The table is the largest one the hub has; the backup of #253 leaves it out by default.
+
 ## Failure behaviour
 
 - At start the hub waits up to 60 seconds for PostgreSQL to answer, then exits with the reason; the service manager starts it again. A database that comes up a little after the hub (after a reboot) needs nobody.

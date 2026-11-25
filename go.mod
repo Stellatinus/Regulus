@@ -3,6 +3,7 @@ module github.com/CodexCircle/Regulus
 go 1.27.0
 
 require (
+	filippo.io/age v1.2.1
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
