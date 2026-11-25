@@ -517,8 +517,8 @@ func TestActionsTabListsWhatTheConsoleCanDo(t *testing.T) {
 	view := m.View()
 	for _, want := range []string{
 		"5 Actions",
-		"r  Restart the service", "p  Reset the administrator password", "a  Turn on remote agents",
-		"already on (:8443)",           // agents are on
+		"r  Restart the service", "p  Reset the administrator password",
+		"a  Turn off remote agents",    // agents are on: the action turns them off
 		"sudo regulus hub reset-admin", // no reset hook here
 		"Adding a server", "192.168.1.20:8443", "sha256:abcd", "Servers → Add a server",
 	} {
@@ -526,10 +526,42 @@ func TestActionsTabListsWhatTheConsoleCanDo(t *testing.T) {
 			t.Errorf("the Actions tab does not show %q:\n%s", want, view)
 		}
 	}
-	// Turning agents on again is refused with the reason.
+	if strings.Contains(view, "Turn on remote agents") {
+		t.Errorf("the Actions tab offers to turn on what is on:\n%s", view)
+	}
+	// Here the file does not set agent_listen: the hub got it from the
+	// dashboard, and emptying the file would not turn it off, so the
+	// console says so instead of asking.
 	m = sendKey(t, m, rune1('a'))
-	if m.confirm != "" || !m.noticeIsErr || !strings.Contains(m.notice, "already on") {
+	if m.confirm != "" || !m.noticeIsErr || !strings.Contains(m.notice, "turned on from the dashboard") {
 		t.Errorf("confirm = %q, notice = %q", m.confirm, m.notice)
+	}
+}
+
+// The machine of the maintainer's report: remote agents are on, and the
+// Actions tab turns them off (#458).
+func TestTurningRemoteAgentsOffFromTheConsole(t *testing.T) {
+	file := copyConfig(t)
+	if _, err := config.SetFile(file, "agent_listen", ":8443"); err != nil {
+		t.Fatal(err)
+	}
+	restarted := 0
+	m := New(Options{System: systemWith(":8443", "sha256:abcd"), ConfigFile: file, Unicode: true, Hooks: Hooks{
+		Restart: func(context.Context) error { restarted++; return nil },
+	}})
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = settle(t, next.(Model), next.(Model).collect())
+	m = sendKey(t, m, rune1('5'), rune1('a'))
+	if m.confirm != "agents-off" {
+		t.Fatalf("confirm = %q, notice = %q", m.confirm, m.notice)
+	}
+	m = sendKey(t, m, rune1('y'))
+	if restarted != 1 || m.noticeIsErr || !strings.Contains(m.notice, "Remote agents are off") {
+		t.Errorf("restarted = %d, notice = %q", restarted, m.notice)
+	}
+	data, _ := os.ReadFile(file)
+	if !strings.Contains(string(data), `agent_listen: ""`) {
+		t.Errorf("agent_listen was not emptied:\n%s", data)
 	}
 }
 

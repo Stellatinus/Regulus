@@ -97,7 +97,7 @@ type Model struct {
 	notice       string
 	noticeIsErr  bool
 	needsRestart bool
-	confirm      string // "restart", "reset", "agents" or ""
+	confirm      string // "restart", "reset", "agents", "agents-off" or ""
 	resetLink    string
 }
 
@@ -296,6 +296,16 @@ func (m Model) operationDone(msg opMsg) (tea.Model, tea.Cmd) {
 		m.needsRestart = false
 		m.say(T.MsgAgentsOn, false)
 		return m, m.collect()
+	case msg.err != nil && msg.kind == "agents-off":
+		m.say(fmt.Sprintf(T.MsgAgentsOffFailed, settingError(msg.err)), true)
+	case msg.kind == "agents-off-saved":
+		m.needsRestart = true
+		m.say(T.MsgAgentsOffSaved+" "+T.RestartHint, false)
+		return m, m.collect()
+	case msg.kind == "agents-off":
+		m.needsRestart = false
+		m.say(T.MsgAgentsOff, false)
+		return m, m.collect()
 	case msg.err != nil && msg.kind == "restart":
 		m.say(fmt.Sprintf(T.MsgRestartFailed, msg.err.Error(), ServiceUnit), true)
 	case msg.err != nil:
@@ -440,22 +450,28 @@ func (m Model) answer(k string) (tea.Model, tea.Cmd) {
 			defer cancel()
 			return opMsg{kind: "restart", err: hooks.Restart(ctx)}
 		}
-	case "agents":
+	case "agents", "agents-off":
+		// On writes the port, off empties the setting; both restart the hub,
+		// which reads agent_listen only at start.
+		kind, value, msg := what, remoteAgentsListen, T.MsgTurningOn
+		if kind == "agents-off" {
+			value, msg = "", T.MsgTurningOff
+		}
 		file := m.snap.ConfigFile
-		m.say(T.MsgTurningOn, false)
+		m.say(msg, false)
 		return m, func() tea.Msg {
-			if _, err := config.SetFile(file, "agent_listen", remoteAgentsListen); err != nil {
-				return opMsg{kind: "agents", err: err}
+			if _, err := config.SetFile(file, "agent_listen", value); err != nil {
+				return opMsg{kind: kind, err: err}
 			}
 			if hooks.Restart == nil {
-				return opMsg{kind: "agents-saved"}
+				return opMsg{kind: kind + "-saved"}
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := hooks.Restart(ctx); err != nil {
-				return opMsg{kind: "agents-saved"}
+				return opMsg{kind: kind + "-saved"}
 			}
-			return opMsg{kind: "agents"}
+			return opMsg{kind: kind}
 		}
 	case "reset":
 		m.say(T.MsgMakingLink, false)
@@ -676,6 +692,8 @@ func (m Model) footer(w int) []string {
 		status = warnStyle.Render(T.ResetAsk + " " + T.HelpConfirm)
 	case m.confirm == "agents":
 		status = warnStyle.Render(T.AgentsAsk + " " + T.HelpConfirm)
+	case m.confirm == "agents-off":
+		status = warnStyle.Render(T.AgentsOffAsk + " " + T.HelpConfirm)
 	case m.notice != "":
 		style := goodStyle
 		if m.noticeIsErr {
@@ -985,23 +1003,33 @@ func (m Model) actions() []action {
 		reset.why = T.WhyReset
 	}
 	agents := action{key: "a", title: T.ActAgents, info: T.ActAgentsInfo, why: m.agentsBlocker()}
+	if m.agentsOn() {
+		// The same key turns them off: turning on what is on is no action.
+		agents.title, agents.info = T.ActAgentsOff, T.ActAgentsOffInfo
+	}
 	return []action{restart, reset, agents}
 }
 
-// agentsBlocker says why remote agents cannot be turned on from here, or ""
-// when they can.
+// agentsOn reports whether remote agents are on, so the action turns them off.
+func (m Model) agentsOn() bool { return m.loaded && m.snap.AgentListen != "" }
+
+// agentsBlocker says why remote agents cannot be turned on or off from here,
+// or "" when they can.
 func (m Model) agentsBlocker() string {
 	switch {
 	case !m.loaded:
 		return T.Loading
-	case m.snap.AgentListen != "":
-		return fmt.Sprintf(T.WhyAgentsOn, m.snap.AgentListen)
 	case m.snap.ConfigFile == "":
 		return T.WhyNoConfig
 	}
 	for _, e := range m.snap.Settings {
 		if e.Key == "agent_listen" && e.Origin == config.OriginEnv {
 			return fmt.Sprintf(T.WhyEnvAgents, e.Env)
+		}
+		// Turned on from the dashboard: the address is in the hub's database,
+		// and emptying the file would not turn it off.
+		if e.Key == "agent_listen" && e.Origin == config.OriginDashboard && m.agentsOn() {
+			return T.WhyDashboardAgents
 		}
 	}
 	return ""
@@ -1017,11 +1045,15 @@ func (m Model) ask(k string) (tea.Model, tea.Cmd) {
 			m.confirm = "reset"
 		}
 	case "a":
+		title, confirm := T.ActAgents, "agents"
+		if m.agentsOn() {
+			title, confirm = T.ActAgentsOff, "agents-off"
+		}
 		if why := m.agentsBlocker(); why != "" {
-			m.say(T.ActAgents+": "+why+".", true)
+			m.say(title+": "+why+".", true)
 			return m, nil
 		}
-		m.confirm = "agents"
+		m.confirm = confirm
 	}
 	return m, nil
 }
