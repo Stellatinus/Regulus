@@ -98,6 +98,7 @@ Commands:
   hub reset-admin
            regain access when the admin cannot log in; see 'regulus hub reset-admin -h'
   agent    run a remote agent that connects to a hub; see 'regulus agent -h'
+           ('regulus agent set-hub HOST:PORT' points it at a new address of its hub)
   update-apply
            install the update the hub downloaded; systemd runs it as root
            (regulus-update.service), you do not need to

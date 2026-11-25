@@ -82,6 +82,20 @@ With one report per interval and one hour of history, a single agent keeps at mo
 
 A network or storage mount whose server is gone can block `statfs` for as long as it stays that way, and no signal ends the call. The agent therefore asks every mount at the same time, waits up to **2 seconds** in total, and sends the report **without the mounts that did not answer** (one warning in the log per mount); a mount that is still stuck is not asked again (a new call per report would only pile up stuck threads) and comes back in the reports as soon as it answers. The whole collection also runs beside the loop that sends the heartbeats: while one is still running the next is skipped, so a collector that never returns costs reports, never the connection (the hub drops an agent that stops sending heartbeats). To try it on a real machine see the `[Test]` issue for hung mounts.
 
+## When the hub's address changes (#455)
+
+Only the agent connects, and it connects to the address in `hub:` of `/etc/regulus/agent.yaml`. A new address **of the agent's own machine** changes nothing: it connects again by itself. A new address **of the hub** does: an agent that was given an IP address keeps trying the old one. The agent trusts its hub by the fingerprint of the hub's CA, not by the address, so it only has to be pointed at the new one; it is not enrolled again.
+
+On the agent server, as root (or with `sudo`):
+
+```bash
+sudo regulus agent set-hub HOST:PORT
+```
+
+It checks that the address answers with the CA this agent was enrolled with (a TLS handshake only; nothing else is sent), writes `hub:` in the configuration file, keeping its comments, and restarts `regulus-agent.service`. If the address does not answer as the hub, **nothing is changed**. `--no-check` writes it anyway (for a hub that is switched off now), `--no-restart` leaves the restart to you, `--config FILE` and `--data-dir DIR` name another file or data directory.
+
+Use a **name** instead of an IP address when you can (a name of the router's DHCP, `host.local` with Avahi, or a DNS name): the agent resolves it again on every reconnection, so a change of the hub's IP address needs no action at all. Not done yet: the hub telling its agents all its addresses, and an agent finding its hub on the local network when the saved address stops answering; both are in #455 and need their own design (see also #109 and #162).
+
 ## How an agent reconnects
 
 **Looking at an agent server.** `sudo regulus` and `regulus status` on a server installed with `--role agent` show the agent: the state of `regulus-agent.service`, the hub address, the link to the hub (read from the agent's log), the agent's id and when its certificate ends. They do not show the hub's screens; see [Console and command line](console-and-cli.md).

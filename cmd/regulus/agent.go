@@ -30,6 +30,9 @@ const exitRejected = 3
 // hub. The first run enrolls it with the token; later runs only need the hub
 // address and the saved credentials.
 func runAgent(args []string) int {
+	if len(args) > 0 && args[0] == "set-hub" {
+		return runAgentSetHub(args[1:])
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return agentMain(ctx, args, os.Getenv, os.Stderr)
