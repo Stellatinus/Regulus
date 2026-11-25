@@ -379,6 +379,10 @@ The dashboard's own tests (vitest, jsdom, a fake `fetch`, fake sockets) do not s
 
 The list and the page of a server show the node role, `hub` or `agent`. Decision: the hub's own server is called **hub** and every other server **agent**, in English and in Italian (the word is not translated). The reasons: the glossary already defines the node role as `hub` or `agent` (#104), the process on the remote machine is the agent, and "compute node" is a node type of #160 that will refine the role, so it must not be the name of the plain remote server. The role is a field of the API (`role` on `GET /api/agents`), computed by the hub (`local` is the hub, the rest agents), added without removing anything; a dashboard that talks to a hub without the field derives it from the id, and an unknown role from a newer hub (a node type) is shown as it is. Not checked in a browser.
 
+## The live indicator while the hub restarts (#435)
+
+The dashboard's live indicator says **Online** (English and Italian). While the stream is connecting or reconnecting it uses the warning colour, because a hub restart is a normal event; it turns to the error colour ("Hub unreachable, retrying…") only after the stream has been down for **60 seconds** (`LONG_OUTAGE_MS` in `dashboard/src/Shell.tsx`). The 60 seconds are a first choice, not a measured one: the front-end redesign (#432) may change it. Not checked in a real browser after a real hub restart (#309).
+
 ## Verification status
 
 The first signed releases exist (`v0.3.0-alpha.1` is the newest), but several parts have only been tested by unit and integration tests: the `.deb` on a clean Ubuntu system through systemd, the agent installer on a second server, and installing and rolling back an update with real systemd. They are checked together on a VM (#81). Until then, try a release on a test server.
