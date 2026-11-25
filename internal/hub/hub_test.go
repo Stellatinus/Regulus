@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/CodexCircle/Regulus/internal/config"
+	"github.com/CodexCircle/Regulus/internal/storage/storagetest"
 )
 
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
@@ -186,6 +187,15 @@ func TestRunningHubReportsItsDatabaseState(t *testing.T) {
 	}
 	if got := read(); got != `{"ok":true}` {
 		t.Fatalf("healthy: %s", got)
+	}
+	if storagetest.Postgres() {
+		// The hub's first check of its database runs in the background; let it
+		// finish, or it can record "answers" over the problem set below.
+		select {
+		case <-h.dbState.firstChecked():
+		case <-time.After(10 * time.Second):
+			t.Fatal("the first check of the database did not finish")
+		}
 	}
 	h.dbState.set("connection refused")
 	if got := read(); got != `{"ok":false}` {

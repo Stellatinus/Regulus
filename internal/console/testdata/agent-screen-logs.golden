@@ -1,0 +1,24 @@
+Regulus agent v0.3.0  ● connected
+
+ 1 Status   2 Logs
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ time=2026-10-25T11:58:01Z level=INFO msg="starting agent" version=v0.3.0
+ time=2026-10-25T11:58:02Z level=INFO msg="connected to the hub" agent=agent-7f3a protocol_version=1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ tab/←/→ section  r restart the agent  q quit

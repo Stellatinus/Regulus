@@ -277,7 +277,7 @@ jobs:
           # (TestHubUnderRealLoad) runs only with REGULUS_LOAD=1, by hand.
           if grep -e '--- SKIP' e2e.log | grep -v -e 'TestAgentOfAnOlderRelease' -e 'TestPreviousReleaseServesOnTheCurrentSchema' -e 'TestUpdateOfAnOlderAgentOverMTLS' -e 'TestHubUnderRealLoad' | grep -q .; then echo '::error::the end-to-end test was skipped'; exit 1; fi
           if grep -q -e '--- SKIP: TestPreviousReleaseServesOnTheCurrentSchema' e2e.log; then echo "::warning::the test of the previous release on the current schema was skipped (or one of its databases): $(grep -h -e 'no previous release' -e 'to run this on PostgreSQL' e2e.log | head -1)"; fi
-          if grep -q -e '--- SKIP: TestUpdateOfAnOlderAgentOverMTLS' e2e.log; then echo "::warning::the update of an older agent was skipped: $(grep -h -e 'only .* release is published' -e 'does not trust the identity' -e 'no releases to test with' e2e.log | head -1)"; fi
+          if grep -q -e '--- SKIP: TestUpdateOfAnOlderAgentOverMTLS' e2e.log; then echo "::warning::the update of an older agent was skipped: $(grep -h -e 'only .* release is published' -e 'does not trust the identity' -e 'no releases to test with' -e 'rate limit: ' e2e.log | head -1)"; fi
           if grep -q -e '--- SKIP: TestAgentOfAnOlderRelease' e2e.log; then echo "::warning::the test of the previous release was skipped: $(grep -h -e 'no previous release' e2e.log | head -1)"; fi
 
   browser:

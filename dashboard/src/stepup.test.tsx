@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, CODE_REQUIRED, createUser, REAUTH_REQUIRED, revokeAgent } from "./api";
+import { ApiError, CODE_REQUIRED, createEnrollment, createUser, REAUTH_REQUIRED, revokeAgent, updateUser } from "./api";
 import { StepUp } from "./StepUp";
 
 interface Call {
@@ -155,6 +155,63 @@ describe("step-up re-authentication", () => {
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
     expect(await screen.findByLabelText("Authentication code")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  });
+
+  it("repeats an enrollment token request after the password", async () => {
+    const calls = mockHub();
+    render(<StepUp twoFactor={false} />);
+    const result = createEnrollment("second server", "1h");
+    await screen.findByRole("dialog");
+    await userEvent.type(screen.getByLabelText("Password"), "right password");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await result;
+    const tokens = calls.filter((c) => c.path === "/api/enrollment-tokens");
+    expect(tokens).toHaveLength(2);
+    expect(tokens[1].body).toEqual({ name: "second server", ttl: "1h" });
+  });
+
+  it("repeats a role change after the password", async () => {
+    const calls = mockHub();
+    render(<StepUp twoFactor={false} />);
+    const result = updateUser("newbie", { role: "operator" });
+    await screen.findByRole("dialog");
+    await userEvent.type(screen.getByLabelText("Password"), "right password");
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await result;
+    const patches = calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    expect(patches[1].body).toEqual({ role: "operator" });
+  });
+
+  it("moves the focus into the dialog, keeps Tab inside, closes on Escape and gives the focus back", async () => {
+    mockHub();
+    render(
+      <>
+        <button>opener</button>
+        <StepUp twoFactor={false} />
+      </>,
+    );
+    const opener = screen.getByRole("button", { name: "opener" });
+    opener.focus();
+    const result = createUser("newbie", "a long password", "viewer").then(
+      () => null,
+      (err: unknown) => err,
+    );
+    await screen.findByRole("dialog");
+    const password = screen.getByLabelText("Password");
+    expect(password).toHaveAttribute("type", "password");
+    expect(password).toHaveAttribute("autocomplete", "current-password");
+    expect(password).toHaveFocus();
+
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await userEvent.tab();
+    expect(password).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(await result).toBeInstanceOf(ApiError);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opener).toHaveFocus();
   });
 
   it("without the dialog, the refusal reaches the caller", async () => {

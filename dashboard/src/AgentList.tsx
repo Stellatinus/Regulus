@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ApiError, fetchAgents, type Agent } from "./api";
 import { serverHref } from "./route";
 import { formatAgo, formatDuration } from "./format";
@@ -25,9 +25,14 @@ interface Props {
   // Called after the list changes; the page uses it to refresh when an agent is
   // added, renamed or revoked.
   reloadKey?: number;
+  // Shown at the far right of the title row (the Servers page puts its "+"
+  // button there, #428).
+  actions?: ReactNode;
+  // Shown between the title row and the list (the open "Add a server" panel).
+  belowTitle?: ReactNode;
 }
 
-export function AgentList({ refreshMs = REFRESH_MS, heading = true, onUnauthorized: onUnauthorizedProp, all = false, reloadKey = 0 }: Props) {
+export function AgentList({ refreshMs = REFRESH_MS, heading = true, onUnauthorized: onUnauthorizedProp, all = false, reloadKey = 0, actions, belowTitle }: Props) {
   const t = useT();
   const session = useSession();
   const onUnauthorized = onUnauthorizedProp ?? session?.expired;
@@ -58,11 +63,20 @@ export function AgentList({ refreshMs = REFRESH_MS, heading = true, onUnauthoriz
 
   return (
     <section aria-labelledby="agents-heading">
-      {heading ? <h2 id="agents-heading">{t("servers.list.heading")}</h2> : <h2 id="agents-heading" className="visually-hidden">{t("servers.list.heading")}</h2>}
+      {heading ? (
+        <div className="page-title">
+          <h2 id="agents-heading" style={{ margin: 0 }}>{t("servers.list.heading")}</h2>
+          {state.kind === "ready" && <StatusCounts agents={state.agents} />}
+          {actions && <span className="title-actions">{actions}</span>}
+        </div>
+      ) : (
+        <h2 id="agents-heading" className="visually-hidden">{t("servers.list.heading")}</h2>
+      )}
+      {belowTitle}
       {state.kind === "loading" && <p>{t("servers.loading")}</p>}
       {state.kind === "error" && <p role="alert">{t("servers.list.loadError", { message: state.message })}</p>}
       {state.kind === "ready" && state.agents.length === 0 && <p>{all ? t("servers.list.noServers") : t("servers.list.noneConnected")}</p>}
-      {state.kind === "ready" && state.agents.length > 0 && <AgentTable agents={state.agents} />}
+      {state.kind === "ready" && state.agents.length > 0 && <AgentTable agents={state.agents} counts={!heading} />}
     </section>
   );
 }
@@ -91,6 +105,19 @@ export function versionNote(a: Agent, t: Translator): string {
 
 export const statusLabel = (a: Agent, t: Translator) => t(STATUS_LABEL[a.status]);
 
+// agentRole is the node role of a server. A hub older than 0.3.0-alpha.2 does
+// not send it: the built-in agent ("local") is then the hub, the rest agents.
+export const agentRole = (a: Agent) => a.role ?? (a.id === "local" ? "hub" : "agent");
+
+// roleLabel is the word for the role; a role the dashboard does not know is
+// shown as the hub names it.
+export function roleLabel(a: Agent, t: Translator): string {
+  const role = agentRole(a);
+  if (role === "hub") return t("servers.role.hub");
+  if (role === "agent") return t("servers.role.agent");
+  return role;
+}
+
 // lastContact says when the hub last heard from a server.
 export function lastContact(a: Agent, t: Translator): string {
   if (a.status === "connected" || a.status === "stale") return formatAgo(a.last_heartbeat, undefined, t);
@@ -104,25 +131,26 @@ function StatusCounts({ agents }: { agents: Agent[] }) {
   const counts = order.map((s) => [s, agents.filter((a) => a.status === s).length] as const).filter(([, n]) => n > 0);
   if (agents.length < 2) return null;
   return (
-    <p className="row-actions" aria-label={t("servers.list.counts")}>
+    <span className="row-actions" aria-label={t("servers.list.counts")}>
       {counts.map(([s, n]) => (
         <span key={s} className={`status ${s}`}>
           {n} {t(STATUS_LABEL[s])}
         </span>
       ))}
-    </p>
+    </span>
   );
 }
 
-function AgentTable({ agents }: { agents: Agent[] }) {
+function AgentTable({ agents, counts }: { agents: Agent[]; counts: boolean }) {
   const t = useT();
   return (
     <>
-    <StatusCounts agents={agents} />
+    {counts && <StatusCounts agents={agents} />}
     <table className="cards">
       <thead>
         <tr>
           <th>{t("servers.fact.server")}</th>
+          <th>{t("servers.fact.role")}</th>
           <th>{t("servers.fact.system")}</th>
           <th>{t("servers.list.version")}</th>
           <th>{t("servers.fact.status")}</th>
@@ -139,6 +167,11 @@ function AgentTable({ agents }: { agents: Agent[] }) {
                   {displayName(a)}
                 </a>
                 {a.name && a.hostname && a.name !== a.hostname ? <span className="muted"> {a.hostname}</span> : null}
+              </span>
+            </td>
+            <td data-label={t("servers.fact.role")}>
+              <span className={agentRole(a) === "hub" ? "status hub" : "muted"}>
+                {roleLabel(a, t)}
               </span>
             </td>
             <td data-label={t("servers.fact.system")}>{[a.os_version ?? a.os, a.arch].filter(Boolean).join(" ") || "-"}</td>

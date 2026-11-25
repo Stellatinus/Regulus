@@ -68,8 +68,13 @@ describe("the servers pages in Italian", () => {
     expect(screen.getByText("online")).toBeInTheDocument();
     expect(screen.getByText("revocato")).toBeInTheDocument();
     expect(screen.getByText("mai connesso")).toBeInTheDocument();
+    // "Aggiungi un server" is closed until the + button opens it.
+    const add = await screen.findByRole("button", { name: "Aggiungi un server" });
+    expect(screen.queryByRole("heading", { name: "Aggiungi un server" })).not.toBeInTheDocument();
+    await userEvent.setup().click(add);
     expect(await screen.findByRole("heading", { name: "Aggiungi un server" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Crea token di registrazione" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Chiudi" })).toBeInTheDocument();
     expect(screen.queryByText("Last contact")).not.toBeInTheDocument();
   });
 

@@ -90,7 +90,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByRole("heading", { name: "Servers" }).first().waitFor();
       assert.equal(await page.getByRole("link", { name: "web1" }).count(), 0, "no server yet");
       // The page is open on a live stream (a WebSocket) before the agent exists.
-      await page.getByText("Live", { exact: true }).waitFor();
+      await page.getByText("Online", { exact: true }).waitFor();
 
       await context.request.post("/api/account/reauth", { data: { password: PASSWORD } });
       const res = await context.request.post("/api/enrollment-tokens", { data: { name: "web1" } });
@@ -144,6 +144,9 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
         await page.goto("/#/servers");
         await page.getByRole("link", { name: "web1" }).click();
         await page.getByRole("heading", { name: "CPU" }).waitFor({ timeout: 30000 });
+        // Measure the settled page, as for the other routes: the disks panel
+        // (and its badges) arrives from its own request.
+        await page.waitForLoadState("networkidle");
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         assert.ok(over <= 0, `the server page is ${over}px wider than the screen`);
       },

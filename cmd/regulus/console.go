@@ -61,6 +61,12 @@ type env struct {
 	run func(console.Options) error
 	// stderrIsTerminal tells whether it is worth explaining a fallback.
 	stderrIsTerminal bool
+	// readFile reads the role file (#434); nil means every server is a hub.
+	readFile func(string) ([]byte, error)
+	// agentSystem and runAgent are the machine and the screen of the console
+	// of a server that runs only the agent.
+	agentSystem console.AgentSystem
+	runAgent    func(console.AgentOptions) error
 }
 
 func hostEnv() env {
@@ -72,6 +78,9 @@ func hostEnv() env {
 		system:           console.HostSystem(),
 		run:              console.Run,
 		stderrIsTerminal: term.IsTerminal(int(os.Stderr.Fd())),
+		readFile:         os.ReadFile,
+		agentSystem:      console.HostAgentSystem(),
+		runAgent:         console.RunAgent,
 	}
 }
 
@@ -208,7 +217,7 @@ func runStatus(args []string) int { return consoleCommand(args, hostEnv(), false
 // otherwise. interactive is false for `status`, which never opens the screen.
 func consoleCommand(args []string, e env, interactive bool) int {
 	console.UseLocale(e.getenv)
-	name, usage := "status", "Usage: regulus status [--json|--plain] [--config FILE]\n\nPrints what the hub is doing. Exit status 0 when the hub is running, 3 when it is not."
+	name, usage := "status", "Usage: regulus status [--json|--plain] [--config FILE]\n\nPrints what the hub is doing (on a server installed with --role agent: what the agent is doing).\n\nExit status 0 when the hub or the agent is running, 3 when it is not."
 	if interactive {
 		name, usage = "console", "Usage: regulus [console] [--no-tui] [--json|--plain] [--config FILE]\n\nOpens the interactive console to check and change the hub. It prints the status\nas text instead when it is not run in a terminal, or when --no-tui,\nREGULUS_NO_TUI=1 or console.tui: false in the configuration says so."
 	}
@@ -227,6 +236,11 @@ func consoleCommand(args []string, e env, interactive bool) int {
 		return 2
 	}
 	c.applyColor(e.getenv)
+
+	// A server installed with --role agent has no hub: show its own view (#434).
+	if e.readFile != nil && console.Role(e.readFile) == console.RoleAgent {
+		return agentCommand(c, e, interactive)
+	}
 
 	file := config.FindFile(c.config, e.getenv)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -271,6 +285,64 @@ func consoleCommand(args []string, e env, interactive bool) int {
 
 	snap := console.Collect(ctx, e.system, file, version)
 	if err := console.WriteStatus(e.stdout, snap, c.format(), e.system.Now()); err != nil {
+		_, _ = fmt.Fprintf(e.stderr, "regulus: %v\n", err)
+		return 1
+	}
+	switch {
+	case snap.Problem != "":
+		return 1
+	case !snap.Running && !interactive:
+		return exitNotRunning
+	}
+	return 0
+}
+
+// agentCommand is consoleCommand on a server whose role is agent: the same
+// choice between the full-screen console and text, with the agent's own
+// screens, and exit status 0 when the agent's unit is active, 3 when it is not.
+func agentCommand(c commonFlags, e env, interactive bool) int {
+	file := c.config
+	if file == "" {
+		if _, err := os.Stat(console.DefaultAgentConfig); err == nil {
+			file = console.DefaultAgentConfig
+		}
+	}
+	if interactive {
+		choice, err := c.choice()
+		if err != nil {
+			_, _ = fmt.Fprintf(e.stderr, "regulus: %v\n", err)
+			return 2
+		}
+		use, reason, err := console.UseTUI(choice, true, e.getenv, console.Terminal{
+			Interactive: e.terminal.interactive, Width: e.terminal.width, Height: e.terminal.height,
+		})
+		if err != nil {
+			_, _ = fmt.Fprintf(e.stderr, "regulus: %v\n", err)
+			return 2
+		}
+		if use {
+			err := e.runAgent(console.AgentOptions{
+				System:     e.agentSystem,
+				ConfigFile: file,
+				Version:    version,
+				Unicode:    console.UnicodeTerminal(e.getenv),
+				Refresh:    2 * time.Second,
+				Restart:    func(ctx context.Context) error { return restartUnit(ctx, console.AgentUnit) },
+			})
+			if err != nil {
+				_, _ = fmt.Fprintf(e.stderr, "regulus: the console failed: %v\n", err)
+				return 1
+			}
+			return 0
+		}
+		if e.stderrIsTerminal && !c.plain && !c.jsonOut {
+			_, _ = fmt.Fprintf(e.stderr, "regulus: not opening the console (%s); printing the status instead\n", reason)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	snap := console.CollectAgent(ctx, e.agentSystem, file, version)
+	if err := console.WriteAgentStatus(e.stdout, snap, c.format(), e.agentSystem.Now()); err != nil {
 		_, _ = fmt.Fprintf(e.stderr, "regulus: %v\n", err)
 		return 1
 	}
@@ -347,8 +419,11 @@ func resetAdminAs(ctx context.Context, uid, gid uint32, dataDir, file string) (s
 
 // restartService restarts the hub's systemd unit, with sudo when this is not
 // root and sudo needs no password.
-func restartService(ctx context.Context) error {
-	args := []string{"systemctl", "restart", console.ServiceUnit}
+func restartService(ctx context.Context) error { return restartUnit(ctx, console.ServiceUnit) }
+
+// restartUnit restarts a systemd unit the same way.
+func restartUnit(ctx context.Context, unit string) error {
+	args := []string{"systemctl", "restart", unit}
 	if os.Geteuid() != 0 {
 		if sudo, err := exec.LookPath("sudo"); err == nil {
 			args = append([]string{sudo, "-n"}, args...)

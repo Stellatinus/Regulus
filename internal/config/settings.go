@@ -289,6 +289,11 @@ const (
 	OriginDefault = "default"
 	OriginFile    = "file"
 	OriginEnv     = "environment"
+	// OriginDashboard is a value the running hub reports that is in none of
+	// the others: today only the agent listener turned on from the dashboard,
+	// which the hub keeps in its database (#423). Resolve never returns it;
+	// the console sets it from what the hub says about itself.
+	OriginDashboard = "dashboard"
 )
 
 // Entry is a setting with its current value and where the value comes from.

@@ -43,8 +43,13 @@ const (
 
 // agentJSON is the JSON form of an agent in GET /api/agents.
 type agentJSON struct {
-	ID               string     `json:"id"`
-	Name             string     `json:"name,omitempty"`
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+	// Role is the node role of the server (docs/glossary.md): "hub" for the
+	// hub's own server (the built-in agent) and "agent" for every other one.
+	// Node types such as a redundant hub will refine it later; a client must
+	// show an unknown value as it is.
+	Role             string     `json:"role"`
 	Version          string     `json:"version"`
 	Status           string     `json:"status"`
 	Hostname         string     `json:"hostname,omitempty"`
@@ -94,10 +99,26 @@ func (j *agentJSON) withRegistry(e fleet.Agent) {
 	}
 }
 
+// Node roles in the API (docs/glossary.md).
+const (
+	roleHub   = "hub"
+	roleAgent = "agent"
+)
+
+// roleOf is the role of the server with this id: the hub's own server is the
+// built-in agent, and every enrolled one is a remote agent.
+func roleOf(id string) string {
+	if id == BuiltinAgentID {
+		return roleHub
+	}
+	return roleAgent
+}
+
 func toAgentJSON(a AgentInfo, now time.Time, staleAfter time.Duration) agentJSON {
 	connected := a.ConnectedAt.UTC()
 	out := agentJSON{
 		ID:          a.ID,
+		Role:        roleOf(a.ID),
 		Version:     a.Version,
 		Status:      statusConnected,
 		ConnectedAt: &connected,
@@ -196,7 +217,7 @@ type rejectionSource interface {
 
 // offlineJSON is the JSON form of an enrolled agent that is not connected.
 func offlineJSON(e fleet.Agent, src AgentSource) agentJSON {
-	out := agentJSON{ID: e.ID, Version: e.Version, Status: statusOffline, Hostname: e.Hostname, OSVersion: e.OSVersion}
+	out := agentJSON{ID: e.ID, Role: roleOf(e.ID), Version: e.Version, Status: statusOffline, Hostname: e.Hostname, OSVersion: e.OSVersion}
 	out.withRegistry(e)
 	if e.Revoked {
 		out.Status = statusRevoked

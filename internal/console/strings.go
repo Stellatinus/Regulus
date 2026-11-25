@@ -22,9 +22,12 @@ type strs struct {
 	AppliesNow     string
 	AppliesRestart string
 	EnvOverride    string
-	Editing        string
-	Valid          string
-	Choices        string
+	// AgentListenDashboard is shown under agent_listen when its value comes
+	// from the dashboard (#423).
+	AgentListenDashboard string
+	Editing              string
+	Valid                string
+	Choices              string
 
 	LogsEmpty, LogsUnavailable string
 	LogsNoJournal              string
@@ -69,7 +72,7 @@ type strs struct {
 	// Durations: %d days, hours, minutes and seconds, largest unit first.
 	DurDays, DurHours, DurMinutes, DurSeconds string
 	// Where the value of a setting comes from (config.Origin*).
-	OriginDefault, OriginFile, OriginEnv string
+	OriginDefault, OriginFile, OriginEnv, OriginDashboard string
 	// States are the words for the systemd state of the service and the
 	// state of an agent, by the value systemd or the hub reports. A value
 	// that is missing here is shown as it is.
@@ -98,6 +101,15 @@ type strs struct {
 	PortServed, PortInUse, PortPrivileged, PortError, PortFree                 string
 	DataMissing, DataNotWritable, DataWritable                                 string
 	DBProblem, DBAnswers, DBLater, DBFile, DBNone                              string
+
+	// The view of a server that runs only the agent (#434), in a block of its
+	// own. AgentLink* say how the agent stands with the hub, read from its log.
+	AgentTitle, AgentRole, AgentLink, AgentID, AgentHost, AgentCert string
+	AgentLinkConnected, AgentLinkRetrying, AgentLinkRejected        string
+	AgentLinkUnknown, AgentLinkStopped, AgentNotEnrolled            string
+	AgentHintRejected, AgentHintNotEnrolled, AgentHintLog           string
+	AgentHelp, AgentRestartAsk                                      string
+	AgentMsgRestarting, AgentMsgRestarted, AgentMsgFailed           string
 
 	// Certificate end dates (#245), kept in a block of their own. CertAgent
 	// takes the agent; CertEnds takes the certificate, the date and the days
@@ -172,14 +184,15 @@ var en = strs{
 	SetupText:    "No administrator exists yet. Open the dashboard and enter this one-time setup token:",
 	SetupCLI:     "No browser? Create the administrator here: sudo -u regulus regulus hub create-admin -h",
 
-	SettingHeader:  [3]string{"Setting", "Value", "Source"},
-	Default:        "default",
-	AppliesNow:     "Applies as soon as it is saved.",
-	AppliesRestart: "The hub reads it at start: restart it to apply.",
-	EnvOverride:    "An environment variable overrides the file: saving here will not change what the hub uses.",
-	Editing:        "Editing",
-	Valid:          "will be saved as",
-	Choices:        "choices",
+	SettingHeader:        [3]string{"Setting", "Value", "Source"},
+	Default:              "default",
+	AppliesNow:           "Applies as soon as it is saved.",
+	AppliesRestart:       "The hub reads it at start: restart it to apply.",
+	EnvOverride:          "An environment variable overrides the file: saving here will not change what the hub uses.",
+	AgentListenDashboard: "Set from the dashboard (kept in the database). A value in the file or environment wins over it.",
+	Editing:              "Editing",
+	Valid:                "will be saved as",
+	Choices:              "choices",
 
 	LogsEmpty:       "No log lines.",
 	LogsUnavailable: "Cannot read the log",
@@ -229,17 +242,18 @@ var en = strs{
 	MsgSaved:              "Saved %s = %s.",
 	ResetLinkTitle:        "Password reset link",
 
-	Problem:       "Problem",
-	Empty:         "(empty)",
-	RunningUnsure: "running?",
-	Ago:           "%s ago",
-	DurDays:       "%dd %dh %dm",
-	DurHours:      "%dh %dm",
-	DurMinutes:    "%dm %ds",
-	DurSeconds:    "%ds",
-	OriginDefault: "default",
-	OriginFile:    "file",
-	OriginEnv:     "environment",
+	Problem:         "Problem",
+	Empty:           "(empty)",
+	RunningUnsure:   "running?",
+	Ago:             "%s ago",
+	DurDays:         "%dd %dh %dm",
+	DurHours:        "%dh %dm",
+	DurMinutes:      "%dm %ds",
+	DurSeconds:      "%ds",
+	OriginDefault:   "default",
+	OriginFile:      "file",
+	OriginEnv:       "environment",
+	OriginDashboard: "dashboard",
 	States: map[string]string{
 		"active": "active", "inactive": "inactive", "failed": "failed", "unknown": "unknown",
 		"activating": "starting", "deactivating": "stopping", "reloading": "reloading",
@@ -284,6 +298,28 @@ var en = strs{
 	DBLater:         "%s (checked while the hub runs; `regulus db check` tries it now)",
 	DBFile:          "%s, %s",
 	DBNone:          "none yet",
+
+	// The agent view (#434).
+	AgentTitle:           "Regulus agent",
+	AgentRole:            "Role",
+	AgentLink:            "Link to the hub",
+	AgentID:              "Agent id",
+	AgentHost:            "Host name",
+	AgentCert:            "Certificate",
+	AgentLinkConnected:   "connected",
+	AgentLinkRetrying:    "not connected, trying again",
+	AgentLinkRejected:    "the hub does not accept this agent (revoked or removed)",
+	AgentLinkUnknown:     "not known (no connection line in the recent log)",
+	AgentLinkStopped:     "the agent is not running",
+	AgentNotEnrolled:     "not enrolled",
+	AgentHintRejected:    "To use this server again: remove the agent data directory and enroll it with a new token (docs/remote-agents.md).",
+	AgentHintNotEnrolled: "Make a token in the hub's dashboard (Servers, Add a server) and run its install command on this server.",
+	AgentHintLog:         "The link is read from the agent's log; the hub's own list of servers is the authority.",
+	AgentHelp:            "tab/←/→ section  r restart the agent  q quit",
+	AgentRestartAsk:      "Restart the regulus-agent service now?",
+	AgentMsgRestarting:   "Restarting the agent…",
+	AgentMsgRestarted:    "The agent service was restarted.",
+	AgentMsgFailed:       "Could not restart: %s. Run: sudo systemctl restart regulus-agent",
 
 	// Certificate end dates (#245).
 	Certificates:   "Certificates",

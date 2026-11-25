@@ -863,6 +863,9 @@ func (m Model) settingsBody(w int) []string {
 	if e.Origin == config.OriginEnv {
 		out = append(out, " "+warnStyle.Render(T.EnvOverride))
 	}
+	if e.Origin == config.OriginDashboard {
+		out = append(out, " "+mutedStyle.Render(T.AgentListenDashboard))
+	}
 	if m.editing {
 		out = append(out, "", " "+headStyle.Render(T.Editing+" "+e.Key), " "+m.input.View())
 		if m.editErr != "" {

@@ -1,0 +1,12 @@
+role=agent
+version=v0.3.0
+service=active
+running=true
+hub=hub.example:8443
+link=connected
+enrolled=true
+agent_id=agent-7f3a
+hostname=web2
+cert_not_after=2027-02-01T00:00:00Z
+data_dir=/var/lib/regulus-agent
+config_file=/etc/regulus/agent.yaml

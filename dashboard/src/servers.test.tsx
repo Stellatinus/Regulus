@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, User } from "./api";
+import { FakeSocket } from "./fake-socket";
 import { LiveProvider } from "./LiveProvider";
 import { ServerPage } from "./ServerPage";
 import { agentCommand, installCommand, ServersPage } from "./ServersPage";
@@ -93,6 +94,22 @@ describe("ServersPage", () => {
     expect(calls[0].path).toBe("/api/agents?all=true");
   });
 
+  it("shows the role of every server, and the hub's own server says hub (#429)", async () => {
+    const hub: Agent = { ...online, id: "local", name: "Hub", role: "hub" };
+    const remote: Agent = { ...online, role: "agent" };
+    // A hub older than 0.3.0-alpha.2 sends no role: it is derived from the id.
+    const legacyRemote: Agent = { ...online, id: "w2", name: "Web2" };
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [hub, remote, legacyRemote, { ...online, id: "x", name: "Fancy", role: "redundant-hub" }] }) });
+    renderAs(viewer, <ServersPage />);
+
+    await screen.findByRole("link", { name: "Hub" });
+    const rowOf = (name: string) => screen.getByRole("link", { name }).closest("tr") as HTMLElement;
+    expect(within(rowOf("Hub")).getByText("hub")).toBeInTheDocument();
+    expect(within(rowOf("Web")).getByText("agent")).toBeInTheDocument();
+    expect(within(rowOf("Web2")).getByText("agent")).toBeInTheDocument();
+    expect(within(rowOf("Fancy")).getByText("redundant-hub")).toBeInTheDocument();
+  });
+
   it("tells which servers run another release than the hub", async () => {
     const behind: Agent = { ...online, id: "b", name: "Behind", compatibility: "behind", version: "0.2.1" };
     const ahead: Agent = { ...online, id: "a", name: "Ahead", compatibility: "ahead", version: "0.4.0" };
@@ -134,7 +151,35 @@ describe("ServersPage", () => {
     first.unmount();
 
     renderAs(admin, <ServersPage />);
+    // The form is closed until the + button of the title row opens it (#428).
+    const add = await screen.findByRole("button", { name: "Add a server" });
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Name (optional)")).not.toBeInTheDocument();
+    expect(add).toHaveAttribute("aria-expanded", "false");
+    await userEvent.setup().click(add);
     expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a server" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("puts the count of servers beside the title, and closes Add a server with Close or Escape (#428)", async () => {
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [online, offline] }) });
+    const user = userEvent.setup();
+    renderAs(admin, <ServersPage />);
+
+    const title = await screen.findByRole("heading", { name: "Servers", level: 2 });
+    const row = title.parentElement as HTMLElement;
+    expect(within(row).getByText("1 online")).toBeInTheDocument();
+    expect(within(row).getByText("1 offline")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Add a server" })).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Add a server" }));
+    expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Add a server" }));
+    await user.type(await screen.findByLabelText("Name (optional)"), "{Escape}");
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
   });
 
   it("shows the install command once the token is created", async () => {
@@ -153,6 +198,7 @@ describe("ServersPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     await user.type(await screen.findByLabelText("Name (optional)"), " Web ");
     await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
 
@@ -186,6 +232,7 @@ describe("ServersPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     expect(await screen.findByRole("heading", { name: "Pending enrollment tokens" })).toBeInTheDocument();
     expect(screen.getByText("(no name)")).toBeInTheDocument();
     expect(screen.getByText(/made by ana/)).toBeInTheDocument();
@@ -201,9 +248,154 @@ describe("ServersPage", () => {
     expect(screen.getByRole("button", { name: "Cancel token (no name)" })).toBeInTheDocument();
   });
 
+  describe("the command of a token that is no longer valid (#426)", () => {
+    const grant = { token: "tok123", name: "Web", expires_at: new Date(Date.now() + 3600_000).toISOString(), ca_fingerprint: "sha256:abcd", agent_port: 7443 };
+    const pendingToken = { id: "aaaa1111bbbb2222", name: "Web", created_by: "admin", created_at: now, expires_at: grant.expires_at };
+
+    it("clears the command when the token shown is cancelled", async () => {
+      let tokens: (typeof pendingToken)[] = [];
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: tokens }),
+        "POST /api/enrollment-tokens": () => {
+          tokens = [pendingToken];
+          return { data: grant };
+        },
+        "DELETE /api/enrollment-tokens/aaaa1111bbbb2222": () => {
+          tokens = [];
+          return { status: 204 };
+        },
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Cancel token Web" }));
+      await user.click(screen.getByRole("button", { name: "Cancel the token" }));
+
+      await waitFor(() => expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument());
+      expect(screen.queryByLabelText("Agent command")).not.toBeInTheDocument();
+      expect(screen.queryByText(/This token is shown only now/)).not.toBeInTheDocument();
+    });
+
+    it("clears the command and the pending entry, without a reload, when a server enrolls with the token", async () => {
+      let tokens: (typeof pendingToken)[] = [];
+      mockHub({
+        "GET /api/agents": () => ({ data: [] }),
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: tokens }),
+        "POST /api/enrollment-tokens": () => {
+          tokens = [pendingToken];
+          return { data: grant };
+        },
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await waitFor(() => expect(FakeSocket.last).toBeDefined());
+      act(() => FakeSocket.last.open());
+      act(() => FakeSocket.last.send({ type: "snapshot", stale_after_seconds: 30, agents: [] }));
+
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Cancel token Web" })).toBeInTheDocument();
+
+      // The server runs the command and enrolls: the hub no longer lists the
+      // token and sends agent.connected on the stream.
+      tokens = [];
+      act(() => FakeSocket.last.send({ type: "agent.connected", agent: { ...online, id: "agent-1", name: "Web" } }));
+
+      await waitFor(() => expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument());
+      expect(screen.queryByRole("button", { name: "Cancel token Web" })).not.toBeInTheDocument();
+      expect(screen.getByText(/no longer pending/)).toBeInTheDocument();
+    });
+
+    it("keeps the command while the list has not shown the new token yet", async () => {
+      // The list read right after the token was made may not have it; that is
+      // not the token being gone.
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: [] }),
+        "POST /api/enrollment-tokens": () => ({ data: grant }),
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.click(await screen.findByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByLabelText("Install command")).toBeInTheDocument();
+    });
+  });
+
+  describe("copying the commands (#427)", () => {
+    const grant = { token: "tok123", name: "Web", expires_at: new Date(Date.now() + 3600_000).toISOString(), ca_fingerprint: "sha256:abcd", agent_port: 7443 };
+
+    async function openWithCommand() {
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: [{ id: "aaaa1111bbbb2222", name: "Web", created_by: "admin", created_at: now, expires_at: grant.expires_at }] }),
+        "POST /api/enrollment-tokens": () => ({ data: grant }),
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      await screen.findByLabelText("Install command");
+      return user;
+    }
+
+    it("has icon buttons with a name and a tooltip, not the long text", async () => {
+      await openWithCommand();
+      for (const name of ["Copy install command", "Copy agent command"]) {
+        const button = screen.getByRole("button", { name });
+        expect(button).toHaveAttribute("title", name);
+        expect(button.textContent).toBe("");
+        expect(button.querySelector("svg")).not.toBeNull();
+      }
+    });
+
+    it("says on a line under the command, in the warning style, that the browser cannot copy", async () => {
+      // Plain HTTP: no clipboard API.
+      vi.stubGlobal("isSecureContext", false);
+      const user = await openWithCommand();
+      await user.click(screen.getByRole("button", { name: "Copy install command" }));
+
+      const warning = await screen.findByRole("alert");
+      expect(warning).toHaveTextContent("This browser cannot copy here");
+      expect(warning).toHaveClass("copy-warning");
+      // It is not beside the button: it follows the row that holds the command and the button.
+      const box = screen.getByLabelText("Install command").closest(".command-box") as HTMLElement;
+      expect(box.contains(warning)).toBe(true);
+      expect(warning.previousElementSibling).toHaveClass("command");
+      expect(warning.parentElement).toBe(box);
+      // The other command shows no message.
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    });
+
+    it("says Copied, and no warning, where copying works", async () => {
+      const writeText = vi.fn(() => Promise.resolve());
+      vi.stubGlobal("isSecureContext", true);
+      const user = await openWithCommand();
+      // user-event installs its own clipboard when it is set up: replace it.
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      await user.click(screen.getByRole("button", { name: "Copy agent command" }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("regulus agent")));
+      expect(await screen.findByText("Copied")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows nothing about tokens when none is pending", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [] }), "GET /api/enrollment-tokens": () => ({ data: [] }) });
     renderAs(admin, <ServersPage />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Add a server" }));
     await screen.findByRole("heading", { name: "Add a server" });
     expect(screen.queryByRole("heading", { name: "Pending enrollment tokens" })).not.toBeInTheDocument();
   });
@@ -221,7 +413,7 @@ describe("ServersPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Remote agents are off" })).toBeInTheDocument();
     // No token while it could not work.
-    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a server" })).not.toBeInTheDocument();
 
     const port = screen.getByLabelText("Port for remote agents");
     await user.clear(port);
@@ -231,7 +423,7 @@ describe("ServersPage", () => {
     await user.type(port, "8443");
     await user.click(screen.getByRole("button", { name: "Turn on remote agents" }));
 
-    expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add a server" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Remote agents are off" })).not.toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ port: 8443 });
   });
@@ -265,6 +457,7 @@ describe("ServersPage", () => {
     });
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     await user.click(await screen.findByRole("button", { name: "Create enrollment token" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("agent listener is off");
     expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument();
@@ -317,6 +510,41 @@ describe("ServerPage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("offline");
     expect(screen.queryByRole("region", { name: "CPU" })).not.toBeInTheDocument();
     expect(screen.getByText(/^2h .*ago$/)).toBeInTheDocument();
+  });
+
+  it("says at the top that an offline server is offline, since when, and that the data is the last known (#436)", async () => {
+    mockHub({ "GET /api/agents/db1": () => ({ data: offline }) });
+    renderAs(viewer, <ServerPage id="db1" />);
+
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("offline: last contact");
+    expect(notice).toHaveTextContent("2h");
+    expect(notice).toHaveTextContent("last known");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // The notice comes before the facts.
+    expect(notice.compareDocumentPosition(screen.getByText("Host")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says that a stale server has not reported, and keeps the page", async () => {
+    const stale: Agent = { ...online, status: "stale", last_heartbeat: new Date(Date.now() - 90_000).toISOString() };
+    mockHub({ "GET /api/agents/web1": () => ({ data: stale }) });
+    renderAs(viewer, <ServerPage id="web1" />);
+
+    const notice = await screen.findByText(/has not received a report/);
+    expect(notice).toBeInTheDocument();
+    expect(screen.getAllByText(/^stale$/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /Web/ })).toBeInTheDocument();
+  });
+
+  it("says the time and the state of a revoked server, and that it was never connected when so (#436)", async () => {
+    mockHub({ "GET /api/agents/old": () => ({ data: revoked }) });
+    renderAs(admin, <ServerPage id="old" />);
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("revoked: last contact");
+
+    mockHub({ "GET /api/agents/new": () => ({ data: { ...offline, id: "new", last_seen_at: undefined } }) });
+    renderAs(admin, <ServerPage id="new" />);
+    await waitFor(() => expect(screen.getAllByRole("status").some((n) => /never connected/.test(n.textContent ?? ""))).toBe(true));
   });
 
   it("says a revoked server cannot come back", async () => {
@@ -374,6 +602,21 @@ describe("ServerPage", () => {
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Revoke the server" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+  });
+
+  it("shows the role on the page of a server (#429)", async () => {
+    mockHub({
+      "GET /api/agents/local": () => ({ data: { ...online, id: "local", name: "Hub", role: "hub" } }),
+      "GET /api/agents/web1": () => ({ data: { ...online, role: "agent" } }),
+    });
+    const first = renderAs(viewer, <ServerPage id="local" />);
+    expect(await screen.findByText("Role")).toBeInTheDocument();
+    expect(screen.getAllByText("hub").length).toBeGreaterThan(1); // badge and fact
+    first.unmount();
+    renderAs(viewer, <ServerPage id="web1" />);
+    await screen.findByText("Role");
+    expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.queryByText("hub")).not.toBeInTheDocument();
   });
 
   it("does not offer to manage the built-in agent", async () => {

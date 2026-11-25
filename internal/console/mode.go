@@ -1,6 +1,9 @@
 // Package console is the interactive terminal console of Regulus and the
 // plain-text and JSON output that takes its place when no terminal UI is
-// wanted: what the hub is doing, its settings, its logs and health checks.
+// wanted: what the hub is doing, its settings, its logs and health checks. On
+// a server that runs only the agent it shows the agent's own, smaller view
+// (agentview.go). It changes things only when asked: a setting in the
+// configuration file, a restart of the unit, a password reset link.
 package console
 
 import (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { ApiError, CODE_REQUIRED, reauthenticate, setReauthHandler } from "./api";
 import { useT } from "./i18n";
 
@@ -20,6 +20,9 @@ export function StepUp({ twoFactor }: { twoFactor: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const pending = useRef<{ promise: Promise<boolean>; resolve: (ok: boolean) => void } | null>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  // The element that had the focus when the dialog opened gets it back.
+  const opener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const remove = setReauthHandler(() => {
@@ -29,6 +32,7 @@ export function StepUp({ twoFactor }: { twoFactor: boolean }) {
         resolve = r;
       });
       pending.current = { promise, resolve };
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setOpen(true);
       return promise;
     });
@@ -47,6 +51,30 @@ export function StepUp({ twoFactor }: { twoFactor: boolean }) {
     setCode("");
     setError(null);
     setBusy(false);
+    const back = opener.current;
+    opener.current = null;
+    if (back?.isConnected) back.focus();
+  };
+
+  // Tab and Shift+Tab stay inside the dialog; Escape closes it.
+  const keys = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      finish(false);
+      return;
+    }
+    if (e.key !== "Tab" || !dialog.current) return;
+    const items = Array.from(dialog.current.querySelectorAll<HTMLElement>("input, button")).filter((el) => !(el as HTMLInputElement).disabled);
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   };
 
   const submit = (e: FormEvent) => {
@@ -71,9 +99,8 @@ export function StepUp({ twoFactor }: { twoFactor: boolean }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="step-up-heading"
-        onKeyDown={(e) => {
-          if (e.key === "Escape") finish(false);
-        }}
+        ref={dialog}
+        onKeyDown={keys}
       >
         <form onSubmit={submit}>
           <h2 id="step-up-heading">{t("auth.stepUp.title")}</h2>
