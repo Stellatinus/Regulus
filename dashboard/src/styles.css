@@ -1482,6 +1482,8 @@ p.command input {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
 /* last-resort error screen (RootBoundary), shown when the app itself failed */
 .root-error {
   max-width: 36rem;
