@@ -319,6 +319,41 @@ describe("ServerPage", () => {
     expect(screen.getByText(/^2h .*ago$/)).toBeInTheDocument();
   });
 
+  it("says at the top that an offline server is offline, since when, and that the data is the last known (#436)", async () => {
+    mockHub({ "GET /api/agents/db1": () => ({ data: offline }) });
+    renderAs(viewer, <ServerPage id="db1" />);
+
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("offline: last contact");
+    expect(notice).toHaveTextContent("2h");
+    expect(notice).toHaveTextContent("last known");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // The notice comes before the facts.
+    expect(notice.compareDocumentPosition(screen.getByText("Host")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says that a stale server has not reported, and keeps the page", async () => {
+    const stale: Agent = { ...online, status: "stale", last_heartbeat: new Date(Date.now() - 90_000).toISOString() };
+    mockHub({ "GET /api/agents/web1": () => ({ data: stale }) });
+    renderAs(viewer, <ServerPage id="web1" />);
+
+    const notice = await screen.findByText(/has not received a report/);
+    expect(notice).toBeInTheDocument();
+    expect(screen.getAllByText(/^stale$/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /Web/ })).toBeInTheDocument();
+  });
+
+  it("says the time and the state of a revoked server, and that it was never connected when so (#436)", async () => {
+    mockHub({ "GET /api/agents/old": () => ({ data: revoked }) });
+    renderAs(admin, <ServerPage id="old" />);
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent("revoked: last contact");
+
+    mockHub({ "GET /api/agents/new": () => ({ data: { ...offline, id: "new", last_seen_at: undefined } }) });
+    renderAs(admin, <ServerPage id="new" />);
+    await waitFor(() => expect(screen.getAllByRole("status").some((n) => /never connected/.test(n.textContent ?? ""))).toBe(true));
+  });
+
   it("says a revoked server cannot come back", async () => {
     mockHub({ "GET /api/agents/old": () => ({ data: revoked }) });
     renderAs(admin, <ServerPage id="old" />);

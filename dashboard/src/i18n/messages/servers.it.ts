@@ -60,6 +60,9 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.server.updateOnlyNote":
     "L'agente di questo server ({version}) è troppo vecchio per questo hub. È connesso solo per poter essere aggiornato e fino ad allora non invia metriche. Aggiornalo dalla pagina Aggiornamenti.",
   "servers.server.offlineNote": "Questo server è offline. Le sue metriche ricompaiono qui quando il suo agente si riconnette.",
+  "servers.server.staleNote": "L'hub non riceve un rapporto da questo server da un po'. Il suo agente potrebbe riconnettersi da solo; i numeri qui sotto sono gli ultimi noti.",
+  "servers.server.lastContactAt": "ultimo contatto {date} ({ago})",
+  "servers.server.lastKnown": "Ciò che l'hub sa senza l'agente (nome, versione, scadenza del certificato, dischi registrati) è mostrato qui come ultimo noto. I grafici in tempo reale non vengono disegnati per un server non connesso.",
   "servers.server.nameLabel": "Nome",
   "servers.server.rename": "Rinomina",
   "servers.server.revoke": "Revoca questo server",

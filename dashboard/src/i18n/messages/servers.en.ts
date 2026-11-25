@@ -64,6 +64,9 @@ export const servers = {
   "servers.server.updateOnlyNote":
     "This server's agent ({version}) is too old for this hub. It is connected only so that it can be updated, and sends no metrics until then. Update it from the Updates page.",
   "servers.server.offlineNote": "This server is offline. Its metrics appear here again when its agent reconnects.",
+  "servers.server.staleNote": "The hub has not received a report from this server for a while. Its agent may reconnect by itself; the numbers below are the last known ones.",
+  "servers.server.lastContactAt": "last contact {date} ({ago})",
+  "servers.server.lastKnown": "What the hub knows without the agent (name, version, certificate end, disks it recorded) is shown here as last known. Live charts are not drawn for a server that is not connected.",
   "servers.server.nameLabel": "Name",
   "servers.server.rename": "Rename",
   "servers.server.revoke": "Revoke this server",
