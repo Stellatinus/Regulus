@@ -481,6 +481,16 @@ func newAPI(t *testing.T, addr string) *api {
 
 func (a *api) do(method, path string, body any, want int) []byte {
 	a.t.Helper()
+	status, out := a.send(method, path, body)
+	if status != want {
+		a.t.Fatalf("%s %s answered %d, want %d: %s", method, path, status, want, out)
+	}
+	return out
+}
+
+// send makes one request and returns the status and the body, whatever they are.
+func (a *api) send(method, path string, body any) (int, []byte) {
+	a.t.Helper()
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -502,10 +512,7 @@ func (a *api) do(method, path string, body any, want int) []byte {
 	}
 	defer func() { _ = res.Body.Close() }()
 	out, _ := io.ReadAll(res.Body)
-	if res.StatusCode != want {
-		a.t.Fatalf("%s %s answered %d, want %d: %s", method, path, res.StatusCode, want, out)
-	}
-	return out
+	return res.StatusCode, out
 }
 
 func (a *api) getJSON(path string, v any) {

@@ -211,9 +211,12 @@ func TestHistoryOffWritesNothing(t *testing.T) {
 // the migration on whichever backend the tests run.
 func TestHubKeepsTheHistoryAcrossARestart(t *testing.T) {
 	h := startHubWithConfig(t, config.Default())
-	waitFor(t, "a report", func() bool {
-		samples, _ := h.Metrics(BuiltinAgentID)
-		return len(samples) > 0
+	// The report reaches the history just after the live metrics, so the
+	// test waits for the open minute, not for a sample.
+	waitFor(t, "a report in the history", func() bool {
+		h.history.mu.Lock()
+		defer h.history.mu.Unlock()
+		return h.history.open[BuiltinAgentID] != nil || len(h.history.pending) > 0
 	})
 	h.history.now = func() time.Time { return time.Now().Add(2 * time.Minute) }
 	if err := h.history.flush(t.Context()); err != nil {

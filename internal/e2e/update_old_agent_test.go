@@ -90,7 +90,15 @@ func TestUpdateOfAnOlderAgentOverMTLS(t *testing.T) {
 
 	// Starting a rollout needs a recent proof of the password (step-up).
 	api.do("POST", "/api/account/reauth", map[string]string{"password": password}, 200)
-	api.do("POST", "/api/updates/rollout", map[string]any{"wave_size": 1}, 202)
+	// The hub asks GitHub for the release without a token, so it can find the
+	// request limit used up even when this test could still download: that is
+	// the same skip as above, not a failure.
+	if code, out := api.send("POST", "/api/updates/rollout", map[string]any{"wave_size": 1}); code != 202 {
+		if code == 502 && strings.Contains(string(out), `"update_upstream"`) && strings.Contains(string(out), "request limit") {
+			t.Skipf("GitHub's rate limit: %s", out)
+		}
+		t.Fatalf("POST /api/updates/rollout answered %d, want 202: %s", code, out)
+	}
 
 	// The agent has fetched the signed archive over mTLS and verified it, and
 	// has left its request for the helper.
