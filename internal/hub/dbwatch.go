@@ -18,9 +18,38 @@ const dbWatchInterval = 15 * time.Second
 type dbHealth struct {
 	mu      sync.Mutex
 	problem string
+	// first is closed when the first check of watchDatabase has recorded its
+	// result; it is made on first use.
+	first chan struct{}
 	// lost is set when another hub took over the database (#344); it goes
 	// away when this hub holds the lock again (#356), whatever the pings say.
 	lost string
+}
+
+// firstChecked returns a channel that is closed once the first check of
+// watchDatabase has recorded its result. It is never closed when the hub does
+// not watch its database (SQLite). A test that injects a state with set waits
+// for it, so the first check cannot overwrite what it injected.
+func (d *dbHealth) firstChecked() <-chan struct{} {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.first == nil {
+		d.first = make(chan struct{})
+	}
+	return d.first
+}
+
+func (d *dbHealth) markFirstChecked() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.first == nil {
+		d.first = make(chan struct{})
+	}
+	select {
+	case <-d.first:
+	default:
+		close(d.first)
+	}
 }
 
 func (d *dbHealth) setLost(p string) {
@@ -138,6 +167,7 @@ func (h *Hub) watchDatabase(ctx context.Context) {
 		t := time.NewTicker(dbWatchInterval)
 		defer t.Stop()
 		h.checkDatabase(ctx)
+		h.dbState.markFirstChecked()
 		for {
 			select {
 			case <-ctx.Done():
