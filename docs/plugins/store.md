@@ -52,21 +52,29 @@ It cannot be built yet, because a plugin outside this repository cannot import t
 
 ## Channels and versions
 
-A plugin's version is SemVer. **Its channel comes from the version, never from a file**, with the same rule as the core ([Decisions](../decisions.md), "Releases and channels"), plus one:
+A plugin's version is SemVer. **Its channel comes from the version, never from a file**, with the same rule as the core ([Decisions](../decisions.md), "Releases and channels"):
 
-| Channel | Version | Who is offered it | In which index |
-|---|---|---|---|
-| **stable** | `1.2.0` | everyone | `index.json` |
-| **beta** | `1.3.0-beta.2`, `-rc.1` | a hub that follows `beta` or `alpha` | `index.json` |
-| **alpha** | `1.3.0-alpha.1`, and any other pre-release not named `dev` | a hub that follows `alpha` | `index.json` |
-| **dev** | `1.3.0-dev.7` | **only a hub whose administrator turned on developer builds for that source** | `dev/index.json`, **never** `index.json` |
+| Channel | Version | Who is offered it |
+|---|---|---|
+| **stable** | `1.2.0` | everyone |
+| **beta** | `1.3.0-beta.2`, `-rc.1` | a hub that follows `beta` or `alpha` |
+| **alpha** | `1.3.0-alpha.1`, and any other pre-release | a hub that follows `alpha` |
 
-**Dev is for the maintainer.** It lets a work in progress be installed on their own hub, through the same path as every release, without anyone else seeing it in the store. There are two levels of invisibility:
+There is **no `dev` channel** (the maintainer's decision, 2026-11-25). Work that is not ready for anyone lives in one of two places:
 
-1. **no tag**: the plugin is in no index at all (a draft);
-2. **a `-dev.N` tag**: it is in the *dev index* only, a separate file. The Store page does not show the dev index, and a hub reads it only when the source has `dev: true` in the **hub's own configuration file** (so the page cannot turn it on; a dashboard administrator is not enough, as for the update policy's `max_channel`, [Updates](../updates.md)).
+1. **a directory with no tag** in regulus-plugins: it is in no index at all (a draft, an idea). The code is public, no hub is offered it;
+2. **the development repository**, for internal builds the maintainer wants to install on their own hub (below).
 
-A `-dev.N` version is **not** ordered against alphas and betas (SemVer would put `dev` after `beta`, which is wrong): the dev index is read alone, and inside it versions compare as SemVer. A hub that follows dev for a source gets the newest dev version of a plugin only if that plugin's dev index lists it, and never moves *from* a stable version to a dev one by itself: an administrator picks it.
+### The development repository
+
+A second repository, **`Stellatinus/regulus-plugins-dev`** *(proposed name)*, with **exactly the same layout and rules** as regulus-plugins, its own CI and its own signed index. It is **not special for the store**: it is a *source* that only the maintainer adds, as a `custom` source in their own hub's configuration file, with its signing identity pinned ([Other sources and trust](#other-sources-and-trust-regulus-plugins3)). Nothing about "dev" exists in the index format, the client or the Store page; the client only knows sources.
+
+- **A plugin starts there**, is released there as often as needed (alphas, anything), and is tried on the maintainer's own hub through the ordinary path.
+- **When it is ready it is moved to regulus-plugins**: its directory is copied (history can be kept with `git subtree split` or `git filter-repo`), and its first release there is the one the public index lists. The `id` does not change.
+- **The same `id` in two sources.** A hub that has both sources must not mix them. An installed plugin remembers the source it came from, updates come only from that source, and the same id offered by another source is shown as such and installed only if the administrator **changes the source** on purpose (the move from the dev repository to the official one is exactly that).
+- **Why a repository and not a channel:** no special case in the client, nothing in the public index to hide, nothing that could leak into it by a wrong tag; the cost is that a plugin's history is copied once when it is promoted, and that a second signing identity and a second set of repository settings exist.
+- **The development repository must be public** (a hub reads its index without credentials; plugin code is public anyway). It needs the same protections as regulus-plugins on `main` and on its signing environment, or whoever can push there can sign for the maintainer's hub.
+- **Sources in the hub's configuration file** (as opposed to added on the Store page) are part of the first store, because this needs them. What waits for the isolation work is *adding a source from the dashboard*, and the allowlist for people other than the maintainer.
 
 Other rules:
 
@@ -119,7 +127,6 @@ The client reads **one index per source**: a signed JSON file, small, at a fixed
 - **It carries everything needed to decide before downloading**: compatibility, requirements, the permissions the plugin asks for (shown **before** installing, as the design in [Plugins](README.md) already says), and a checksum per file. The client never has to unpack a plugin to know what it needs.
 - **Signed as the core's `latest.json` is** (#263): Sigstore keyless, the identity of the publishing workflow pinned by the client, `issued_at` and `expires` (21 days) so a replay or a frozen index is noticed, never an index older than the last one verified, and a weekly refresh. The checksums in the index are what make a downloaded file trustworthy; there is no second signature on each file, though a build-provenance attestation may be attached for people ([Releases](../releases.md)).
 - **The official identity is built into Regulus**, like `update.Repository`. A workflow that publishes from a branch (not from a tag) is weaker than the core's tag identity: it needs a protected `main`, an environment with required reviewers, and two-factor authentication for whoever can approve. Without them, whoever can push to `main` can sign for every hub. This is the same warning as in [Releases](../releases.md) and it is **not set up**.
-- **`dev/index.json` has the same format** and is signed the same way.
 - **The format has a `format` number** and follows the rules of [Versioning](../versioning.md): a client ignores fields it does not know, and refuses a `format` it does not speak with a message.
 
 ## Requirements
@@ -174,7 +181,7 @@ Where a requirement is **used** (how one plugin calls what another provides) is 
 - **Who writes the plugins directory.** The plugins directory must be owned by root ([Runtime](runtime.md), "Security"), and the hub runs as the unprivileged user `regulus`. So, as with the core, **a root helper does the installation** (the update helper, #215, or a sibling started the same way) after the hub has downloaded and verified the file. The helper checks the checksum again, and refuses what the local policy forbids. This is a real change to the helper and a part of the work.
 - **To agents**, the hub sends the verified plugin over the agent connection that already exists, as for the core's updates. An agent installs it through its own helper and says so in its next report.
 - **Yanked and removed.** A version marked `yanked` is hidden from new installs and offered no more as an update, but **stays in the index and stays downloadable** so a rollback or a pinned hub keeps working. A plugin removed from the catalog (such as `hello-world`) keeps its past versions the same way, with `yanked` set. Deleting a release breaks rollbacks and checksums (the same lesson as #439), so it is not done.
-- **A sideload** for developers: installing a package from a local file, through the same helper and the same checks except the index (a package whose checksum is not in a signed index is marked **unverified** and needs the administrator's explicit confirmation, shown in the plugin's state). It is how a `-dev` build is tried on one machine without any index.
+- **A sideload** for developers: installing a package from a local file, through the same helper and the same checks except the index (a package whose checksum is not in a signed index is marked **unverified** and needs the administrator's explicit confirmation, shown in the plugin's state). It is how a build is tried on one machine without any index.
 
 ## Kinds and audiences
 
@@ -204,7 +211,7 @@ What the maintainer wants is to give the dashboard to many people: administrator
 
 ## Other sources and trust (regulus-plugins#3)
 
-- **Sources are a list in the hub's configuration**: a name, an index address, a **trust level** (`official`, `custom`), the channel to follow, `dev` (a flag, see above), and for `custom` ones the **signing identity** to expect (an identity and an issuer, as in [Releases](../releases.md)).
+- **Sources are a list in the hub's configuration**: a name, an index address, a **trust level** (`official`, `custom`), the channel to follow, and for `custom` ones the **signing identity** to expect (an identity and an issuer, as in [Releases](../releases.md)).
 - **An unsigned or unverifiable index is refused**, not offered with a warning: plugins run as the agent's user, and for now can read everything the agent can ([Runtime](runtime.md), "Security").
 - **Adding a source is an act of trust**, and the page says so in plain words: a plugin is code that runs on the servers, and whoever signs the index decides what runs. It needs an administrator, an explicit confirmation naming the signer, and an entry in the audit log.
 - **An allowlist of signers** is the same list: only the identities an administrator has added are accepted, and the official one is there from the start.
@@ -221,7 +228,7 @@ What the maintainer wants is to give the dashboard to many people: administrator
 
 1. **The hosting of the index.** GitHub Pages is proposed because it avoids the API's rate limit; a release asset on a fixed tag is the alternative. Either needs the identity to be pinned.
 2. **One plugin policy or the core's.** Does `max_channel` of `/etc/regulus/update-policy.yaml` also cap plugins, or does a plugin have its own file?
-3. **Per-plugin channel and the `dev` ordering** (above) are the proposed answer; the maintainer may prefer a simpler one.
+3. **Per-plugin channel override** (above) is the proposed answer; the maintainer may prefer a simpler one.
 4. **Capability versions.** `@<major>` only, or a range? A major is simplest and enough until a plugin needs more.
 5. **Where capability names are registered**, and who may add one.
 6. **Per-entry audience**, which waits for #21.
@@ -237,5 +244,7 @@ What the maintainer wants is to give the dashboard to many people: administrator
 | Manifest: `kind`, `audience`, `needs`, versioned `provides` | Regulus | M6 |
 | The root helper installs and rolls back plugins | Regulus | M6 |
 | The layout, CI, release workflow and index publishing of regulus-plugins; the test plugins | regulus-plugins | M6 *(that repository has no milestones yet)* |
-| Other sources and the signer allowlist (`regulus-plugins#3`) | Regulus | after isolation is designed |
+| Sources in the configuration file, with a pinned signer (needed for the development repository): part of the store client | Regulus | M6 |
+| Adding a source from the dashboard, and the signer allowlist for people other than the maintainer (`regulus-plugins#3`) | Regulus | after isolation is designed |
+| Create `regulus-plugins-dev` with the same layout and CI | the maintainer creates it; the layout comes from regulus-plugins | M6 |
 | An Admin view and a Standard view of the dashboard | Regulus | M6, with #21 |
