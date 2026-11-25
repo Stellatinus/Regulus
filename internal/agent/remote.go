@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
@@ -174,4 +175,27 @@ func ClientKeepalive() keepalive.ClientParameters {
 		Timeout:             protocol.KeepaliveTimeout,
 		PermitWithoutStream: true,
 	}
+}
+
+// CheckHub makes the TLS handshake with the hub at hubAddr, and reports an
+// error unless the certificate it presents is signed by the CA these
+// credentials pin. It sends nothing else: no token and no message of the
+// protocol. `regulus agent set-hub` uses it to refuse an address that is not
+// this agent's hub, before it is written to the configuration.
+func (c *Credentials) CheckHub(ctx context.Context, hubAddr string) error {
+	tlsCfg, err := pki.PinnedClientTLS(pki.Fingerprint(c.CADER), &tls.Certificate{
+		Certificate: [][]byte{c.CertDER},
+		PrivateKey:  c.Key,
+	})
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	d := tls.Dialer{NetDialer: &net.Dialer{}, Config: tlsCfg}
+	conn, err := d.DialContext(ctx, "tcp", hubAddr)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net"
@@ -638,4 +639,47 @@ func editYAML(text, key, value string) (string, error) {
 	}
 	lines = append(lines[:end], append([]string{line}, lines[end:]...)...)
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+// SetAgentHub sets hub in the agent's configuration file (agent.yaml): the
+// address the agent connects to. The comments and the order of the file are
+// kept and the file is replaced in one step, like SetFile does for the hub's
+// configuration. The address must be host:port.
+func SetAgentHub(path, hub string) error {
+	host, port, err := net.SplitHostPort(hub)
+	if err != nil || host == "" {
+		return &SettingError{Code: ErrInvalid, Args: []string{fmt.Sprintf("hub %q must be host:port, such as hub.example:8443", hub)}, Err: fmt.Errorf("hub %q must be host:port", hub)}
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return &SettingError{Code: ErrInvalid, Args: []string{fmt.Sprintf("the port of hub %q must be a number from 1 to 65535", hub)}, Err: fmt.Errorf("hub %q has an invalid port", hub)}
+	}
+	defer lockDir(filepath.Dir(path))()
+	old, err := os.ReadFile(path)
+	if err != nil {
+		return &SettingError{Code: ErrReadFile, Args: []string{err.Error()}, Err: err}
+	}
+	// Quoted: an IPv6 address such as [::1]:8443 starts like a YAML list.
+	updated, err := editYAML(string(old), "hub", strconv.Quote(hub))
+	if err != nil {
+		return err
+	}
+	check := DefaultAgent()
+	dec := yaml.NewDecoder(strings.NewReader(updated))
+	dec.KnownFields(true)
+	if err := dec.Decode(&check); err != nil && !errors.Is(err, io.EOF) {
+		return &SettingError{Code: ErrUnreadable, Args: []string{path, err.Error()}, Err: err}
+	}
+	if check.Hub != hub {
+		return settingErr("hub", ErrHandEdit, path)
+	}
+	if updated == string(old) {
+		return nil
+	}
+	if err := writeConfig(path, []byte(updated)); err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			return &SettingError{Code: ErrWritePermission, Args: []string{err.Error()}, Err: err}
+		}
+		return &SettingError{Code: ErrWriteFile, Args: []string{err.Error()}, Err: err}
+	}
+	return nil
 }

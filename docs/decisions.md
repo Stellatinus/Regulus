@@ -445,6 +445,10 @@ GitHub's API answers 502, 503 or 504 now and then for a few seconds. `GitHubSour
 
 The `a` action of the console's Actions tab turns remote agents on (`agent_listen: ":8443"`) or, while they are on, off (empties `agent_listen`); both restart the hub. When the hub got the address from the dashboard (database, #423) the file does not decide it, so the console refuses with that reason instead of writing a file that changes nothing; turning it off from the dashboard is #459.
 
+## Agents: `regulus agent set-hub` for a hub whose address changed (#455)
+
+Only the agent connects, and it trusts its hub by the fingerprint of the hub's CA (`pki.PinnedClientTLS`), not by the address. So pointing an enrolled agent at another address is safe and needs no new enrollment. `regulus agent set-hub HOST:PORT` (`cmd/regulus/agent_set_hub.go`) does it in three steps: a TLS handshake with the pinned CA (`Credentials.CheckHub`, which sends nothing but the handshake), then `hub:` written into `agent.yaml` by `config.SetAgentHub` (comments kept, replaced in one step, owner and mode kept, an IPv6 address quoted), then a restart of `regulus-agent.service` when run as root. A refused address changes nothing; `--no-check` is for a hub that is off now. The advice for a changing address stays a **name** instead of an IP; the hub announcing all its addresses and discovery on the local network are not built and are left to #455, #109 and #162. Unit tests with a real TLS listener signed by a real CA and by another; not run on a real agent.
+
 ## Verification status
 
 The first signed releases exist (`v0.3.0-alpha.1` is the newest), but several parts have only been tested by unit and integration tests: the `.deb` on a clean Ubuntu system through systemd, the agent installer on a second server, and installing and rolling back an update with real systemd. They are checked together on a VM (#81). A first run on two real VMs was done on 2026-11-24 and covers part of this (the last item of this section says which part). Until the rest is run, try a release on a test server.
