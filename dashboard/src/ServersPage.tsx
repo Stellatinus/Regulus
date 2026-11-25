@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AgentList } from "./AgentList";
 import {
   createEnrollment,
@@ -11,6 +11,7 @@ import {
   type PendingEnrollment,
 } from "./api";
 import { useT } from "./i18n";
+import { useRoster } from "./LiveProvider";
 import { useCan } from "./session";
 import { ConfirmButton, CopyButton } from "./ui";
 import { errorMessage, useApiList, type ListState } from "./useApiList";
@@ -34,6 +35,17 @@ export function ServersPage() {
     };
   }, []);
   const off = listener != null && !listener.enabled;
+  // The list is read again when a server connects or leaves, so a server that
+  // just enrolled shows up without waiting for the next refresh (#426).
+  const connected = useRoster()
+    .map((a) => a.id)
+    .join(",");
+  const lastConnected = useRef(connected);
+  useEffect(() => {
+    if (lastConnected.current === connected) return;
+    lastConnected.current = connected;
+    setReload((n) => n + 1);
+  }, [connected]);
   // "Add a server" is needed rarely: it is closed until the + button of the
   // title row opens it (#428).
   const [adding, setAdding] = useState(false);
@@ -167,21 +179,54 @@ function AddServer({ onAdded, onClose }: { onAdded: () => void; onClose: () => v
   const [name, setName] = useState("");
   const [ttl, setTtl] = useState<string>("1h");
   const [grant, setGrant] = useState<Enrollment | null>(null);
+  // The shown command stops being valid when its token is no longer pending:
+  // it was cancelled, used or has expired. "listed" is set once the pending
+  // list has shown it, so the list read before the token existed does not
+  // count as the token having gone.
+  const [listed, setListed] = useState(false);
+  const [gone, setGone] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, reloadPending] = useApiList<PendingEnrollment>(fetchEnrollmentTokens);
 
+  // A server that connects may be the one that used the token: read the
+  // pending list again (the hub already sends agent.connected on the stream).
+  const connected = useRoster()
+    .map((a) => a.id)
+    .join(",");
+  const lastConnected = useRef(connected);
+  useEffect(() => {
+    if (lastConnected.current === connected) return;
+    lastConnected.current = connected;
+    reloadPending();
+  }, [connected, reloadPending]);
+
+  // State that follows from the list is adjusted while rendering, not in an
+  // effect (React redraws at once, without a frame with the stale command).
+  if (grant && pending.kind === "ready") {
+    const present = pending.items.some((tok) => sameToken(tok, grant));
+    if (present && !listed) setListed(true);
+    if (!present && listed) {
+      setGrant(null);
+      setListed(false);
+      setGone(true);
+    }
+  }
+
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setGone(false);
     setBusy(true);
     try {
       setGrant(await createEnrollment(name.trim(), ttl));
+      setListed(false);
       setName("");
       reloadPending();
       onAdded();
     } catch (err) {
       setGrant(null);
+      setListed(false);
       setError(errorMessage(err));
     } finally {
       setBusy(false);
@@ -226,6 +271,11 @@ function AddServer({ onAdded, onClose }: { onAdded: () => void; onClose: () => v
           {t("servers.add.createToken")}
         </button>
       </form>
+      {gone && (
+        <p role="status" className="muted">
+          {t("servers.add.tokenGone")}
+        </p>
+      )}
       {grant && (
         <div role="status" aria-label={t("servers.add.tokenLabel")} className="notice">
           <p>
@@ -244,16 +294,42 @@ function AddServer({ onAdded, onClose }: { onAdded: () => void; onClose: () => v
           <CommandBox label={t("servers.add.agentCommand")} copyLabel={t("servers.add.copyAgent")} command={agentCommand(grant, host)} />
         </div>
       )}
-      <PendingTokens state={pending} onChanged={reloadPending} />
+      <PendingTokens
+        state={pending}
+        onChanged={reloadPending}
+        onCancelled={(tok) => {
+          // Cancelling the token whose command is on the page removes the
+          // command at once: it is no longer valid.
+          if (grant && sameToken(tok, grant)) {
+            setGrant(null);
+            setListed(false);
+          }
+        }}
+      />
     </section>
   );
+}
+
+// sameToken tells whether a pending token is the one just created: the grant
+// has no id (the hub shows the secret once and keeps only its hash), so the
+// name and the end time identify it.
+function sameToken(pending: PendingEnrollment, grant: Enrollment): boolean {
+  return pending.name === grant.name && Date.parse(pending.expires_at) === Date.parse(grant.expires_at);
 }
 
 // PendingTokens lists the enrollment tokens nobody has used yet, so one that
 // was pasted where it should not have been can be cancelled. A list that
 // cannot be loaded (an older hub has none) is left out; it is not an error of
 // the page.
-function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollment>; onChanged: () => void }) {
+function PendingTokens({
+  state,
+  onChanged,
+  onCancelled,
+}: {
+  state: ListState<PendingEnrollment>;
+  onChanged: () => void;
+  onCancelled: (token: PendingEnrollment) => void;
+}) {
   const t = useT();
   const [error, setError] = useState("");
   if (state.kind === "error") return <p className="muted">{t("servers.pending.loadError")}</p>;
@@ -263,6 +339,7 @@ function PendingTokens({ state, onChanged }: { state: ListState<PendingEnrollmen
     setError("");
     try {
       await revokeEnrollmentToken(token.id);
+      onCancelled(token);
     } catch (err) {
       setError(errorMessage(err));
     }

@@ -289,6 +289,19 @@ export function usePluginsVersion(): number {
   );
 }
 
+// useRoster is the list of connected agents the live stream last told about
+// (a snapshot, then agent.connected and agent.disconnected). A page that must
+// react when a server enrolls and connects, such as Add a server, follows it
+// instead of polling. Without a provider it stays empty.
+export function useRoster(): Agent[] {
+  const store = useContext(LiveContext) ?? noStore;
+  return useSyncExternalStore(
+    (onChange) => store.subscribe(ROSTER, onChange),
+    () => store.roster,
+    () => store.roster,
+  );
+}
+
 // useConnection is the state of the live stream (/api/stream): connecting,
 // live or offline (retrying). Without a provider it reports "connecting".
 export function useConnection(): Connection {

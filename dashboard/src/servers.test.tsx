@@ -1,7 +1,8 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Agent, User } from "./api";
+import { FakeSocket } from "./fake-socket";
 import { LiveProvider } from "./LiveProvider";
 import { ServerPage } from "./ServerPage";
 import { agentCommand, installCommand, ServersPage } from "./ServersPage";
@@ -245,6 +246,90 @@ describe("ServersPage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel the token" }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel token Web" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Cancel token (no name)" })).toBeInTheDocument();
+  });
+
+  describe("the command of a token that is no longer valid (#426)", () => {
+    const grant = { token: "tok123", name: "Web", expires_at: new Date(Date.now() + 3600_000).toISOString(), ca_fingerprint: "sha256:abcd", agent_port: 7443 };
+    const pendingToken = { id: "aaaa1111bbbb2222", name: "Web", created_by: "admin", created_at: now, expires_at: grant.expires_at };
+
+    it("clears the command when the token shown is cancelled", async () => {
+      let tokens: (typeof pendingToken)[] = [];
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: tokens }),
+        "POST /api/enrollment-tokens": () => {
+          tokens = [pendingToken];
+          return { data: grant };
+        },
+        "DELETE /api/enrollment-tokens/aaaa1111bbbb2222": () => {
+          tokens = [];
+          return { status: 204 };
+        },
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+
+      await user.click(await screen.findByRole("button", { name: "Cancel token Web" }));
+      await user.click(screen.getByRole("button", { name: "Cancel the token" }));
+
+      await waitFor(() => expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument());
+      expect(screen.queryByLabelText("Agent command")).not.toBeInTheDocument();
+      expect(screen.queryByText(/This token is shown only now/)).not.toBeInTheDocument();
+    });
+
+    it("clears the command and the pending entry, without a reload, when a server enrolls with the token", async () => {
+      let tokens: (typeof pendingToken)[] = [];
+      mockHub({
+        "GET /api/agents": () => ({ data: [] }),
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: tokens }),
+        "POST /api/enrollment-tokens": () => {
+          tokens = [pendingToken];
+          return { data: grant };
+        },
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await waitFor(() => expect(FakeSocket.last).toBeDefined());
+      act(() => FakeSocket.last.open());
+      act(() => FakeSocket.last.send({ type: "snapshot", stale_after_seconds: 30, agents: [] }));
+
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Cancel token Web" })).toBeInTheDocument();
+
+      // The server runs the command and enrolls: the hub no longer lists the
+      // token and sends agent.connected on the stream.
+      tokens = [];
+      act(() => FakeSocket.last.send({ type: "agent.connected", agent: { ...online, id: "agent-1", name: "Web" } }));
+
+      await waitFor(() => expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument());
+      expect(screen.queryByRole("button", { name: "Cancel token Web" })).not.toBeInTheDocument();
+      expect(screen.getByText(/no longer pending/)).toBeInTheDocument();
+    });
+
+    it("keeps the command while the list has not shown the new token yet", async () => {
+      // The list read right after the token was made may not have it; that is
+      // not the token being gone.
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: [] }),
+        "POST /api/enrollment-tokens": () => ({ data: grant }),
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.click(await screen.findByRole("button", { name: "Create enrollment token" }));
+      expect(await screen.findByLabelText("Install command")).toBeInTheDocument();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(screen.getByLabelText("Install command")).toBeInTheDocument();
+    });
   });
 
   it("shows nothing about tokens when none is pending", async () => {

@@ -93,6 +93,7 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.add.shownOnce": "Questo token è mostrato solo ora: copia il comando prima di lasciare la pagina.",
   "servers.add.close": "Chiudi",
   "servers.add.createToken": "Crea token di registrazione",
+  "servers.add.tokenGone": "Questo token non è più in attesa: è stato usato, annullato o è scaduto, quindi il suo comando non funziona più. Se un server si è registrato con esso, è nell'elenco.",
   "servers.add.tokenLabel": "Token di registrazione",
   "servers.add.instructions":
     "Esegui questo comando sul server che vuoi aggiungere (Ubuntu o Debian, come utente che può usare sudo). Installa Regulus, registra il server e avvia l'agente. Il token vale una sola volta e scade il {expires}. Non viene mostrato di nuovo.",

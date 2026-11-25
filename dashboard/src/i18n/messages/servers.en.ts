@@ -102,6 +102,7 @@ export const servers = {
   "servers.add.shownOnce": "This token is shown only now: copy the command before leaving the page.",
   "servers.add.close": "Close",
   "servers.add.createToken": "Create enrollment token",
+  "servers.add.tokenGone": "This token is no longer pending: it was used, cancelled or has expired, so its command no longer works. If a server enrolled with it, it is in the list.",
   "servers.add.tokenLabel": "Enrollment token",
   "servers.add.instructions":
     "Run this on the server you want to add (Ubuntu or Debian, as a user that can use sudo). It installs Regulus, enrolls the server and starts the agent. The token works once and expires at {expires}. It is not shown again.",
