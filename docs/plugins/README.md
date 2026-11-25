@@ -10,7 +10,9 @@ This folder is the guide to the plugin system. Read the pages in order:
 |---|---|---|
 | [Manifest](manifest.md) | `plugin.yaml`: id, version, plugin API, the Regulus versions it needs, components, permissions | implemented (#19) |
 | [Runtime](runtime.md) | how Regulus finds, starts, checks, restarts and stops plugins; the contract on the socket; limits and security; where their state is shown | implemented on the agent (#19) and the hub (#262) |
-| [Writing a plugin](writing-a-plugin.md) | the example plugin, making your own step by step, the SDK for Go, other languages, packaging | implemented (#19, #22) |
+| [Writing a plugin](writing-a-plugin.md) | the example plugin, making your own step by step, the SDK for Go, other languages, packaging | implemented (#19, regulus-plugins#2) |
+
+**Where the issues are.** The plugin store and the plugins themselves live in their own repository, [Stellatinus/regulus-plugins](https://github.com/Stellatinus/regulus-plugins). The issues about the store moved there on 2026-11-25: the lifecycle, index and installation (formerly #20) is `regulus-plugins#1`, the example plugin and guide (formerly #22) `regulus-plugins#2`, third-party plugins (formerly #23) `regulus-plugins#3`, and the plugin for free-tier cloud servers (formerly #163) `regulus-plugins#4`. The runtime, the contract, the SDK, the host side of plugins (#261), the isolation (#267), the dashboard widgets (#21) and the tests of the runtime stay here, with the code. A reference written `regulus-plugins#N` is an issue of the other repository.
 
 The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/plugin/sdk` (for plugins written in Go), `proto/regulus/plugin/v1` (the contract) and `plugins/example-hello` (the example).
 
@@ -24,10 +26,10 @@ The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/pl
 | Running plugins on the hub | #262 | **implemented** (`plugins_dir` of the hub), tests with real processes; **not verified** on an installed hub |
 | State of the plugins outside the log | #262 | **implemented**: `GET /api/plugins` (hub and agents), the console's Status tab and `regulus status` (hub); agents report theirs with their metrics; and the dashboard's **Plugins** page (`dashboard/src/PluginsPage.tsx`), which reads `GET /api/plugins` again when the hub pushes `plugins.changed`. The page was opened on a real hub with no plugin directory on 2026-11-24 and said so; it has **not been checked** with a running plugin on an installed hub (#310, #327) |
 | The host side of plugin features (what a plugin can ask Regulus for, how its data reaches the dashboard) | #19 follow-up | **not designed**: today a plugin can only prove it runs and is healthy |
-| Index, installation, updates, removal, signatures, per-plugin update mode | #20 | designed below, not implemented |
+| Index, installation, updates, removal, signatures, per-plugin update mode | regulus-plugins#1 | designed below, not implemented |
 | Dashboard widgets loaded at runtime | #21 | designed below, not implemented (the manifest already accepts `components.ui`) |
-| Example plugin and developer guide | #22 | **done as far as the system goes**: the example (agent and hub component, state in its data directory, health, a provisional widget), a step-by-step guide and a packaging script. A *real* plugin that does something for the dashboard needs the host side (open question 1) and the widget loader (#21) |
-| Third-party plugins | #23 | after the internal system is stable |
+| Example plugin and developer guide | regulus-plugins#2 | **done as far as the system goes**: the example (agent and hub component, state in its data directory, health, a provisional widget), a step-by-step guide and a packaging script. A *real* plugin that does something for the dashboard needs the host side (open question 1) and the widget loader (#21) |
+| Third-party plugins | regulus-plugins#3 | after the internal system is stable |
 | Skills for the AI assistant | #68 | `skills` is not accepted in the manifest yet |
 
 ## Core and plugins are versioned separately
@@ -39,13 +41,13 @@ Two numbers tie them together, both checked when a plugin starts:
 - **`api`**: the plugin API version the plugin speaks, the contract in `proto/regulus/plugin/v1` and the meaning of `plugin.yaml`. Regulus runs plugins whose `api` is between `plugin.MinAPIVersion` and `plugin.APIVersion` (both 1 today). See [Versioning](../versioning.md).
 - **`requires`**: the range of Regulus releases the plugin works with, for example `">=0.3.0 <0.5.0"`.
 
-## Index, installation and updates (#20, design)
+## Index, installation and updates (regulus-plugins#1, design)
 
-- CI publishes an `index.json` listing each plugin, its versions, **checksums** and **compatibility** (`api`, `requires`). The format has a `source` field so other sources can be added later (#23).
+- CI publishes an `index.json` listing each plugin, its versions, **checksums** and **compatibility** (`api`, `requires`). The format has a `source` field so other sources can be added later (regulus-plugins#3).
 - The hub installs, updates and removes plugins from the dashboard, shows the requested permissions before installing, verifies signatures and distributes the plugin to the agents that need it, over the agents' existing connection, like the core's updates.
 - The same three update modes as the core (`manual`, `download`, `automatic`), with a per-plugin override.
 - A plugin's version can be **pinned**, and the previous version is kept for a **rollback**.
-- *Proposed* layout on disk once versions are kept side by side: `<plugins dir>/<id>/<version>/` with `<id>/current` naming the one that runs. Today a plugin is `<plugins dir>/<id>/` (see [Runtime](runtime.md)); the change is for #20 to make.
+- *Proposed* layout on disk once versions are kept side by side: `<plugins dir>/<id>/<version>/` with `<id>/current` naming the one that runs. Today a plugin is `<plugins dir>/<id>/` (see [Runtime](runtime.md)); the change is for regulus-plugins#1 to make.
 
 ## Dashboard widgets (#21, design)
 
@@ -57,23 +59,23 @@ A module served from the hub's own origin passes the Content-Security-Policy and
 
 - **A widget never runs in the dashboard's page.** It runs in an `<iframe sandbox="allow-scripts">` **without** `allow-same-origin`, which gives it an opaque origin: no cookie, no `localStorage`, no access to the parent's DOM, and `fetch` to the hub arrives without the session. The module is served with its own response header `Content-Security-Policy: sandbox allow-scripts; default-src 'none'; script-src 'self'` so that opening its URL directly gives it the same empty origin, and with `connect-src 'none'`: the frame cannot call out.
 - **The only door is `postMessage`.** The dashboard answers a small set of messages from the frame (read the metric series the widget declared, read its own plugin's data, show a notification) and forwards each one as an ordinary API call **made by the dashboard for the plugin id**, which the hub checks against the permissions of the manifest the administrator approved, and against the viewer's own permissions as well (the narrower of the two wins). Nothing in this API writes, until a later design adds write operations with their own approval (#261).
-- **No exception for first-party plugins.** A signed first-party plugin would be easier to run in the page, but that makes the rule depend on a list and a signature that #23 has not designed; one mechanism for every plugin keeps the example plugin (#22) honest.
+- **No exception for first-party plugins.** A signed first-party plugin would be easier to run in the page, but that makes the rule depend on a list and a signature that regulus-plugins#3 has not designed; one mechanism for every plugin keeps the example plugin (regulus-plugins#2) honest.
 - **Cost:** a widget cannot share a stylesheet or a React tree with the dashboard. It gets the theme as a few CSS variables sent in the first message and a size from the frame. #21 decides the message format; this section decides that it is not the page.
 
 [Decisions](../decisions.md) records the choice. #21 and #261 must follow it.
 
-## Repository layout (#22)
+## Repository layout (regulus-plugins#2)
 
 Internal plugins live in `plugins/<id>/` in this repository, with the manifest and the source next to each other. The first one is `plugins/example-hello`.
 
-## Third-party plugins (#23)
+## Third-party plugins (regulus-plugins#3)
 
 Later, after the internal plugin system is stable: extra index sources, an **allowlist of trusted signers**, warnings for unsigned plugins and sandboxed permissions. Until then, formats are kept ready for it.
 
 ## Open questions
 
 1. **What a plugin can do.** The contract has only `Describe` and `Health`. What a plugin offers (metrics for the dashboard, commands an administrator runs, data the hub stores) and what it may ask of the host (a key-value store, the hub's audit log, the agent's connection) is the next design step. It must say how the permissions of the manifest are enforced.
-2. **Dependencies between plugins.** What happens when a plugin that others depend on (through `provides`) is updated or removed? Block, warn, or update the dependents together? #20 does not say yet. `provides` is accepted but unused.
+2. **Dependencies between plugins.** What happens when a plugin that others depend on (through `provides`) is updated or removed? Block, warn, or update the dependents together? regulus-plugins#1 does not say yet. `provides` is accepted but unused.
 3. **Tag format.** Is `plugin/<id>/vX.Y.Z` confirmed, and does the release workflow publish plugins from those tags?
 4. **Plugin signatures.** Do internal plugins use the same Sigstore keyless signature as core releases?
 5. **Isolation.** A plugin runs as the same user as the agent, with the same systemd sandbox. A user per plugin, or a stricter sandbox, is open (see [Runtime](runtime.md), "Security").

@@ -57,7 +57,7 @@ type Manifest struct {
 	Components Components `yaml:"components"`
 	// Permissions are what the plugin asks to be allowed. They become
 	// permissions an administrator can give to roles (#61); the plugin gets
-	// none of them by itself (#20).
+	// none of them by itself (regulus-plugins#1).
 	Permissions []Permission `yaml:"permissions"`
 	// Provides names integration points other plugins can use. Reserved: no
 	// plugin can depend on another yet (docs/plugins/README.md).

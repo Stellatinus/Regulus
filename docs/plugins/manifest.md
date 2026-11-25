@@ -62,7 +62,7 @@ Versions are compared as SemVer, with **one exception**: `<X.Y.Z` also leaves ou
 
 Each permission has an `id` that starts with the plugin id and a dot (`docker.containers.read`), and a `description`, which is what an administrator reads before allowing it. An id may appear only once.
 
-Permissions in the manifest are a **request**. They will become permissions that an administrator can give to roles, like the core's (#61), when plugins are installed from the dashboard (#20). **Nothing enforces them yet:** a plugin can do whatever the user it runs as can do. See [Runtime](runtime.md), "Security".
+Permissions in the manifest are a **request**. They will become permissions that an administrator can give to roles, like the core's (#61), when plugins are installed from the dashboard (regulus-plugins#1). **Nothing enforces them yet:** a plugin can do whatever the user it runs as can do. See [Runtime](runtime.md), "Security".
 
 ## Checking a manifest
 

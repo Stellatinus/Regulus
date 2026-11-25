@@ -11,7 +11,7 @@ Plugins are off by default. Name a plugins directory in the configuration:
 | agent | `plugins_dir` in `agent.yaml` | `--plugins-dir` | `REGULUS_AGENT_PLUGINS_DIR` | empty: no plugin runs |
 | hub | `plugins_dir` in `config.yaml` (also `regulus config set plugins_dir ...`) | `--plugins-dir` | `REGULUS_PLUGINS_DIR` | empty: no plugin runs |
 
-Restart the agent or the hub after changing it. The plugins directory is read once, at start: adding or removing a plugin needs a restart until the dashboard can install plugins (#20). A plugins directory that does not exist means no plugins; one that cannot be read is logged and shown as a problem in `GET /api/plugins`.
+Restart the agent or the hub after changing it. The plugins directory is read once, at start: adding or removing a plugin needs a restart until the dashboard can install plugins (regulus-plugins#1). A plugins directory that does not exist means no plugins; one that cannot be read is logged and shown as a problem in `GET /api/plugins`.
 
 The hub runs its plugins beside its servers (`Hub.Serve`, `internal/hub/plugins.go`): the sockets are in `<data_dir>/plugins-run`, the plugins' data in `<data_dir>/plugins-data/<id>`. A plugin with only an `agent` component is not started on the hub, and the other way round. The hub's built-in agent runs no plugins.
 
@@ -111,7 +111,7 @@ What is protected today:
 - the system against a forgotten process: process groups are stopped;
 - a wrong program: identity check, and the command must stay inside the plugin directory.
 
-What is **not** protected yet, and must be before plugins come from anywhere but this repository (#20, #23):
+What is **not** protected yet, and must be before plugins come from anywhere but this repository (regulus-plugins#1, regulus-plugins#3):
 
 - **Same user, same sandbox.** A plugin runs as the agent's user (`regulus`) under the agent's systemd hardening. It can read what the agent can read, including the agent's key in its data directory. On the hub it runs as the hub's user and can read what the hub can read: the database file (SQLite), `secret.key`, the CA key and `/etc/regulus/regulus.env` with the database password. The clean environment keeps the password out of the plugin's variables, **not** out of its reach: a hub plugin must be trusted as much as the hub. A user per plugin, or a stricter sandbox (systemd transient units, Landlock), is an open question.
 - **No signature check.** Whatever is in the plugins directory runs. Who can write that directory controls what runs, so keep it owned by root and not writable by `regulus`.
@@ -122,4 +122,4 @@ The restart rules bound how often a broken plugin costs a start: at most 6 start
 
 ## Not verified
 
-The runtime has run in tests with real processes, sockets and signals, on Linux. It has **not** run on an installed agent or hub under its systemd unit. The unit's hardening (`MemoryDenyWriteExecute`, `SystemCallFilter`, `ProtectSystem`) applies to plugins as well, and some plugins may need it relaxed. A `[Test]` issue should cover this before the first real plugin (#22).
+The runtime has run in tests with real processes, sockets and signals, on Linux. It has **not** run on an installed agent or hub under its systemd unit. The unit's hardening (`MemoryDenyWriteExecute`, `SystemCallFilter`, `ProtectSystem`) applies to plugins as well, and some plugins may need it relaxed. A `[Test]` issue should cover this before the first real plugin (regulus-plugins#2).

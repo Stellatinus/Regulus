@@ -17,6 +17,6 @@
 //   - sdk/: what a plugin written in Go uses to serve the contract.
 //
 // It does not install, update or remove plugins, check their signatures, or
-// give them any permission (#20); it does not load dashboard widgets (#21).
+// give them any permission (regulus-plugins#1); it does not load dashboard widgets (#21).
 // The design is in docs/plugins/.
 package plugin
