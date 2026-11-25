@@ -797,6 +797,49 @@ help_lists() { run_script --help | grep -q -- "$1"; }
 check "the help lists --db-local" help_lists --db-local
 check "the help lists --db-reuse" help_lists --db-reuse
 
+# The report at the end of a hub installation (#421, #422). The system is
+# replaced by stubs: journalctl has an old setup token, systemctl says whether
+# the unit is active, and wait_for_hub records that it was called.
+report_case() { # first_install was_active unit_now hub_answers
+	(
+		CONFIG_DIR=$tmp/report-etc
+		mkdir -p "$CONFIG_DIR"
+		SUDO=
+		version=9.9.9
+		first_install=$1
+		was_active=$2
+		unit_now=$3
+		answers=$4
+		REGULUS_LISTEN=127.0.0.1:8080
+		REGULUS_TLS_CERT=
+		export REGULUS_LISTEN REGULUS_TLS_CERT
+		hostname() { echo 10.0.0.9; }
+		journalctl() { echo 'level=INFO msg="setup" setup_token=OLDTOKEN123'; }
+		systemctl() { [ "$unit_now" = active ]; }
+		wait_for_hub() { echo waited >>"$tmp/waited"; [ "$answers" = yes ]; }
+		report 2>&1
+	)
+}
+rm -f "$tmp/waited"
+out=$(report_case 0 1 active yes)
+case $out in *"Setup token"*) fail "an upgrade prints no setup token" ;; *) pass "an upgrade prints no setup token" ;; esac
+case $out in *"first admin"*) fail "an upgrade does not say to create the first admin" ;; *) pass "an upgrade does not say to create the first admin" ;; esac
+case $out in *"9.9.9 is installed and running"*"127.0.0.1:8080"*) pass "an upgrade prints the version and the dashboard address" ;; *) fail "an upgrade prints the version and the dashboard address" ;; esac
+out=$(report_case 1 0 active yes)
+case $out in *"Setup token: OLDTOKEN123"*) pass "a first installation prints the setup token" ;; *) fail "a first installation prints the setup token" ;; esac
+case $out in *"create the first admin"*) pass "a first installation says to create the first admin" ;; *) fail "a first installation says to create the first admin" ;; esac
+# A service that was stopped before and is stopped after is left as it was.
+rm -f "$tmp/waited"
+out=$(report_case 0 0 inactive no)
+case $out in *warning*) fail "a service left stopped gives no warning" ;; *) pass "a service left stopped gives no warning" ;; esac
+case $out in *"left stopped"*"systemctl start regulus"*) pass "a service left stopped says so and how to start it" ;; *) fail "a service left stopped says so and how to start it" ;; esac
+check_not "a service left stopped is not waited for" test -e "$tmp/waited"
+# An active service that does not answer still warns.
+out=$(report_case 0 1 active no)
+case $out in *"did not answer within 30 seconds"*) pass "an active service that does not answer still warns" ;; *) fail "an active service that does not answer still warns" ;; esac
+out=$(report_case 0 1 inactive no)
+case $out in *"did not answer within 30 seconds"*) pass "a service that stopped during the upgrade still warns" ;; *) fail "a service that stopped during the upgrade still warns" ;; esac
+
 if [ "$failures" -ne 0 ]; then
 	printf '%d test(s) failed\n' "$failures"
 	exit 1
