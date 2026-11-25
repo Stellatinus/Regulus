@@ -332,6 +332,66 @@ describe("ServersPage", () => {
     });
   });
 
+  describe("copying the commands (#427)", () => {
+    const grant = { token: "tok123", name: "Web", expires_at: new Date(Date.now() + 3600_000).toISOString(), ca_fingerprint: "sha256:abcd", agent_port: 7443 };
+
+    async function openWithCommand() {
+      mockHub({
+        "GET /api/agents?all=true": () => ({ data: [] }),
+        "GET /api/enrollment-tokens": () => ({ data: [{ id: "aaaa1111bbbb2222", name: "Web", created_by: "admin", created_at: now, expires_at: grant.expires_at }] }),
+        "POST /api/enrollment-tokens": () => ({ data: grant }),
+      });
+      const user = userEvent.setup();
+      renderAs(admin, <ServersPage />);
+      await user.click(await screen.findByRole("button", { name: "Add a server" }));
+      await user.type(await screen.findByLabelText("Name (optional)"), "Web");
+      await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
+      await screen.findByLabelText("Install command");
+      return user;
+    }
+
+    it("has icon buttons with a name and a tooltip, not the long text", async () => {
+      await openWithCommand();
+      for (const name of ["Copy install command", "Copy agent command"]) {
+        const button = screen.getByRole("button", { name });
+        expect(button).toHaveAttribute("title", name);
+        expect(button.textContent).toBe("");
+        expect(button.querySelector("svg")).not.toBeNull();
+      }
+    });
+
+    it("says on a line under the command, in the warning style, that the browser cannot copy", async () => {
+      // Plain HTTP: no clipboard API.
+      vi.stubGlobal("isSecureContext", false);
+      const user = await openWithCommand();
+      await user.click(screen.getByRole("button", { name: "Copy install command" }));
+
+      const warning = await screen.findByRole("alert");
+      expect(warning).toHaveTextContent("This browser cannot copy here");
+      expect(warning).toHaveClass("copy-warning");
+      // It is not beside the button: it follows the row that holds the command and the button.
+      const box = screen.getByLabelText("Install command").closest(".command-box") as HTMLElement;
+      expect(box.contains(warning)).toBe(true);
+      expect(warning.previousElementSibling).toHaveClass("command");
+      expect(warning.parentElement).toBe(box);
+      // The other command shows no message.
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+    });
+
+    it("says Copied, and no warning, where copying works", async () => {
+      const writeText = vi.fn(() => Promise.resolve());
+      vi.stubGlobal("isSecureContext", true);
+      const user = await openWithCommand();
+      // user-event installs its own clipboard when it is set up: replace it.
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      await user.click(screen.getByRole("button", { name: "Copy agent command" }));
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining("regulus agent")));
+      expect(await screen.findByText("Copied")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+  });
+
   it("shows nothing about tokens when none is pending", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [] }), "GET /api/enrollment-tokens": () => ({ data: [] }) });
     renderAs(admin, <ServersPage />);

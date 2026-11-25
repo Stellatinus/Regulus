@@ -13,7 +13,7 @@ import {
 import { useT } from "./i18n";
 import { useRoster } from "./LiveProvider";
 import { useCan } from "./session";
-import { ConfirmButton, CopyButton } from "./ui";
+import { ConfirmButton, CopyIconButton } from "./ui";
 import { errorMessage, useApiList, type ListState } from "./useApiList";
 
 // ServersPage lists the servers and, for those who may manage servers, adds new
@@ -374,12 +374,24 @@ function PendingTokens({
   );
 }
 
+// CommandBox shows a command in a box that keeps the whole row but for a
+// square icon button. Where the browser cannot copy (the clipboard API needs
+// HTTPS or localhost) the way to do it by hand is a line of its own under the
+// command, in the warning colour (#427).
 function CommandBox({ label, copyLabel, command }: { label: string; copyLabel: string; command: string }) {
   const t = useT();
+  const [manual, setManual] = useState(false);
   return (
-    <p className="command">
-      <input readOnly value={command} aria-label={label} onFocus={(e) => e.target.select()} className="mono" />{" "}
-      <CopyButton text={command} label={copyLabel} copiedLabel={t("servers.add.copied")} />
-    </p>
+    <div className="command-box">
+      <p className="command">
+        <input readOnly value={command} aria-label={label} onFocus={(e) => e.target.select()} className="mono" />
+        <CopyIconButton text={command} label={copyLabel} copiedLabel={t("servers.add.copied")} onResult={(ok) => setManual(!ok)} />
+      </p>
+      {manual && (
+        <p role="alert" className="copy-warning">
+          {t("ui.copyManual")}
+        </p>
+      )}
+    </div>
   );
 }
