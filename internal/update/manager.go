@@ -643,7 +643,11 @@ func (m *Manager) Check(ctx context.Context) (Status, error) {
 		return Status{}, ErrTooSoon
 	}
 	m.mu.Unlock()
-	st, err := m.check(ctx)
+	// A check asked for from the dashboard runs to its end even when the
+	// browser stops waiting (a reload, another page): otherwise its request
+	// would be cancelled half way and nothing learnt. check has its own time
+	// limit (checkTimeout).
+	st, err := m.check(context.WithoutCancel(ctx))
 	if err != nil {
 		return Status{}, err
 	}
@@ -696,6 +700,11 @@ func (m *Manager) check(ctx context.Context) (Status, error) {
 	case serr != nil:
 		m.mu.Unlock()
 		return Status{}, serr
+	case err != nil && ctx.Err() != nil:
+		// The caller went away (the hub is stopping): the release server did
+		// not fail, so nothing is recorded and the last result stays.
+		m.mu.Unlock()
+		return Status{}, ctx.Err()
 	case err != nil:
 		// Keep what the last good check found; only the error is new.
 		m.state.CheckError = err.Error()
