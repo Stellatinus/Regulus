@@ -111,16 +111,36 @@ function savedCollapsed(): boolean {
   }
 }
 
+// How long the live stream may stay down before the indicator turns to the
+// error colour (#435). A hub restart takes a few seconds and the dashboard
+// reconnects by itself, so a shorter outage is only a warning.
+export const LONG_OUTAGE_MS = 60_000;
+
 // LiveState shows whether the live updates (/api/stream) are flowing:
-// colour and a word, announced politely when it changes.
-function LiveState() {
+// colour and a word, announced politely when it changes. Connected is green
+// ("Online"); connecting or reconnecting is the warning colour; the error
+// colour and its own text come only when the stream stayed down for
+// LONG_OUTAGE_MS.
+export function LiveState() {
   const t = useT();
   const connection = useConnection();
-  const look = {
-    live: { sev: "var(--ok)", text: t("live.connected") },
-    connecting: { sev: "var(--warn)", text: t("live.connecting") },
-    offline: { sev: "var(--crit)", text: t("live.lost") },
-  }[connection];
+  const [longOutage, setLongOutage] = useState(false);
+  const live = connection === "live";
+  useEffect(() => {
+    if (live) return;
+    const timer = setTimeout(() => setLongOutage(true), LONG_OUTAGE_MS);
+    return () => {
+      clearTimeout(timer);
+      setLongOutage(false);
+    };
+  }, [live]);
+  const look = live
+    ? { sev: "var(--ok)", text: t("live.connected") }
+    : longOutage
+        ? { sev: "var(--crit)", text: t("live.failed") }
+      : connection === "connecting"
+          ? { sev: "var(--warn)", text: t("live.connecting") }
+          : { sev: "var(--warn)", text: t("live.lost") };
   return (
     <span className="live-state" role="status" style={{ "--sev": look.sev } as React.CSSProperties} title={t("live.title")}>
       <i aria-hidden="true" />

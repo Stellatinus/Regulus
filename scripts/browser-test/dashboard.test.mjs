@@ -90,7 +90,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByRole("heading", { name: "Servers" }).first().waitFor();
       assert.equal(await page.getByRole("link", { name: "web1" }).count(), 0, "no server yet");
       // The page is open on a live stream (a WebSocket) before the agent exists.
-      await page.getByText("Live", { exact: true }).waitFor();
+      await page.getByText("Online", { exact: true }).waitFor();
 
       await context.request.post("/api/account/reauth", { data: { password: PASSWORD } });
       const res = await context.request.post("/api/enrollment-tokens", { data: { name: "web1" } });
