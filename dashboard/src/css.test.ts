@@ -1,5 +1,9 @@
+// @ts-expect-error the dashboard has no Node type definitions; vitest runs in Node
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+
+// The hub of the test is the working directory: vitest runs from dashboard/.
+const stylesheet = (): string => readFileSync("src/styles.css", "utf8") as string;
 
 // An unclosed block in styles.css swallows every rule after it (#425: the
 // step-up dialog lost its overlay and ended up at the bottom of the page).
@@ -12,7 +16,7 @@ function rule(css: string, selector: string): string {
 
 describe("styles.css", () => {
   it("makes the widget title a drag handle that cannot be selected, in edit mode only (#430)", () => {
-    const css = readFileSync("src/styles.css", "utf8");
+    const css = stylesheet();
     const handle = rule(css, ".grid.editing .widget-title");
     expect(handle).toContain("user-select: none");
     expect(handle).toContain("-webkit-user-select: none");
@@ -22,7 +26,7 @@ describe("styles.css", () => {
   });
 
   it("has balanced braces", () => {
-    const css = readFileSync("src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const css = stylesheet().replace(/\/\*[\s\S]*?\*\//g, "");
     let depth = 0;
     for (const ch of css) {
       if (ch === "{") depth++;
