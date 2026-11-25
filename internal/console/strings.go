@@ -50,8 +50,10 @@ type strs struct {
 	ActRestart, ActRestartInfo           string
 	ActReset, ActResetInfo               string
 	ActAgents, ActAgentsInfo             string
+	ActAgentsOff, ActAgentsOffInfo       string
 	ActUnavailable                       string
 	AgentsAsk                            string
+	AgentsOffAsk                         string
 	NewAgentTitle, NewAgentText          string
 	NewAgentAddress, NewAgentFingerprint string
 	NewAgentToken                        string
@@ -59,6 +61,8 @@ type strs struct {
 	// Messages shown after an action. Most are fmt templates: the verbs are
 	// documented where they are used (internal/console/tui.go).
 	MsgAgentsFailed, MsgAgentsSaved, MsgAgentsOn string
+	MsgAgentsOffFailed, MsgAgentsOffSaved        string
+	MsgAgentsOff, MsgTurningOff                  string
 	MsgRestartFailed, MsgRestartUnavailable      string
 	MsgRestarting, MsgRestarted                  string
 	MsgLinkFailed, MsgLinkReady, MsgMakingLink   string
@@ -83,13 +87,13 @@ type strs struct {
 	SettingInfo map[string]string
 
 	// Why an action of the Actions tab cannot run here.
-	WhyRestart       string // %s: the systemd unit
-	WhyReset         string
-	WhyAgentsOn      string // %s: the agent address
-	WhyNoConfig      string
-	WhyEnvAgents     string // %s: the environment variable
-	NoConfigToChange string
-	FingerprintLater string
+	WhyRestart         string // %s: the systemd unit
+	WhyReset           string
+	WhyNoConfig        string
+	WhyEnvAgents       string // %s: the environment variable
+	WhyDashboardAgents string
+	NoConfigToChange   string
+	FingerprintLater   string
 
 	// Health checks: the status words of the text output, the names of the
 	// checks and their details (the %s are documented where they are used,
@@ -220,8 +224,11 @@ var en = strs{
 	ActResetInfo:        "Makes a one-time link to choose a new password, for when nobody can sign in. Needs root or the hub's user.",
 	ActAgents:           "Turn on remote agents",
 	ActAgentsInfo:       "Sets agent_listen to :8443 and restarts the hub, so other servers can connect. Needs root.",
+	ActAgentsOff:        "Turn off remote agents",
+	ActAgentsOffInfo:    "Empties agent_listen and restarts the hub: the remote servers disconnect and stay enrolled. Needs root.",
 	ActUnavailable:      "not available",
 	AgentsAsk:           "Turn on remote agents on port 8443 and restart the hub?",
+	AgentsOffAsk:        "Turn off remote agents and restart the hub? The remote servers disconnect until they are turned on again.",
 	NewAgentTitle:       "Adding a server",
 	NewAgentText:        "Remote agents are on. On the new server, the installer needs:",
 	NewAgentAddress:     "Hub address",
@@ -239,6 +246,10 @@ var en = strs{
 	MsgLinkReady:          "Open the link below to choose a new password. It works once.",
 	MsgMakingLink:         "Making the link…",
 	MsgTurningOn:          "Turning on remote agents…",
+	MsgTurningOff:         "Turning off remote agents…",
+	MsgAgentsOff:          "Remote agents are off.",
+	MsgAgentsOffSaved:     "Saved: agent_listen is empty.",
+	MsgAgentsOffFailed:    "Could not turn off remote agents: %s. Open the console with sudo, or set agent_listen by hand.",
 	MsgSaved:              "Saved %s = %s.",
 	ResetLinkTitle:        "Password reset link",
 
@@ -260,13 +271,13 @@ var en = strs{
 		"connected": "connected", "stale": "stale", "offline": "offline", "revoked": "revoked",
 	},
 
-	WhyRestart:       "run: sudo systemctl restart %s",
-	WhyReset:         "run the console as root, or run: sudo regulus hub reset-admin",
-	WhyAgentsOn:      "already on (%s)",
-	WhyNoConfig:      "there is no configuration file: start the console with --config FILE",
-	WhyEnvAgents:     "%s overrides the configuration file",
-	NoConfigToChange: "there is no configuration file to change: start the console with --config FILE",
-	FingerprintLater: "shown while the hub runs",
+	WhyRestart:         "run: sudo systemctl restart %s",
+	WhyReset:           "run the console as root, or run: sudo regulus hub reset-admin",
+	WhyNoConfig:        "there is no configuration file: start the console with --config FILE",
+	WhyEnvAgents:       "%s overrides the configuration file",
+	WhyDashboardAgents: "they were turned on from the dashboard, which keeps the address in the hub's database: they cannot be turned off from here yet",
+	NoConfigToChange:   "there is no configuration file to change: start the console with --config FILE",
+	FingerprintLater:   "shown while the hub runs",
 
 	StatusOK:   "ok",
 	StatusWarn: "warn",

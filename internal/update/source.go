@@ -105,6 +105,10 @@ type GitHubSource struct {
 	// UserAgent identifies the hub to GitHub.
 	UserAgent string
 	Client    *http.Client
+	// RetryWaits are the pauses before asking again after an answer that
+	// says the server is busy for a moment (502, 503, 504); nil means
+	// defaultRetryWaits. Each retry is one more of the 60 requests an hour.
+	RetryWaits []time.Duration
 
 	// allowHTTP lets tests use a plain HTTP server.
 	allowHTTP bool
@@ -158,7 +162,7 @@ func (g *GitHubSource) Releases(ctx context.Context) ([]Release, error) {
 	var all []Release
 	newETag := ""
 	for page := 1; page <= maxPages; page++ {
-		raw, tag, notModified, err := g.page(ctx, page, etag)
+		raw, tag, notModified, err := g.pageWithRetry(ctx, page, etag)
 		if err != nil {
 			return nil, err
 		}
@@ -203,6 +207,39 @@ func hasStable(releases []Release) bool {
 	return false
 }
 
+// defaultRetryWaits: GitHub answers 502, 503 or 504 now and then for a few
+// seconds; asking again twice, after 2 and then 5 seconds, gets past most of
+// them without a person having to press the button again.
+var defaultRetryWaits = []time.Duration{2 * time.Second, 5 * time.Second}
+
+// errServerBusy is an answer that says the release server cannot answer for a
+// moment (502, 503, 504): worth asking again shortly.
+type errServerBusy struct{ err error }
+
+func (e errServerBusy) Error() string { return e.err.Error() }
+func (e errServerBusy) Unwrap() error { return e.err }
+
+// pageWithRetry is page, asked again after the waits of RetryWaits while the
+// server answers that it is busy.
+func (g *GitHubSource) pageWithRetry(ctx context.Context, n int, etag string) ([]ghRelease, string, bool, error) {
+	waits := g.RetryWaits
+	if waits == nil {
+		waits = defaultRetryWaits
+	}
+	for i := 0; ; i++ {
+		raw, tag, notModified, err := g.page(ctx, n, etag)
+		var busy errServerBusy
+		if err == nil || !errors.As(err, &busy) || i >= len(waits) {
+			return raw, tag, notModified, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, "", false, err
+		case <-time.After(waits[i]):
+		}
+	}
+}
+
 // page reads one page of the list. With etag set, a 304 answer is reported
 // as notModified.
 func (g *GitHubSource) page(ctx context.Context, n int, etag string) (raw []ghRelease, tag string, notModified bool, err error) {
@@ -238,6 +275,8 @@ func (g *GitHubSource) page(ctx context.Context, n int, etag string) (raw []ghRe
 		return nil, "", true, nil
 	case res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusTooManyRequests:
 		return nil, "", false, rateLimited(res)
+	case res.StatusCode == http.StatusBadGateway || res.StatusCode == http.StatusServiceUnavailable || res.StatusCode == http.StatusGatewayTimeout:
+		return nil, "", false, errServerBusy{fmt.Errorf("the release server answered %s", res.Status)}
 	case res.StatusCode != http.StatusOK:
 		return nil, "", false, fmt.Errorf("the release server answered %s", res.Status)
 	}
