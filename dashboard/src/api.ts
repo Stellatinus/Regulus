@@ -6,6 +6,10 @@ export interface Agent {
   id: string;
   // The name an admin gave the server, if any.
   name?: string;
+  // The node role: "hub" for the hub's own server, "agent" for the others.
+  // Absent from a hub older than 0.3.0-alpha.2 (see agentRole); node types
+  // may refine it later, so an unknown value is shown as it is.
+  role?: string;
   version: string;
   // offline and revoked only come with fetchAgents(.., true): enrolled agents
   // that are not connected.
@@ -1074,7 +1078,12 @@ export const fetchAgentDisks = (id: string, signal?: AbortSignal) =>
   ).then((r) => r.disks);
 
 export const fetchDiskMoves = (limit = 200, signal?: AbortSignal) =>
-  request<DiskMove[]>("GET", `/api/disks/moves?limit=${limit}`, undefined, signal);
+  request<{ moves: DiskMove[] }>(
+    "GET",
+    `/api/disks/moves?limit=${limit}`,
+    undefined,
+    signal,
+  ).then((r) => r.moves);
 
 export const fetchPlugins = (signal?: AbortSignal) =>
   request<PluginsStatus>("GET", "/api/plugins", undefined, signal);

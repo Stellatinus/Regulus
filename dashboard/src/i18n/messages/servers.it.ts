@@ -60,13 +60,18 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.server.updateOnlyNote":
     "L'agente di questo server ({version}) è troppo vecchio per questo hub. È connesso solo per poter essere aggiornato e fino ad allora non invia metriche. Aggiornalo dalla pagina Aggiornamenti.",
   "servers.server.offlineNote": "Questo server è offline. Le sue metriche ricompaiono qui quando il suo agente si riconnette.",
+  "servers.server.staleNote": "L'hub non riceve un rapporto da questo server da un po'. Il suo agente potrebbe riconnettersi da solo; i numeri qui sotto sono gli ultimi noti.",
+  "servers.server.lastContactAt": "ultimo contatto {date} ({ago})",
+  "servers.server.lastKnown": "Ciò che l'hub sa senza l'agente (nome, versione, scadenza del certificato, dischi registrati) è mostrato qui come ultimo noto. I grafici in tempo reale non vengono disegnati per un server non connesso.",
   "servers.server.nameLabel": "Nome",
   "servers.server.rename": "Rinomina",
   "servers.server.revoke": "Revoca questo server",
   "servers.server.revokeConfirm": "Revocare {name}? Verrà disconnesso e non potrà mai più connettersi.",
   "servers.server.revokeYes": "Revoca il server",
   "servers.server.manage": "Gestione",
-  "servers.server.hubBadge": "hub",
+  "servers.fact.role": "Ruolo",
+  "servers.role.hub": "hub",
+  "servers.role.agent": "agent",
 
   "servers.remoteOff.title": "Gli agenti remoti sono disattivati",
   "servers.remoteOff.intro":
@@ -86,7 +91,9 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.add.ttl24h": "24 ore",
   "servers.add.ttl7d": "7 giorni",
   "servers.add.shownOnce": "Questo token è mostrato solo ora: copia il comando prima di lasciare la pagina.",
+  "servers.add.close": "Chiudi",
   "servers.add.createToken": "Crea token di registrazione",
+  "servers.add.tokenGone": "Questo token non è più in attesa: è stato usato, annullato o è scaduto, quindi il suo comando non funziona più. Se un server si è registrato con esso, è nell'elenco.",
   "servers.add.tokenLabel": "Token di registrazione",
   "servers.add.instructions":
     "Esegui questo comando sul server che vuoi aggiungere (Ubuntu o Debian, come utente che può usare sudo). Installa Regulus, registra il server e avvia l'agente. Il token vale una sola volta e scade il {expires}. Non viene mostrato di nuovo.",
@@ -219,6 +226,8 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.disks.reason.duplicate": "due dischi segnalano lo stesso identificativo",
   "servers.disks.reason.other": "nessun identificativo affidabile",
   "servers.disks.moves.title": "Spostamenti di dischi",
+  "servers.disks.moves.loadError": "Impossibile caricare gli spostamenti dei dischi: {message}",
+  "servers.panel.failed": "Questa parte della pagina ha avuto un errore: {message}",
   "servers.disks.moves.none": "Nessun disco è passato da o verso questo server.",
   "servers.disks.moves.column.when": "Quando",
   "servers.disks.moves.column.disk": "Disco",

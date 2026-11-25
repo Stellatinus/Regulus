@@ -64,13 +64,19 @@ export const servers = {
   "servers.server.updateOnlyNote":
     "This server's agent ({version}) is too old for this hub. It is connected only so that it can be updated, and sends no metrics until then. Update it from the Updates page.",
   "servers.server.offlineNote": "This server is offline. Its metrics appear here again when its agent reconnects.",
+  "servers.server.staleNote": "The hub has not received a report from this server for a while. Its agent may reconnect by itself; the numbers below are the last known ones.",
+  "servers.server.lastContactAt": "last contact {date} ({ago})",
+  "servers.server.lastKnown": "What the hub knows without the agent (name, version, certificate end, disks it recorded) is shown here as last known. Live charts are not drawn for a server that is not connected.",
   "servers.server.nameLabel": "Name",
   "servers.server.rename": "Rename",
   "servers.server.revoke": "Revoke this server",
   "servers.server.revokeConfirm": "Revoke {name}? It will be disconnected and can never connect again.",
   "servers.server.revokeYes": "Revoke the server",
   "servers.server.manage": "Manage",
-  "servers.server.hubBadge": "hub",
+  // The node role (docs/glossary.md): the hub's own server is the hub, every other one is an agent.
+  "servers.fact.role": "Role",
+  "servers.role.hub": "hub",
+  "servers.role.agent": "agent",
 
   // Remote agents are off (ServersPage).
   "servers.remoteOff.title": "Remote agents are off",
@@ -94,7 +100,9 @@ export const servers = {
   "servers.add.ttl24h": "24 hours",
   "servers.add.ttl7d": "7 days",
   "servers.add.shownOnce": "This token is shown only now: copy the command before leaving the page.",
+  "servers.add.close": "Close",
   "servers.add.createToken": "Create enrollment token",
+  "servers.add.tokenGone": "This token is no longer pending: it was used, cancelled or has expired, so its command no longer works. If a server enrolled with it, it is in the list.",
   "servers.add.tokenLabel": "Enrollment token",
   "servers.add.instructions":
     "Run this on the server you want to add (Ubuntu or Debian, as a user that can use sudo). It installs Regulus, enrolls the server and starts the agent. The token works once and expires at {expires}. It is not shown again.",
@@ -234,6 +242,8 @@ export const servers = {
   "servers.disks.reason.duplicate": "two disks report the same identifier",
   "servers.disks.reason.other": "no reliable identifier",
   "servers.disks.moves.title": "Moves of disks",
+  "servers.disks.moves.loadError": "Could not load the disk moves: {message}",
+  "servers.panel.failed": "This part of the page failed: {message}",
   "servers.disks.moves.none": "No disk has moved to or from this server.",
   "servers.disks.moves.column.when": "When",
   "servers.disks.moves.column.disk": "Disk",

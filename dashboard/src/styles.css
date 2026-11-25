@@ -1570,3 +1570,46 @@ p.command input {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* the right end of a title row: the + button of the Servers page (#428) */
+.title-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+button.icon-button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* a command that can be copied: the box keeps the row, the button is a square (#427) */
+.command-box {
+  min-width: 0;
+}
+
+.command-box p.command {
+  margin: 0;
+  /* an icon button fits beside the box at a phone width too */
+  flex-direction: row;
+  align-items: center;
+}
+
+.command-box p.command input {
+  min-width: 0;
+}
+
+.copy-warning {
+  margin: 6px 0 0;
+  color: var(--warn);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+button.icon-button svg {
+  display: block;
+}

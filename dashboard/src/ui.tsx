@@ -1,5 +1,40 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { useT } from "./i18n";
+
+// PanelBoundary keeps an error inside one panel of a page: the panel shows
+// its own message and the rest of the page stays (#424). RootBoundary is
+// only for what no panel could catch.
+export class PanelBoundary extends Component<
+  { name: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`panel "${this.props.name}" failed`, error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) return <PanelFailed message={this.state.error.message} />;
+    return this.props.children;
+  }
+}
+
+function PanelFailed({ message }: { message: string }) {
+  const t = useT();
+  return <p role="alert">{t("servers.panel.failed", { message })}</p>;
+}
 
 // Shared pieces of the web UI (#91): the inline confirmation that replaces
 // the browser's confirm(), the narrow-screen row menu and a media query hook.
@@ -108,6 +143,57 @@ export async function copyText(text: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// CopyIconButton copies a value from a button that is only an icon: it has an
+// accessible name and a tooltip (label), takes a square of its own and never
+// grows with its text. It shows a check for a moment and says "Copied" to
+// screen readers. It tells the caller the result, so that a failure can be
+// written where the caller has room (under the command, #427) instead of
+// beside the button.
+export function CopyIconButton({
+  text,
+  label,
+  copiedLabel,
+  onResult,
+}: {
+  text: string;
+  label: string;
+  copiedLabel?: string;
+  onResult?: (ok: boolean) => void;
+}) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={label}
+        title={label}
+        onClick={() =>
+          void copyText(text).then((ok) => {
+            setCopied(ok);
+            onResult?.(ok);
+          })
+        }
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          {copied ? (
+            <path d="M3 8.5l3.2 3.2L13 4.8" />
+          ) : (
+            <>
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+              <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+            </>
+          )}
+        </svg>
+      </button>
+      <span role="status" className="visually-hidden">
+        {copied ? (copiedLabel ?? t("ui.copied")) : ""}
+      </span>
+    </>
+  );
 }
 
 // CopyButton copies a value and says "Copied", or, where the browser cannot

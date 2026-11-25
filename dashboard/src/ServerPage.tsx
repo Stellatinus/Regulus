@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  agentRole,
   displayName,
   lastContact,
+  roleLabel,
   statusLabel,
   versionNote,
 } from "./AgentList";
@@ -16,7 +18,7 @@ import {
 import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
-import { ConfirmButton } from "./ui";
+import { ConfirmButton, PanelBoundary } from "./ui";
 import { daysLeft } from "./CertificateBanner";
 import { useT } from "./i18n";
 import { registry } from "./widgets";
@@ -124,14 +126,19 @@ function Details({
         <span className={`status ${agent.status}`}>
           {statusLabel(agent, t)}
         </span>
-        {agent.id === "local" && (
-          <span className="status hub">{t("servers.server.hubBadge")}</span>
+        {agentRole(agent) === "hub" && (
+          <span className="status hub">{roleLabel(agent, t)}</span>
         )}
       </div>
+      <ConnectionNotice agent={agent} />
       <dl className="facts server-facts">
         <div>
           <dt>{t("servers.fact.id")}</dt>
           <dd>{agent.id}</dd>
+        </div>
+        <div>
+          <dt>{t("servers.fact.role")}</dt>
+          <dd>{roleLabel(agent, t)}</dd>
         </div>
         <div>
           <dt>{t("servers.fact.host")}</dt>
@@ -180,7 +187,11 @@ function Details({
       {canManage && agent.id !== "local" && (
         <Manage agent={agent} onChanged={onChanged} />
       )}
-      {canSeeDisks && <DisksPanel serverId={agent.id} />}
+      {canSeeDisks && (
+        <PanelBoundary name="disks">
+          <DisksPanel serverId={agent.id} />
+        </PanelBoundary>
+      )}
       {online ? (
         <div className="server-grid">
           {WIDGETS.map((w) => {
@@ -207,22 +218,58 @@ function Details({
             );
           })}
         </div>
-      ) : (
-        <p role="status" className="notice warn">
-          {agent.update_only
-            ? t("servers.server.updateOnlyNote", { version: agent.version })
-            : agent.status === "revoked"
-              ? t("servers.server.revokedNote")
-              : agent.status === "incompatible"
-                ? t("servers.server.incompatibleNote", {
-                    reason:
-                      agent.incompatible_reason ??
-                      t("servers.server.incompatibleFallback"),
-                  })
-                : t("servers.server.offlineNote")}
-        </p>
-      )}
+      ) : null}
     </>
+  );
+}
+
+// ConnectionNotice sits at the top of the page of a server that is not sending
+// live data (#436). It says the state and since when, and that what follows
+// is what the hub last knew; the live widgets are not drawn for a server that
+// is offline, so nothing looks alive.
+function ConnectionNotice({ agent }: { agent: Agent }) {
+  const t = useT();
+  const stale = agent.status === "stale";
+  const online = agent.status === "connected" && !agent.update_only;
+  if (online) return null;
+
+  const when = stale ? agent.last_heartbeat : (agent.last_seen_at ?? null);
+  const since = when
+    ? t("servers.server.lastContactAt", {
+        date: new Date(when).toLocaleString(),
+        ago: lastContact(agent, t),
+      })
+    : t("servers.list.neverConnected");
+
+  let detail: string;
+  if (agent.update_only) {
+    detail = t("servers.server.updateOnlyNote", { version: agent.version });
+  } else if (agent.status === "revoked") {
+    detail = t("servers.server.revokedNote");
+  } else if (agent.status === "incompatible") {
+    detail = t("servers.server.incompatibleNote", {
+      reason:
+        agent.incompatible_reason ?? t("servers.server.incompatibleFallback"),
+    });
+  } else if (stale) {
+    detail = t("servers.server.staleNote");
+  } else {
+    detail = t("servers.server.offlineNote");
+  }
+
+  const lastKnown =
+    agent.status === "stale" ||
+    agent.status === "offline" ||
+    agent.status === "revoked";
+  return (
+    <div role="status" className="notice warn">
+      <p>
+        <strong>{statusLabel(agent, t)}</strong>
+        {lastKnown ? `: ${since}` : null}
+      </p>
+      <p>{detail}</p>
+      {lastKnown && <p className="muted">{t("servers.server.lastKnown")}</p>}
+    </div>
   );
 }
 

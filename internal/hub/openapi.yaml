@@ -1947,6 +1947,14 @@ components:
       required: [id, version, status, connected_at, last_heartbeat, metrics_at, uptime_seconds]
       properties:
         id: { type: string }
+        role:
+          type: string
+          description: |
+            The node role of the server: `hub` for the hub's own server (the
+            built-in agent, id `local`) and `agent` for every other one. Node
+            types (redundant hub, backup node, ...) may refine it later, so a
+            client shows a value it does not know as it is. Absent from a hub
+            older than 0.3.0-alpha.2.
         name:
           type: string
           description: The name an admin gave the server; absent if none, then show the host name.

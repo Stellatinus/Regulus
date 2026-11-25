@@ -69,6 +69,11 @@ export function DisksPanel({ serverId }: { serverId: string }) {
           </table>
         ))}
       <h4>{t("servers.disks.moves.title")}</h4>
+      {moves.kind === "error" && (
+        <p role="alert">
+          {t("servers.disks.moves.loadError", { message: moves.message })}
+        </p>
+      )}
       {moves.kind === "ready" && (
         <Moves moves={moves.items} serverId={serverId} />
       )}
