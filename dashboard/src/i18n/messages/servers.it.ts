@@ -219,6 +219,8 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.disks.reason.duplicate": "due dischi segnalano lo stesso identificativo",
   "servers.disks.reason.other": "nessun identificativo affidabile",
   "servers.disks.moves.title": "Spostamenti di dischi",
+  "servers.disks.moves.loadError": "Impossibile caricare gli spostamenti dei dischi: {message}",
+  "servers.panel.failed": "Questa parte della pagina ha avuto un errore: {message}",
   "servers.disks.moves.none": "Nessun disco è passato da o verso questo server.",
   "servers.disks.moves.column.when": "Quando",
   "servers.disks.moves.column.disk": "Disco",

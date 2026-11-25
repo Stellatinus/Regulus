@@ -234,6 +234,8 @@ export const servers = {
   "servers.disks.reason.duplicate": "two disks report the same identifier",
   "servers.disks.reason.other": "no reliable identifier",
   "servers.disks.moves.title": "Moves of disks",
+  "servers.disks.moves.loadError": "Could not load the disk moves: {message}",
+  "servers.panel.failed": "This part of the page failed: {message}",
   "servers.disks.moves.none": "No disk has moved to or from this server.",
   "servers.disks.moves.column.when": "When",
   "servers.disks.moves.column.disk": "Disk",

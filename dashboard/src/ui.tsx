@@ -1,5 +1,40 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  Component,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import { useT } from "./i18n";
+
+// PanelBoundary keeps an error inside one panel of a page: the panel shows
+// its own message and the rest of the page stays (#424). RootBoundary is
+// only for what no panel could catch.
+export class PanelBoundary extends Component<
+  { name: string; children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error(`panel "${this.props.name}" failed`, error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) return <PanelFailed message={this.state.error.message} />;
+    return this.props.children;
+  }
+}
+
+function PanelFailed({ message }: { message: string }) {
+  const t = useT();
+  return <p role="alert">{t("servers.panel.failed", { message })}</p>;
+}
 
 // Shared pieces of the web UI (#91): the inline confirmation that replaces
 // the browser's confirm(), the narrow-screen row menu and a media query hook.

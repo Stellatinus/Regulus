@@ -16,7 +16,7 @@ import {
 import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
-import { ConfirmButton } from "./ui";
+import { ConfirmButton, PanelBoundary } from "./ui";
 import { daysLeft } from "./CertificateBanner";
 import { useT } from "./i18n";
 import { registry } from "./widgets";
@@ -180,7 +180,11 @@ function Details({
       {canManage && agent.id !== "local" && (
         <Manage agent={agent} onChanged={onChanged} />
       )}
-      {canSeeDisks && <DisksPanel serverId={agent.id} />}
+      {canSeeDisks && (
+        <PanelBoundary name="disks">
+          <DisksPanel serverId={agent.id} />
+        </PanelBoundary>
+      )}
       {online ? (
         <div className="server-grid">
           {WIDGETS.map((w) => {

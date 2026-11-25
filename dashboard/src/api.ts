@@ -1074,7 +1074,12 @@ export const fetchAgentDisks = (id: string, signal?: AbortSignal) =>
   ).then((r) => r.disks);
 
 export const fetchDiskMoves = (limit = 200, signal?: AbortSignal) =>
-  request<DiskMove[]>("GET", `/api/disks/moves?limit=${limit}`, undefined, signal);
+  request<{ moves: DiskMove[] }>(
+    "GET",
+    `/api/disks/moves?limit=${limit}`,
+    undefined,
+    signal,
+  ).then((r) => r.moves);
 
 export const fetchPlugins = (signal?: AbortSignal) =>
   request<PluginsStatus>("GET", "/api/plugins", undefined, signal);

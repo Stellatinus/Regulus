@@ -63,7 +63,7 @@ function mockHub(seen: string[]) {
       const reply = (status: number, data?: unknown) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(data) });
       if (path === "/api/agents/web1") return reply(200, server);
       if (path === "/api/agents/web1/disks") return reply(200, { agent: "web1", disks });
-      if (path.startsWith("/api/disks/moves")) return reply(200, moves);
+      if (path.startsWith("/api/disks/moves")) return reply(200, { moves });
       return reply(404, { error: "not found" });
     }),
   );
@@ -122,6 +122,24 @@ describe("DisksPanel on the page of a server", () => {
     expect(await screen.findByText("Web")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Physical disks" })).not.toBeInTheDocument();
     expect(seen.some((p) => p.includes("disks"))).toBe(false);
+  });
+
+  it("keeps the server page when the moves have an unexpected shape (#424)", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((path: string) => {
+        const reply = (status: number, data?: unknown) => Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(data) });
+        if (path === "/api/agents/web1") return reply(200, server);
+        if (path === "/api/agents/web1/disks") return reply(200, { agent: "web1", disks });
+        // A bare array is not what the hub sends; the panel must not take the page down.
+        if (path.startsWith("/api/disks/moves")) return reply(200, moves);
+        return reply(404, { error: "not found" });
+      }),
+    );
+    renderAs(admin);
+    expect(await screen.findByText(/This part of the page failed|Could not load the disk moves/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Web" })).toBeInTheDocument();
   });
 
   it("says so when the disks cannot be loaded", async () => {
