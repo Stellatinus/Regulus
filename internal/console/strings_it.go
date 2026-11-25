@@ -178,6 +178,28 @@ var it = strs{
 	DBFile:          "%s, %s",
 	DBNone:          "ancora nessuno",
 
+	// La vista dell'agent (#434).
+	AgentTitle:           "Agente Regulus",
+	AgentRole:            "Ruolo",
+	AgentLink:            "Collegamento con l'hub",
+	AgentID:              "Id dell'agent",
+	AgentHost:            "Nome host",
+	AgentCert:            "Certificato",
+	AgentLinkConnected:   "collegato",
+	AgentLinkRetrying:    "non collegato, sta riprovando",
+	AgentLinkRejected:    "l'hub non accetta questo agent (revocato o rimosso)",
+	AgentLinkUnknown:     "non noto (nessuna riga di connessione nel log recente)",
+	AgentLinkStopped:     "l'agent non è in esecuzione",
+	AgentNotEnrolled:     "non registrato",
+	AgentHintRejected:    "Per usare di nuovo questo server: elimina la cartella dei dati dell'agent e registralo con un nuovo token (docs/remote-agents.md).",
+	AgentHintNotEnrolled: "Crea un token nella dashboard dell'hub (Server, Aggiungi un server) ed esegui qui il suo comando di installazione.",
+	AgentHintLog:         "Il collegamento è letto dal log dell'agent; vale l'elenco dei server dell'hub.",
+	AgentHelp:            "tab/←/→ sezione  r riavvia l'agent  q esci",
+	AgentRestartAsk:      "Riavviare ora il servizio regulus-agent?",
+	AgentMsgRestarting:   "Riavvio dell'agent…",
+	AgentMsgRestarted:    "Il servizio dell'agent è stato riavviato.",
+	AgentMsgFailed:       "Impossibile riavviare: %s. Esegui: sudo systemctl restart regulus-agent",
+
 	// Scadenza dei certificati (#245).
 	Certificates:   "Certificati",
 	CertNoneSoon:   "nessuno scade entro 90 giorni; il primo a scadere:",

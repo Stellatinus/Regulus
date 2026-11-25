@@ -1,0 +1,24 @@
+Regulus agent v0.3.0  ● the agent is not running
+
+ 1 Status   2 Logs
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Role             agent
+ Service          regulus-agent: inactive
+ Version          v0.3.0
+ Hub              hub.example:8443
+ Link to the hub  the agent is not running
+ Agent id         agent-7f3a
+ Host name        web2
+ Certificate      ends on 2027-02-01, in 98 days
+ Data directory   /var/lib/regulus-agent
+ Configuration    /etc/regulus/agent.yaml
+
+ The link is read from the agent's log; the hub's own list of servers is the authority.
+
+
+
+
+
+
+
+ tab/←/→ section  r restart the agent  q quit

@@ -1,0 +1,24 @@
+Agente Regulus v0.3.0  ● collegato
+
+ 1 Stato   2 Log
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Ruolo                   agent
+ Servizio                regulus-agent: attivo
+ Versione                v0.3.0
+ Hub                     hub.example:8443
+ Collegamento con l'hub  collegato
+ Id dell'agent           agent-7f3a
+ Nome host               web2
+ Certificato             scade il 2027-02-01, tra 98 giorni
+ Directory dei dati      /var/lib/regulus-agent
+ Configurazione          /etc/regulus/agent.yaml
+
+ Il collegamento è letto dal log dell'agent; vale l'elenco dei server dell'hub.
+
+
+
+
+
+
+
+ tab/←/→ sezione  r riavvia l'agent  q esci
