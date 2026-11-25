@@ -22,9 +22,12 @@ type strs struct {
 	AppliesNow     string
 	AppliesRestart string
 	EnvOverride    string
-	Editing        string
-	Valid          string
-	Choices        string
+	// AgentListenDashboard is shown under agent_listen when its value comes
+	// from the dashboard (#423).
+	AgentListenDashboard string
+	Editing              string
+	Valid                string
+	Choices              string
 
 	LogsEmpty, LogsUnavailable string
 	LogFilters                 [4]string
@@ -68,7 +71,7 @@ type strs struct {
 	// Durations: %d days, hours, minutes and seconds, largest unit first.
 	DurDays, DurHours, DurMinutes, DurSeconds string
 	// Where the value of a setting comes from (config.Origin*).
-	OriginDefault, OriginFile, OriginEnv string
+	OriginDefault, OriginFile, OriginEnv, OriginDashboard string
 	// States are the words for the systemd state of the service and the
 	// state of an agent, by the value systemd or the hub reports. A value
 	// that is missing here is shown as it is.
@@ -171,14 +174,15 @@ var en = strs{
 	SetupText:    "No administrator exists yet. Open the dashboard and enter this one-time setup token:",
 	SetupCLI:     "No browser? Create the administrator here: sudo -u regulus regulus hub create-admin -h",
 
-	SettingHeader:  [3]string{"Setting", "Value", "Source"},
-	Default:        "default",
-	AppliesNow:     "Applies as soon as it is saved.",
-	AppliesRestart: "The hub reads it at start: restart it to apply.",
-	EnvOverride:    "An environment variable overrides the file: saving here will not change what the hub uses.",
-	Editing:        "Editing",
-	Valid:          "will be saved as",
-	Choices:        "choices",
+	SettingHeader:        [3]string{"Setting", "Value", "Source"},
+	Default:              "default",
+	AppliesNow:           "Applies as soon as it is saved.",
+	AppliesRestart:       "The hub reads it at start: restart it to apply.",
+	EnvOverride:          "An environment variable overrides the file: saving here will not change what the hub uses.",
+	AgentListenDashboard: "Set from the dashboard (kept in the database). A value in the file or environment wins over it.",
+	Editing:              "Editing",
+	Valid:                "will be saved as",
+	Choices:              "choices",
 
 	LogsEmpty:       "No log lines.",
 	LogsUnavailable: "Cannot read the log",
@@ -227,17 +231,18 @@ var en = strs{
 	MsgSaved:              "Saved %s = %s.",
 	ResetLinkTitle:        "Password reset link",
 
-	Problem:       "Problem",
-	Empty:         "(empty)",
-	RunningUnsure: "running?",
-	Ago:           "%s ago",
-	DurDays:       "%dd %dh %dm",
-	DurHours:      "%dh %dm",
-	DurMinutes:    "%dm %ds",
-	DurSeconds:    "%ds",
-	OriginDefault: "default",
-	OriginFile:    "file",
-	OriginEnv:     "environment",
+	Problem:         "Problem",
+	Empty:           "(empty)",
+	RunningUnsure:   "running?",
+	Ago:             "%s ago",
+	DurDays:         "%dd %dh %dm",
+	DurHours:        "%dh %dm",
+	DurMinutes:      "%dm %ds",
+	DurSeconds:      "%ds",
+	OriginDefault:   "default",
+	OriginFile:      "file",
+	OriginEnv:       "environment",
+	OriginDashboard: "dashboard",
 	States: map[string]string{
 		"active": "active", "inactive": "inactive", "failed": "failed", "unknown": "unknown",
 		"activating": "starting", "deactivating": "stopping", "reloading": "reloading",

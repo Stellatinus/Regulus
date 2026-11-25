@@ -270,6 +270,15 @@ func Collect(ctx context.Context, sys System, configFile, version string) Snapsh
 		}
 		if live.AgentAddr != "" {
 			snap.AgentListen = live.AgentAddr
+			// An address that is in neither the file nor the environment was
+			// set from the dashboard and lives in the database: show it, and
+			// where it comes from, instead of an empty default (#423).
+			for i := range snap.Settings {
+				e := &snap.Settings[i]
+				if e.Key == "agent_listen" && e.Origin == config.OriginDefault && e.Value == "" {
+					e.Value, e.Origin = live.AgentAddr, config.OriginDashboard
+				}
+			}
 		}
 		snap.CAFingerprint = live.CAFingerprint
 		snap.DatabaseProblem = live.DatabaseProblem

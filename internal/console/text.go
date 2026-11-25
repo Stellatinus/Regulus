@@ -302,6 +302,8 @@ func originWord(origin string) string {
 		return T.OriginFile
 	case config.OriginEnv:
 		return T.OriginEnv
+	case config.OriginDashboard:
+		return T.OriginDashboard
 	}
 	return origin
 }
