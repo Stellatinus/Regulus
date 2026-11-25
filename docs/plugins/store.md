@@ -1,0 +1,241 @@
+# The plugin store (design)
+
+**Status: design. Nothing here is implemented**, and the code does not accept the new manifest keys yet (the manifest is read strictly, see [Manifest](manifest.md)). It is the design that `regulus-plugins#1` (lifecycle, index, installation) and `regulus-plugins#3` (other sources) were waiting for. It follows the maintainer's decision of 2026-11-25 (see [Decisions](../decisions.md), "The plugin store: the client here, the catalog there"). Nothing should be coded from it until the maintainer has agreed with it, as for any new area ([AGENTS.md](../../AGENTS.md)).
+
+## The split
+
+"The store" is two different things, and they live in two places:
+
+| Where | What |
+|---|---|
+| **This repository (Regulus)** | The **store client**: the Store page of the dashboard, reading an index, checking its signature, checking requirements, installing, updating, rolling back and removing plugins, handing them to the agents, and the list of **sources**. The format of the index and the manifest, the plugin API, the runtime and the SDK. |
+| **[regulus-plugins](https://github.com/Stellatinus/Regulus-Plugins)** | **Only plugins**, and what is needed to build and release them: their source, their CI, their releases, and the CI that writes and signs the **official index**. No code of the core. |
+| **Any other repository** | The same layout and the same index format: an administrator adds its address as a **source** (third-party plugins, regulus-plugins#3). |
+
+The official catalog is therefore **a source like any other**, only configured by default and trusted by a signing identity that is built into Regulus. A person who wants their own plugins copies the layout of regulus-plugins, publishes an index, and gives its address to a hub.
+
+Why the official catalog is not inside this repository is in [Decisions](../decisions.md): the core's updates are trusted by the signature of this repository's release workflow, plugin tags would fill the list of core releases that every hub reads, and each plugin needs its own releases.
+
+## The layout of regulus-plugins
+
+```
+plugins/
+  <id>/                    one directory per plugin, named after its id
+    plugin.yaml            the manifest ([Manifest](manifest.md))
+    README.md              what it does, what it needs, how to try it
+    CHANGELOG.md           one section per released version
+    ...                    source, ui/, tests
+  hello-world/             the test plugin (see below), removed later
+scripts/                   package a plugin, check a manifest, write the index
+.github/workflows/
+  ci.yml                   every pull request: manifests, build, tests, for every plugin that changed
+  release-plugin.yml       on a tag plugin/<id>/vX.Y.Z[-pre.N]: build, package, release
+  publish-index.yml        writes, signs and publishes the indexes
+README.md                  the rules below, for people
+AGENTS.md                  the same, for AI agents, pointing at this page
+```
+
+Rules:
+
+- **A directory is a plugin, and nothing else is.** No shared code between plugins (a plugin builds and is released alone). Common code belongs in the SDK, which belongs to Regulus.
+- **`main` is the only long-lived branch**, as in Regulus. Work goes in by pull request, one issue each.
+- **Pushing is not publishing.** Only a **tag** publishes. A plugin that has no tag is in no index, however much code it has: that is where a draft, an idea or an experiment lives. Anyone can read the code, because the repository is public, but no hub is offered it.
+- **A tag is `plugin/<id>/v<version>`** (the form already proposed in [Plugins](README.md)). CI refuses a tag whose version differs from `version` in that plugin's `plugin.yaml`, a tag on a commit that is not on `main`, and a tag on a commit where CI has not passed, as the core's release workflow does ([Releases](../releases.md)).
+- **Each plugin has its own version and releases** and may leave other plugins untouched for a year.
+- Releases are made by a workflow (like **Publish release** in Regulus), not by typing tags, so a version always goes through its pre-releases in order. *(The workflow is part of the work, below.)*
+
+### The test plugin
+
+`plugins/hello-world` is a plugin that does nothing useful, on purpose: it is **healthy while its data directory is writable**, counts its starts, and *provides* one capability (`hello.greet@1`). It exists so the store can be built and tried end to end (index, install, update, rollback, removal, a requirement between two plugins) before any real plugin depends on it. A second one, `hello-guest`, that **needs** `hello.greet@1`, belongs to the tests of requirements. Both are deleted once the first real plugin is released; the index must still be able to hold a plugin that has been removed (see "Yanked and removed").
+
+It cannot be built yet, because a plugin outside this repository cannot import the SDK (see "What blocks the work").
+
+## Channels and versions
+
+A plugin's version is SemVer. **Its channel comes from the version, never from a file**, with the same rule as the core ([Decisions](../decisions.md), "Releases and channels"), plus one:
+
+| Channel | Version | Who is offered it | In which index |
+|---|---|---|---|
+| **stable** | `1.2.0` | everyone | `index.json` |
+| **beta** | `1.3.0-beta.2`, `-rc.1` | a hub that follows `beta` or `alpha` | `index.json` |
+| **alpha** | `1.3.0-alpha.1`, and any other pre-release not named `dev` | a hub that follows `alpha` | `index.json` |
+| **dev** | `1.3.0-dev.7` | **only a hub whose administrator turned on developer builds for that source** | `dev/index.json`, **never** `index.json` |
+
+**Dev is for the maintainer.** It lets a work in progress be installed on their own hub, through the same path as every release, without anyone else seeing it in the store. There are two levels of invisibility:
+
+1. **no tag**: the plugin is in no index at all (a draft);
+2. **a `-dev.N` tag**: it is in the *dev index* only, a separate file. The Store page does not show the dev index, and a hub reads it only when the source has `dev: true` in the **hub's own configuration file** (so the page cannot turn it on; a dashboard administrator is not enough, as for the update policy's `max_channel`, [Updates](../updates.md)).
+
+A `-dev.N` version is **not** ordered against alphas and betas (SemVer would put `dev` after `beta`, which is wrong): the dev index is read alone, and inside it versions compare as SemVer. A hub that follows dev for a source gets the newest dev version of a plugin only if that plugin's dev index lists it, and never moves *from* a stable version to a dev one by itself: an administrator picks it.
+
+Other rules:
+
+- **A hub follows a channel per source, and a plugin may follow another one.** The default is the channel the hub itself follows. An administrator can override it for one plugin (a beta of one plugin on a stable hub). The root update policy's `max_channel` ([Updates](../updates.md)) caps this too, whatever the dashboard says. *(Whether the plugin policy is the same file or another one is open, below.)*
+- **0.x is allowed**; a plugin is not forced to 1.0.
+- **A plugin has no stable release until it is ready.** A plugin with only alphas appears only to hubs on `alpha`, marked as such.
+- **Compatibility is in the index, not found out by running.** Each version lists `api` and `requires` ([Manifest](manifest.md)); the Store page shows a version a hub cannot run as greyed out with the reason, and never installs it.
+
+## The index
+
+The client reads **one index per source**: a signed JSON file, small, at a fixed address, served as a static file (GitHub Pages of regulus-plugins, for example) rather than through GitHub's API, so it does not count against the 60 anonymous requests an hour that limit the core's release list (#213).
+
+```json
+{
+  "format": 1,
+  "source": "regulus-plugins",
+  "issued_at": "2026-12-01T09:00:00Z",
+  "expires": "2026-12-22T09:00:00Z",
+  "plugins": [
+    {
+      "id": "hello-world",
+      "name": "Hello world",
+      "description": "Does nothing useful. For testing the store.",
+      "kind": "integration",
+      "audience": "admin",
+      "homepage": "https://github.com/Stellatinus/Regulus-Plugins/tree/main/plugins/hello-world",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "channel": "stable",
+          "released_at": "2026-12-01T08:30:00Z",
+          "api": 1,
+          "requires": ">=0.4.0",
+          "components": ["agent", "hub"],
+          "provides": ["hello.greet@1"],
+          "needs": [],
+          "permissions": [{"id": "hello-world.greet", "description": "Say hello."}],
+          "artifacts": [
+            {"os": "linux", "arch": "amd64", "url": "https://github.com/.../hello-world_0.1.0_linux_amd64.tar.gz", "sha256": "…", "size": 1048576},
+            {"os": "linux", "arch": "arm64", "url": "…", "sha256": "…", "size": 1040384}
+          ],
+          "yanked": false
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **It carries everything needed to decide before downloading**: compatibility, requirements, the permissions the plugin asks for (shown **before** installing, as the design in [Plugins](README.md) already says), and a checksum per file. The client never has to unpack a plugin to know what it needs.
+- **Signed as the core's `latest.json` is** (#263): Sigstore keyless, the identity of the publishing workflow pinned by the client, `issued_at` and `expires` (21 days) so a replay or a frozen index is noticed, never an index older than the last one verified, and a weekly refresh. The checksums in the index are what make a downloaded file trustworthy; there is no second signature on each file, though a build-provenance attestation may be attached for people ([Releases](../releases.md)).
+- **The official identity is built into Regulus**, like `update.Repository`. A workflow that publishes from a branch (not from a tag) is weaker than the core's tag identity: it needs a protected `main`, an environment with required reviewers, and two-factor authentication for whoever can approve. Without them, whoever can push to `main` can sign for every hub. This is the same warning as in [Releases](../releases.md) and it is **not set up**.
+- **`dev/index.json` has the same format** and is signed the same way.
+- **The format has a `format` number** and follows the rules of [Versioning](../versioning.md): a client ignores fields it does not know, and refuses a `format` it does not speak with a message.
+
+## Requirements
+
+A plugin can need three kinds of things, all listed in the manifest and copied to the index:
+
+| Need | Where | Checked |
+|---|---|---|
+| **Regulus** | `requires` (a range of core releases) and `api` | already implemented at start; the store checks it before installing |
+| **The machine** | `os` and `arch` of the artifacts | the client picks the artifact of the machine; none, no install |
+| **Another plugin's feature** | `needs` (new) | when installing, updating, removing and starting |
+
+**Needs are capabilities, not plugin names.** The idea of "this plugin needs mail" is not "this plugin needs the SMTP plugin": a different plugin may send mail some other way. So a plugin **provides** capabilities and **needs** capabilities, each with a number that is the capability's *major version*:
+
+```yaml
+# plugin.yaml of the plugin that sends mail
+provides:
+  - mail.send@1
+# plugin.yaml of a plugin that wants to send alerts by mail
+needs:
+  - capability: mail.send@1
+  - capability: sms.send@1
+    optional: true          # works without it, with less
+```
+
+`provides` already exists in the manifest as a list of names, reserved and unused ([Manifest](manifest.md)). This design gives it its meaning, with `@<major>` in each entry. Capability names are lower-case, dotted, and **the first-party ones are listed in one page in Regulus** (`docs/plugins/capabilities.md`, to write), so two plugins do not invent two names for the same thing. A capability's major version changes only when its contract does.
+
+Resolution rules, for the hub, which decides for every agent:
+
+| Action | Rule |
+|---|---|
+| **Install** | every non-optional `needs` must be provided by an installed plugin whose capability has the same major. If not, the store says which and offers the plugins that provide it (from the sources it knows), to be installed first, in order. It never installs a half-satisfied set. |
+| **Update** | an update that would stop providing something that an installed plugin needs is **blocked**, and says which plugin depends on it. |
+| **Remove** | removing a plugin that is the only provider of a capability that another plugin needs is **blocked** (this answers open question 2 of [Plugins](README.md): block, say who depends, do not remove the dependents on their own). |
+| **Start** | a plugin whose needs are not met is not started and is shown as **`unmet`** with the missing capability, rather than started and left to fail. |
+| **Cycles** | refused at install time, with the cycle named. |
+
+Where a requirement is **used** (how one plugin calls what another provides) is the host side of plugins, **not designed** ([Plugins](README.md), open question 1, #261). Until then `needs` is checked at installation and start and nothing more. It is stated here so the manifest does not change twice.
+
+## Installing, updating and removing
+
+- **The same three modes as the core**: `manual` (tell me), `download` (download and verify, then wait), `automatic` (install in a maintenance window), with the **default `download`**, and an override **per plugin** ([Updates](../updates.md)).
+- **Automatic is narrower than "newer".** Even in `automatic` mode, an update is **not** installed on its own when:
+  - it is a **new major version**;
+  - it asks for **more permissions** than the installed version (the administrator has approved the old set, not the new one);
+  - it adds a `needs` that is not met;
+  - its channel is not allowed, or the plugin is **pinned**.
+
+  It is shown on the Store page as **needs approval**, with what changed.
+- **Pin and rollback.** A version can be pinned. The previous version stays on disk and can be restored with one action; a rollback that does not become healthy is undone, as for the core.
+- **On disk**, once versions are kept side by side: `<plugins dir>/<id>/<version>/` and `<plugins dir>/<id>/current` naming the one that runs ([Plugins](README.md), proposed layout; [Runtime](runtime.md) describes today's `<plugins dir>/<id>/`).
+- **Who writes the plugins directory.** The plugins directory must be owned by root ([Runtime](runtime.md), "Security"), and the hub runs as the unprivileged user `regulus`. So, as with the core, **a root helper does the installation** (the update helper, #215, or a sibling started the same way) after the hub has downloaded and verified the file. The helper checks the checksum again, and refuses what the local policy forbids. This is a real change to the helper and a part of the work.
+- **To agents**, the hub sends the verified plugin over the agent connection that already exists, as for the core's updates. An agent installs it through its own helper and says so in its next report.
+- **Yanked and removed.** A version marked `yanked` is hidden from new installs and offered no more as an update, but **stays in the index and stays downloadable** so a rollback or a pinned hub keeps working. A plugin removed from the catalog (such as `hello-world`) keeps its past versions the same way, with `yanked` set. Deleting a release breaks rollbacks and checksums (the same lesson as #439), so it is not done.
+- **A sideload** for developers: installing a package from a local file, through the same helper and the same checks except the index (a package whose checksum is not in a signed index is marked **unverified** and needs the administrator's explicit confirmation, shown in the plugin's state). It is how a `-dev` build is tried on one machine without any index.
+
+## Kinds and audiences
+
+Two separate questions, two keys. Both are **proposed manifest keys, not accepted by the code yet**.
+
+**`kind`: what a plugin is for.** Used by the Store page to group and describe, not by the runtime.
+
+| `kind` | Meaning | Example |
+|---|---|---|
+| `manager` | implements a function of a server, a backend of a manager ([Managers, backends and apps](../managers-and-apps.md)) | firewall, reverse proxy, RAID |
+| `integration` | provides a capability to other plugins or to the core, with little or nothing of its own to show | SMTP, a notification service, a cloud provider |
+| `feature` | gives users something to look at or use | a media overview, a widget |
+
+(`components` already says *where* a plugin runs, `agent`, `hub`, `ui`; `kind` says *what for*. The three kinds are a proposal; adding one later is compatible.)
+
+**`audience`: who is meant to see it.** `admin` (administrators only) or `everyone` (any user who may see the server). **The default is `admin`**, so a plugin that does not say anything is never shown to ordinary users by mistake. A reverse proxy manager is `admin`; a widget of a media server is `everyone`. A plugin that has both (an admin page and a user-facing widget) needs the audience **per dashboard entry**, which depends on how the widget loader describes entries (#21); until then `audience` on the plugin is the **upper bound**, and the loader may only narrow it.
+
+**`audience` is a hint for the dashboard, not a security boundary.** Hiding a button does not stop a request. What a user may *do* is decided on the hub by **permissions**, the plugin's permissions given to roles ([Manifest](manifest.md), "Permissions"; #61), and enforcing them is not done yet. A plugin's data and actions an ordinary user must not reach need a permission that only an administrator role holds, **checked by the hub**, however the dashboard draws it.
+
+### An admin view and a standard view of the dashboard
+
+What the maintainer wants is to give the dashboard to many people: administrators see everything (servers, users, updates, plugins, shell and files), the others see only the applications and the widgets meant for them. This is **a feature of the dashboard, not of the store**, and it deserves its own design issue (below). The direction proposed here, to be confirmed there:
+
+- **A view is derived from permissions and roles**, not a second kind of account. The dashboard already shows its Administration section only to those who have the permissions for it ([Dashboard](../dashboard.md)); this extends the idea to widgets and plugin pages.
+- Two named views, **Admin** and **Standard**, which a role is mapped to; a person with an administrator role can switch to the Standard view to see what others see.
+- `audience` of a plugin's entries decides in which view they are *offered*; the permissions decide what works.
+
+## Other sources and trust (regulus-plugins#3)
+
+- **Sources are a list in the hub's configuration**: a name, an index address, a **trust level** (`official`, `custom`), the channel to follow, `dev` (a flag, see above), and for `custom` ones the **signing identity** to expect (an identity and an issuer, as in [Releases](../releases.md)).
+- **An unsigned or unverifiable index is refused**, not offered with a warning: plugins run as the agent's user, and for now can read everything the agent can ([Runtime](runtime.md), "Security").
+- **Adding a source is an act of trust**, and the page says so in plain words: a plugin is code that runs on the servers, and whoever signs the index decides what runs. It needs an administrator, an explicit confirmation naming the signer, and an entry in the audit log.
+- **An allowlist of signers** is the same list: only the identities an administrator has added are accepted, and the official one is there from the start.
+- **Isolation is the open point.** Until plugins run under a user of their own or a stricter sandbox ([Runtime](runtime.md), open question 5) and permissions are enforced, a third-party source is as dangerous as installing a program as root. Documents say it, and the work for sources other than the official one should wait for those.
+
+## What blocks the work
+
+1. **A plugin outside this repository cannot be built.** The SDK is `internal/plugin/sdk` and the Go module path is still the old organization's name (see [Decisions](../decisions.md), "The repository moved"): Go refuses to import an `internal` package from another module, and a plugin also needs the generated plugin contract (`proto/regulus/plugin/v1`). Before `hello-world` or any plugin can live in regulus-plugins, the SDK and the contract must be an importable, versioned package (a public directory of this module, or a module of its own; a plugin's `go.mod` pins a version). This is a change in this repository, and it also fixes what a "plugin API version" means for a plugin author. That module path is part of what an author would have to type, so the maintainer should decide whether this is the moment to rename it.
+2. **A plugin can only run and be healthy today** ([Plugins](README.md), open question 1). The store can install and update plugins before that, but a real plugin needs the host side (#261) and the widget loader (#21).
+3. **The root helper** must learn to install plugins (above).
+4. **The signing set-up** of regulus-plugins (protected `main`, environment, two-factor authentication) is a repository setting, not a file.
+
+## Open questions
+
+1. **The hosting of the index.** GitHub Pages is proposed because it avoids the API's rate limit; a release asset on a fixed tag is the alternative. Either needs the identity to be pinned.
+2. **One plugin policy or the core's.** Does `max_channel` of `/etc/regulus/update-policy.yaml` also cap plugins, or does a plugin have its own file?
+3. **Per-plugin channel and the `dev` ordering** (above) are the proposed answer; the maintainer may prefer a simpler one.
+4. **Capability versions.** `@<major>` only, or a range? A major is simplest and enough until a plugin needs more.
+5. **Where capability names are registered**, and who may add one.
+6. **Per-entry audience**, which waits for #21.
+7. **Names of the views** (Admin, Standard) and whether a role chooses its view or the permissions imply it.
+8. **Does an `agent` component get a plugin that its server does not need?** The hub could install a plugin only on the agents whose manifest or an administrator's choice names them; the default is a decision for #1.
+
+## Work to do
+
+| Piece | Where | Milestone |
+|---|---|---|
+| Make the SDK and the plugin contract importable by plugins in another repository | Regulus | M6 |
+| Store client design and implementation: index format and reader, signature check, sources, requirements, the Store page | Regulus (`regulus-plugins#1`) | M6 |
+| Manifest: `kind`, `audience`, `needs`, versioned `provides` | Regulus | M6 |
+| The root helper installs and rolls back plugins | Regulus | M6 |
+| The layout, CI, release workflow and index publishing of regulus-plugins; the test plugins | regulus-plugins | M6 *(that repository has no milestones yet)* |
+| Other sources and the signer allowlist (`regulus-plugins#3`) | Regulus | after isolation is designed |
+| An Admin view and a Standard view of the dashboard | Regulus | M6, with #21 |

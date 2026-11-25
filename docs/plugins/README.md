@@ -11,8 +11,9 @@ This folder is the guide to the plugin system. Read the pages in order:
 | [Manifest](manifest.md) | `plugin.yaml`: id, version, plugin API, the Regulus versions it needs, components, permissions | implemented (#19) |
 | [Runtime](runtime.md) | how Regulus finds, starts, checks, restarts and stops plugins; the contract on the socket; limits and security; where their state is shown | implemented on the agent (#19) and the hub (#262) |
 | [Writing a plugin](writing-a-plugin.md) | the example plugin, making your own step by step, the SDK for Go, other languages, packaging | implemented (#19, regulus-plugins#2) |
+| [The plugin store](store.md) | what lives in which repository, channels and versions (including `dev`), the index, requirements between plugins, updates, kinds and audiences, other sources | **design**, not implemented (regulus-plugins#1, regulus-plugins#3) |
 
-**Where the issues are.** The plugin store and the plugins themselves live in their own repository, [Stellatinus/regulus-plugins](https://github.com/Stellatinus/regulus-plugins). The issues about the store moved there on 2026-11-25: the lifecycle, index and installation (formerly #20) is `regulus-plugins#1`, the example plugin and guide (formerly #22) `regulus-plugins#2`, third-party plugins (formerly #23) `regulus-plugins#3`, and the plugin for free-tier cloud servers (formerly #163) `regulus-plugins#4`. The runtime, the contract, the SDK, the host side of plugins (#261), the isolation (#267), the dashboard widgets (#21) and the tests of the runtime stay here, with the code. A reference written `regulus-plugins#N` is an issue of the other repository.
+**Where the issues are.** The plugins themselves and the catalog live in their own repository, [Stellatinus/regulus-plugins](https://github.com/Stellatinus/regulus-plugins); the **store client** (the dashboard page, the index reader, installation) lives here, with the code ([the plugin store](store.md)). The issues about the store moved there on 2026-11-25: the lifecycle, index and installation (formerly #20) is `regulus-plugins#1`, the example plugin and guide (formerly #22) `regulus-plugins#2`, third-party plugins (formerly #23) `regulus-plugins#3`, and the plugin for free-tier cloud servers (formerly #163) `regulus-plugins#4`. The runtime, the contract, the SDK, the host side of plugins (#261), the isolation (#267), the dashboard widgets (#21) and the tests of the runtime stay here, with the code. A reference written `regulus-plugins#N` is an issue of the other repository.
 
 The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/plugin/sdk` (for plugins written in Go), `proto/regulus/plugin/v1` (the contract) and `plugins/example-hello` (the example).
 
@@ -43,6 +44,8 @@ Two numbers tie them together, both checked when a plugin starts:
 
 ## Index, installation and updates (regulus-plugins#1, design)
 
+The full design is [the plugin store](store.md); this is the short version.
+
 - CI publishes an `index.json` listing each plugin, its versions, **checksums** and **compatibility** (`api`, `requires`). The format has a `source` field so other sources can be added later (regulus-plugins#3).
 - The hub installs, updates and removes plugins from the dashboard, shows the requested permissions before installing, verifies signatures and distributes the plugin to the agents that need it, over the agents' existing connection, like the core's updates.
 - The same three update modes as the core (`manual`, `download`, `automatic`), with a per-plugin override.
@@ -66,16 +69,16 @@ A module served from the hub's own origin passes the Content-Security-Policy and
 
 ## Repository layout (regulus-plugins#2)
 
-Internal plugins live in `plugins/<id>/` in this repository, with the manifest and the source next to each other. The first one is `plugins/example-hello`.
+`plugins/example-hello` stays in this repository: the tests of the runtime build and run it. The plugins that are released through the store live in [regulus-plugins](https://github.com/Stellatinus/Regulus-Plugins), in `plugins/<id>/`, with the manifest and the source next to each other ([the plugin store](store.md) says how that repository is laid out).
 
 ## Third-party plugins (regulus-plugins#3)
 
-Later, after the internal plugin system is stable: extra index sources, an **allowlist of trusted signers**, warnings for unsigned plugins and sandboxed permissions. Until then, formats are kept ready for it.
+Later, after the internal plugin system is stable: extra index sources, an **allowlist of trusted signers**, warnings for unsigned plugins and sandboxed permissions. The design is in [the plugin store](store.md), "Other sources and trust"; until isolation exists, formats are kept ready and nothing more.
 
 ## Open questions
 
 1. **What a plugin can do.** The contract has only `Describe` and `Health`. What a plugin offers (metrics for the dashboard, commands an administrator runs, data the hub stores) and what it may ask of the host (a key-value store, the hub's audit log, the agent's connection) is the next design step. It must say how the permissions of the manifest are enforced.
-2. **Dependencies between plugins.** What happens when a plugin that others depend on (through `provides`) is updated or removed? Block, warn, or update the dependents together? regulus-plugins#1 does not say yet. `provides` is accepted but unused.
+2. **Dependencies between plugins.** Proposed in [the plugin store](store.md), "Requirements": plugins provide and need *capabilities* (`mail.send@1`), and removing or updating a provider that others need is **blocked**, with the dependents named. Not implemented; `provides` is accepted but unused.
 3. **Tag format.** Is `plugin/<id>/vX.Y.Z` confirmed, and does the release workflow publish plugins from those tags?
 4. **Plugin signatures.** Do internal plugins use the same Sigstore keyless signature as core releases?
 5. **Isolation.** A plugin runs as the same user as the agent, with the same systemd sandbox. A user per plugin, or a stricter sandbox, is open (see [Runtime](runtime.md), "Security").

@@ -24,7 +24,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | see the kinds of machine in a group (hub, redundant hub, backup node, access gateway…) | [Node types](node-types.md) (design draft) |
 | read the design of the Android access app and the access gateway (skeleton, not implemented) | [Regulus Access](regulus-access.md) |
 | understand why a choice was made | [Design decisions](decisions.md) |
-| understand plugins: the manifest, how they run, how to write one | [Plugins](plugins/README.md), [Manifest](plugins/manifest.md), [Runtime](plugins/runtime.md), [Writing a plugin](plugins/writing-a-plugin.md) |
+| understand plugins: the manifest, how they run, how to write one | [Plugins](plugins/README.md), [Manifest](plugins/manifest.md), [Runtime](plugins/runtime.md), [Writing a plugin](plugins/writing-a-plugin.md), [the plugin store](plugins/store.md) |
 | understand managers, backends and apps (RAID, firewall, containers, VPN, Plex and the like; design only) | [Managers, backends and apps](managers-and-apps.md) |
 | read the proposed design for changing a node's type and the guided installation (not implemented) | [Node type changes](node-type-changes.md) |
 | read the proposed design of the web terminal and the file browser of a node (not implemented) | [Web terminal and file browser](node-access.md) |
