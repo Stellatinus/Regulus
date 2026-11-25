@@ -1340,6 +1340,20 @@ td.chips-cell {
   table.cards td.chips-cell {
     min-width: 0;
   }
+
+  /* A badge may hold a whole sentence here (a disk that is not identifiable
+     says why): let it wrap instead of pushing the page wider than the screen. */
+  table.cards td .status {
+    white-space: normal;
+    min-width: 0;
+    max-width: 100%;
+    border-radius: 12px;
+    text-align: left;
+  }
+
+  table.cards td .status::before {
+    flex-shrink: 0;
+  }
 }
 
 .qr {

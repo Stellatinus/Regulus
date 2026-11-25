@@ -144,6 +144,9 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
         await page.goto("/#/servers");
         await page.getByRole("link", { name: "web1" }).click();
         await page.getByRole("heading", { name: "CPU" }).waitFor({ timeout: 30000 });
+        // Measure the settled page, as for the other routes: the disks panel
+        // (and its badges) arrives from its own request.
+        await page.waitForLoadState("networkidle");
         const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         assert.ok(over <= 0, `the server page is ${over}px wider than the screen`);
       },
