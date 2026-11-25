@@ -18,6 +18,8 @@ Regulus v0.3.0  Hub ● running
    builtin_agent          true                       file
    metrics_interval       10s                        file
    metrics_budget         256MiB                     default
+   metrics_retention_1m   3d                         default
+   metrics_retention_15m  90d                        default
    plugins_dir            (empty)                    default
    log.level              info                       file
    log.format             text                       file
@@ -30,8 +32,6 @@ Regulus v0.3.0  Hub ● running
  agent_listen  default: (empty)
  Address where remote agents connect (gRPC over TLS); empty keeps remote agents off
  The hub reads it at start: restart it to apply.
-
-
 
 
 
