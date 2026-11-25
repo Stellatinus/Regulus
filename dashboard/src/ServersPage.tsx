@@ -34,12 +34,43 @@ export function ServersPage() {
     };
   }, []);
   const off = listener != null && !listener.enabled;
+  // "Add a server" is needed rarely: it is closed until the + button of the
+  // title row opens it (#428).
+  const [adding, setAdding] = useState(false);
+  const canAdd = canManage && listener !== undefined && !off;
   return (
     <>
-      <AgentList all reloadKey={reload} />
+      <AgentList
+        all
+        reloadKey={reload}
+        actions={canAdd ? <AddButton open={adding} onToggle={() => setAdding((v) => !v)} /> : undefined}
+        belowTitle={
+          canAdd && adding ? (
+            <AddServer onAdded={() => setReload((n) => n + 1)} onClose={() => setAdding(false)} />
+          ) : undefined
+        }
+      />
       {off && <RemoteAgentsOff listener={listener} canManage={canManage} onEnabled={setListener} />}
-      {canManage && listener !== undefined && !off && <AddServer onAdded={() => setReload((n) => n + 1)} />}
     </>
+  );
+}
+
+// AddButton is the + at the right of the title row. It has an accessible name
+// and a tooltip, and says whether the panel it controls is open.
+function AddButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="icon-button"
+      aria-label={t("servers.add.title")}
+      title={t("servers.add.title")}
+      aria-expanded={open}
+      aria-controls="add-server-panel"
+      onClick={onToggle}
+    >
+      <span aria-hidden="true">{open ? "−" : "+"}</span>
+    </button>
   );
 }
 
@@ -131,7 +162,7 @@ export const TOKEN_LIFETIMES = [
   { ttl: "168h", label: "servers.add.ttl7d" },
 ] as const;
 
-function AddServer({ onAdded }: { onAdded: () => void }) {
+function AddServer({ onAdded, onClose }: { onAdded: () => void; onClose: () => void }) {
   const t = useT();
   const [name, setName] = useState("");
   const [ttl, setTtl] = useState<string>("1h");
@@ -159,8 +190,22 @@ function AddServer({ onAdded }: { onAdded: () => void }) {
 
   const host = window.location.hostname;
   return (
-    <section className="panel" aria-labelledby="add-server-heading">
-      <h3 id="add-server-heading">{t("servers.add.title")}</h3>
+    <section
+      id="add-server-panel"
+      className="panel"
+      aria-labelledby="add-server-heading"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <div className="page-title">
+        <h3 id="add-server-heading" style={{ margin: 0 }}>{t("servers.add.title")}</h3>
+        <span className="title-actions">
+          <button type="button" onClick={onClose}>
+            {t("servers.add.close")}
+          </button>
+        </span>
+      </div>
       <form onSubmit={(e) => void create(e)}>
         <label>
           {t("servers.add.nameLabel")}

@@ -150,7 +150,35 @@ describe("ServersPage", () => {
     first.unmount();
 
     renderAs(admin, <ServersPage />);
+    // The form is closed until the + button of the title row opens it (#428).
+    const add = await screen.findByRole("button", { name: "Add a server" });
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Name (optional)")).not.toBeInTheDocument();
+    expect(add).toHaveAttribute("aria-expanded", "false");
+    await userEvent.setup().click(add);
     expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a server" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("puts the count of servers beside the title, and closes Add a server with Close or Escape (#428)", async () => {
+    mockHub({ "GET /api/agents?all=true": () => ({ data: [online, offline] }) });
+    const user = userEvent.setup();
+    renderAs(admin, <ServersPage />);
+
+    const title = await screen.findByRole("heading", { name: "Servers", level: 2 });
+    const row = title.parentElement as HTMLElement;
+    expect(within(row).getByText("1 online")).toBeInTheDocument();
+    expect(within(row).getByText("1 offline")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Add a server" })).toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Add a server" }));
+    expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+
+    await user.click(within(row).getByRole("button", { name: "Add a server" }));
+    await user.type(await screen.findByLabelText("Name (optional)"), "{Escape}");
+    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
   });
 
   it("shows the install command once the token is created", async () => {
@@ -169,6 +197,7 @@ describe("ServersPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     await user.type(await screen.findByLabelText("Name (optional)"), " Web ");
     await user.click(screen.getByRole("button", { name: "Create enrollment token" }));
 
@@ -202,6 +231,7 @@ describe("ServersPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
 
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     expect(await screen.findByRole("heading", { name: "Pending enrollment tokens" })).toBeInTheDocument();
     expect(screen.getByText("(no name)")).toBeInTheDocument();
     expect(screen.getByText(/made by ana/)).toBeInTheDocument();
@@ -220,6 +250,7 @@ describe("ServersPage", () => {
   it("shows nothing about tokens when none is pending", async () => {
     mockHub({ "GET /api/agents?all=true": () => ({ data: [] }), "GET /api/enrollment-tokens": () => ({ data: [] }) });
     renderAs(admin, <ServersPage />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Add a server" }));
     await screen.findByRole("heading", { name: "Add a server" });
     expect(screen.queryByRole("heading", { name: "Pending enrollment tokens" })).not.toBeInTheDocument();
   });
@@ -237,7 +268,7 @@ describe("ServersPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Remote agents are off" })).toBeInTheDocument();
     // No token while it could not work.
-    expect(screen.queryByRole("heading", { name: "Add a server" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a server" })).not.toBeInTheDocument();
 
     const port = screen.getByLabelText("Port for remote agents");
     await user.clear(port);
@@ -247,7 +278,7 @@ describe("ServersPage", () => {
     await user.type(port, "8443");
     await user.click(screen.getByRole("button", { name: "Turn on remote agents" }));
 
-    expect(await screen.findByRole("heading", { name: "Add a server" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Add a server" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Remote agents are off" })).not.toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ port: 8443 });
   });
@@ -281,6 +312,7 @@ describe("ServersPage", () => {
     });
     const user = userEvent.setup();
     renderAs(admin, <ServersPage />);
+    await user.click(await screen.findByRole("button", { name: "Add a server" }));
     await user.click(await screen.findByRole("button", { name: "Create enrollment token" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("agent listener is off");
     expect(screen.queryByLabelText("Install command")).not.toBeInTheDocument();

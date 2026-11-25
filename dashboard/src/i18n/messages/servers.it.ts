@@ -91,6 +91,7 @@ export const serversIt: Record<keyof typeof servers, string> = {
   "servers.add.ttl24h": "24 ore",
   "servers.add.ttl7d": "7 giorni",
   "servers.add.shownOnce": "Questo token è mostrato solo ora: copia il comando prima di lasciare la pagina.",
+  "servers.add.close": "Chiudi",
   "servers.add.createToken": "Crea token di registrazione",
   "servers.add.tokenLabel": "Token di registrazione",
   "servers.add.instructions":

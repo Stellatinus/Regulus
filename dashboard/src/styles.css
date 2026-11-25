@@ -1482,6 +1482,8 @@ p.command input {
     flex-direction: column;
     align-items: stretch;
   }
+}
+
 /* last-resort error screen (RootBoundary), shown when the app itself failed */
 .root-error {
   max-width: 36rem;
@@ -1558,4 +1560,20 @@ p.command input {
   display: block;
   width: 100%;
   box-sizing: border-box;
+}
+
+/* the right end of a title row: the + button of the Servers page (#428) */
+.title-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+button.icon-button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
 }

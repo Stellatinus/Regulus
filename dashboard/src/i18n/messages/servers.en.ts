@@ -100,6 +100,7 @@ export const servers = {
   "servers.add.ttl24h": "24 hours",
   "servers.add.ttl7d": "7 days",
   "servers.add.shownOnce": "This token is shown only now: copy the command before leaving the page.",
+  "servers.add.close": "Close",
   "servers.add.createToken": "Create enrollment token",
   "servers.add.tokenLabel": "Enrollment token",
   "servers.add.instructions":
