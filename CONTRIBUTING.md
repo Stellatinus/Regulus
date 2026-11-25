@@ -21,7 +21,7 @@ See [docs/development.md](docs/development.md) and [docs/configuration.md](docs/
 ## How we work
 
 - **One pull request per issue.** Pick an issue (or open one), say you are working on it, and reference it in the pull request with `Closes #N`.
-- **Branches** are named after the work, for example `feat/hub-auth` or `fix/migration-rollback`.
+- **Branches** are for development and for stable versions. A development branch is named after the work, for example `feat/hub-auth` or `fix/migration-rollback`, holds one issue and is merged into `main` by pull request. When a stable version is released (for example `1.0.0`), a branch for it is kept, named `release/1.0.0`, and development goes on in `main`; there is no stable release yet, so there is no release branch. Do not push to a release branch except as the maintainer says. The alphas and betas published so far will be deleted once a stable version exists, see [docs/releases.md](docs/releases.md).
 - **Commits** follow [Conventional Commits](https://www.conventionalcommits.org/): `feat(hub): ...`, `fix(storage): ...`, `docs: ...`, `ci: ...`, `test: ...`.
 - **Run `make lint test` before pushing.** CI runs the same checks and must be green to merge.
 - **Protobuf**: after editing a `.proto` file run `make proto` and commit the generated code in `internal/gen`. CI fails if it is out of date, and `make proto-breaking` (also in CI) fails if a field was renumbered, retyped or removed compared with `main`. Read [docs/versioning.md](docs/versioning.md) first: an old agent must keep working with a new hub, and the update contract never changes meaning.
