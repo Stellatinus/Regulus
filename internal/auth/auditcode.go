@@ -39,6 +39,15 @@ const (
 	CodeDownloadFailed       = "update_download_failed" // error: the system's own text, English
 	CodeTwoFactorSettings    = "two_factor_settings"    // the password check of the two-factor settings failed
 	CodeReauthentication     = "reauthentication"       // the password check of a re-authentication failed
+
+	// API tokens (#406).
+	CodeAPIToken        = "api_token"              // name, permissions: ids separated by commas
+	CodeAPITokenName    = "api_token_name"         // name
+	CodeAPITokenRequest = "api_token_request"      // method, path
+	CodeAPITokenLimited = "api_token_rate_limited" //
+
+	// Backups (#408).
+	CodeBackupRestored = "backup_restored" // time, version: when the backup was made and by which release
 )
 
 type codeKey struct{}

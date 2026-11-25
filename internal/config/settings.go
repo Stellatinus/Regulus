@@ -59,6 +59,8 @@ func Settings() []Setting {
 		{Key: "builtin_agent", Env: "REGULUS_BUILTIN_AGENT", Description: "Run an agent inside the hub so its own server is managed too", Choices: []string{"true", "false"}, Restart: true},
 		{Key: "metrics_interval", Env: "REGULUS_METRICS_INTERVAL", Description: "How often agents report metrics, such as 10s (at least 1s)", Restart: true},
 		{Key: "metrics_budget", Env: "REGULUS_METRICS_BUDGET", Description: "Memory for the metrics history of all agents together, such as 256MiB (at least 4MiB); the oldest samples go first when it is full", Restart: true},
+		{Key: "metrics_retention_1m", Env: "REGULUS_METRICS_RETENTION_1M", Description: "How long the stored 1-minute history of the metrics is kept, such as 3d; 0 turns the tier off", Restart: true},
+		{Key: "metrics_retention_15m", Env: "REGULUS_METRICS_RETENTION_15M", Description: "How long the stored 15-minute history of the metrics is kept, such as 90d; 0 turns the tier off", Restart: true},
 		{Key: "plugins_dir", Env: "REGULUS_PLUGINS_DIR", Description: "Directory of the plugins the hub runs, each as its own process; empty runs none. Keep it owned by root: whatever is in it runs", Restart: true, quote: true},
 		{Key: "log.level", Env: "REGULUS_LOG_LEVEL", Description: "How much the hub logs", Choices: []string{"debug", "info", "warn", "error"}, Restart: true},
 		{Key: "log.format", Env: "REGULUS_LOG_FORMAT", Description: "Log format", Choices: []string{"text", "json"}, Restart: true},
@@ -126,6 +128,10 @@ func (c Config) Get(key string) (string, bool) {
 		return c.MetricsInterval.String(), true
 	case "metrics_budget":
 		return c.MetricsBudget.String(), true
+	case "metrics_retention_1m":
+		return c.MetricsRetention1m.String(), true
+	case "metrics_retention_15m":
+		return c.MetricsRetention15m.String(), true
 	case "plugins_dir":
 		return c.PluginsDir, true
 	case "log.level":
@@ -229,6 +235,12 @@ func normalize(key, raw string) (string, *SettingError) {
 			return "", settingErr("", ErrTooShort, MinMetricsBudget.String())
 		}
 		return n.String(), nil
+	case "metrics_retention_1m", "metrics_retention_15m":
+		r, err := ParseRetention(v)
+		if err != nil {
+			return "", settingErr("", ErrRetention)
+		}
+		return r.String(), nil
 	case "log.level":
 		return oneOf(v, "debug", "info", "warn", "error")
 	case "log.format":

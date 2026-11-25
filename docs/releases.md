@@ -25,3 +25,12 @@ A server verifies the signature of a release with the signing identity that was 
 A hub of `v0.2.0-alpha.1` is in the same position as an agent of it: its own update fails the same way, because both use the same check. The way out is by hand, once per server: run the installer of the new release (`install.sh --version VERSION`, see [Updates](updates.md#after-the-move-of-the-repository)), which keeps the data and, for an agent, its certificate. A rollout that includes such an agent fails for it with the signature message and stops there; the hub does not hide those servers from the list, because the version number is the only thing it knows about them.
 
 **Moving the repository again.** Do not accept two identities at once as a permanent rule: the old organization may no longer be controlled by the maintainers, and whoever controls it could then sign releases for every server. A move needs a *bridge release* built before it: a release signed by the old identity that already accepts the new one, published and installed everywhere, and only then the first release signed by the new identity (see `docs/decisions.md`, "Signing identity across a move").
+
+## Branches and old pre-releases
+
+Decided by the maintainer on 2026-11-25 (see `docs/decisions.md`, "Releases and channels"):
+
+- **A branch for each stable version.** Branches are for development (one per issue, merged into `main`) and for stable versions: when `1.0.0` is released, the branch `release/1.0.0` is kept, and development goes on in `main`. There is no stable release yet, so there is no release branch.
+- **Old pre-releases are removed.** Once a stable version exists, the alphas and betas before it are deleted and the stable releases are kept. The maintainer reads the download counts on GitHub first. Not every pre-release has to go.
+
+Two things are **not decided and not done**: how a fix to an older stable version would be tagged (the release workflow accepts only a commit on `main`, #438), and how to delete a release without breaking the update check, `latest.json`, `install.sh --version` of a kept release and rollbacks (#439). Do not delete a release or a tag before #439 is done.

@@ -59,6 +59,12 @@ var Routes = []string{
 // otherwise it answers 401. The user is available with UserFrom.
 func (s *Service) Require(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A bearer token is the only identity of the request: a cookie on it
+		// is ignored.
+		if secret, ok := bearerOf(r); ok {
+			s.requireToken(w, r, secret, next)
+			return
+		}
 		user, sess, err := s.sessionOf(r)
 		if err != nil {
 			writeFail(w, http.StatusUnauthorized, ErrUnauthenticated)
@@ -231,6 +237,12 @@ func (s *Service) handleLogout(w http.ResponseWriter, r *http.Request) {
 // hub's own. Wrap every POST, PUT and DELETE handler with it.
 func RequireJSON(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The rule protects cookies from other sites; a browser never adds a
+		// bearer header by itself, so a token needs neither.
+		if IsToken(r.Context()) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		ct := r.Header.Get("Content-Type")
 		if mt, _, _ := strings.Cut(ct, ";"); strings.TrimSpace(strings.ToLower(mt)) != "application/json" {
 			writeErrorCode(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json", codeUnsupportedMedia)
@@ -306,6 +318,7 @@ var errorCodes = []struct {
 	{ErrInvalidCredentials, "invalid_credentials"},
 	{ErrBadSetupToken, "bad_setup_token"},
 	{ErrSetupDone, "setup_done"},
+	{ErrTokenNotFound, "token_not_found"},
 }
 
 // Codes of answers that no sentinel error carries (#354).
@@ -325,6 +338,7 @@ func ErrorCodes() []string {
 	codes := []string{
 		codeInternal, codeInvalidJSON, codeInvalidLimit, codeUnsupportedMedia, codeCrossOrigin,
 		"login_expired", "reauth_required",
+		StepUpUnavailableCode, NotForTokensCode, codeTokenInvalid, codeTokenLimited, "rate_limited",
 	}
 	codes = append(codes, inputCodes...)
 	for _, c := range errorCodes {
@@ -337,6 +351,8 @@ func ErrorCodes() []string {
 var inputCodes = []string{
 	"username_invalid", "password_too_short", "password_too_long", "new_password_length", "account_disabled",
 	"role_name_invalid", "role_name_builtin", "role_unknown", "permission_unknown", "role_description_length", "policy_invalid",
+	"token_name_invalid", "token_permissions_none", "token_permission_forbidden", "token_permission_not_held",
+	"token_no_expiry_forbidden", "token_expiry_invalid", "token_limit",
 }
 
 // errorCodeOf is the code of err, or "" for an error without one.

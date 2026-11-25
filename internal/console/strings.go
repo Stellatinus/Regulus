@@ -376,6 +376,7 @@ var en = strs{
 		"bool":             "use true or false",
 		"duration":         "use a duration such as 10s or 1m",
 		"size":             "use a size such as 256MiB or 1GiB",
+		"retention":        "use days such as 3d or 90d (or a duration such as 36h), or 0 to turn the tier off",
 		"too_short":        "too short (minimum %s)",
 		"choice":           "use one of: %s",
 		"read_file":        "cannot read the configuration file: %s",

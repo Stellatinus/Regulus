@@ -160,6 +160,13 @@ message Reject {
 // Heartbeat tells the hub the agent is alive.
 message Heartbeat {
   google.protobuf.Timestamp sent_at = 1;
+  // The update helper's result, sent when it differs from the one the hub
+  // already has (the one in Hello, or the last heartbeat). A helper that
+  // refuses a request ("failed") changes nothing and does not restart the
+  // agent, so no new Hello arrives: this is how the hub learns of it (#411).
+  // Added without a new version (add-only, docs/versioning.md); an older hub
+  // ignores it and an older agent does not send it.
+  UpdateResult update_result = 2;
 }
 
 // MetricsReport is a snapshot of the machine state.

@@ -47,6 +47,10 @@ func main() {
 		os.Exit(runHub(os.Args[2:]))
 	case "db":
 		os.Exit(runDB(os.Args[2:]))
+	case "backup":
+		os.Exit(runBackup(os.Args[2:]))
+	case "restore":
+		os.Exit(runRestore(os.Args[2:]))
 	case "agent":
 		os.Exit(runAgent(os.Args[2:]))
 	case "update-apply":
@@ -86,6 +90,8 @@ Commands:
   config   list, get and set the hub's settings (list|get|set|path)
   hub      run the hub (serves the dashboard); see 'regulus hub -h' for flags
   db       check the database settings (db check)
+  backup   write an encrypted backup of the hub; see 'regulus backup -h'
+  restore  restore a backup into an empty installation; see 'regulus restore -h'
   hub create-admin
            create the first admin from the terminal; see 'regulus hub create-admin -h'
   hub reset-admin

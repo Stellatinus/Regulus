@@ -25,6 +25,10 @@ const (
 	PermCoreUpdate    = "core.update"
 	// PermInventoryRead: what identifies hardware (serial numbers, WWNs).
 	PermInventoryRead = "inventory.read"
+	// PermTokensCreate lets a user make, list and revoke their own API tokens;
+	// PermTokensManage lists and revokes anyone's (#406).
+	PermTokensCreate = "tokens.create"
+	PermTokensManage = "tokens.manage"
 )
 
 var catalogue = []Permission{
@@ -35,6 +39,8 @@ var catalogue = []Permission{
 	{PermRolesManage, "Create, change and delete roles"},
 	{PermAuditRead, "Read the audit log"},
 	{PermInventoryRead, "See the hardware inventory: the disks of the servers with their serial numbers, and where a disk moved"},
+	{PermTokensCreate, "Make, list and revoke their own API tokens"},
+	{PermTokensManage, "List and revoke anybody's API tokens, and make tokens that never expire"},
 	{PermCoreUpdate, "See the updates of Regulus, check for them, download them and choose the update mode and channel"},
 }
 

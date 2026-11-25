@@ -66,6 +66,12 @@ func (s *Service) recent(sess session) bool {
 // so that a user without the permission is refused rather than asked.
 func (s *Service) RequireStepUp(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if IsToken(r.Context()) {
+			// A token never passes step-up, whatever permissions it has: the
+			// actions that need a proof of the password are for a person.
+			writeErrorCode(w, http.StatusForbidden, "this action needs a password confirmation, which an API token cannot give", StepUpUnavailableCode)
+			return
+		}
 		sess, ok := sessionFrom(r.Context())
 		if !ok || !s.recent(sess) {
 			writeJSON(w, http.StatusForbidden, map[string]string{

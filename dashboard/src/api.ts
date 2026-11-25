@@ -146,6 +146,17 @@ export function apiErrorText(
 // errorCodes) that have a text of their own in the catalogs, "hub.error.<code>"
 // (#330). Any other answer shows the hub's English text.
 const HUB_ERROR_CODES = new Set([
+  "step_up_not_available_to_tokens",
+  "not_available_to_tokens",
+  "invalid_token",
+  "token_rate_limited",
+  "token_name_invalid",
+  "token_permissions_none",
+  "token_permission_forbidden",
+  "token_permission_not_held",
+  "token_no_expiry_forbidden",
+  "token_expiry_invalid",
+  "token_limit",
   "user_not_found",
   "session_not_found",
   "role_not_found",

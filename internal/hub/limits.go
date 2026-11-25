@@ -56,7 +56,9 @@ func cleanText(s string) string {
 func sanitizeHello(h *agentv1.Hello) {
 	h.AgentVersion = cleanText(h.GetAgentVersion())
 	h.AgentId = cleanText(h.GetAgentId())
-	sanitizeUpdateResult(h)
+	if !sanitizeUpdateResult(h.GetUpdateResult()) {
+		h.UpdateResult = nil
+	}
 	if sys := h.GetSystem(); sys != nil {
 		sys.Hostname = cleanText(sys.GetHostname())
 		sys.Os = cleanText(sys.GetOs())
@@ -68,18 +70,17 @@ func sanitizeHello(h *agentv1.Hello) {
 }
 
 // sanitizeUpdateResult limits the update helper's result that an agent sends in
-// Hello (#337): the texts are cut and cleaned, a few arguments are kept, and an
-// outcome that is not one the helper writes is dropped with the whole result.
-func sanitizeUpdateResult(h *agentv1.Hello) {
-	r := h.GetUpdateResult()
+// Hello (#337) or in a heartbeat (#411): the texts are cut and cleaned, a few
+// arguments are kept. It reports false for nil and for an outcome that is not
+// one the helper writes: the caller then drops the whole result.
+func sanitizeUpdateResult(r *agentv1.UpdateResult) bool {
 	if r == nil {
-		return
+		return false
 	}
 	switch r.GetOutcome() {
 	case update.OutcomeInstalling, update.OutcomeApplied, update.OutcomeRolledBack, update.OutcomeFailed:
 	default:
-		h.UpdateResult = nil
-		return
+		return false
 	}
 	r.Version = cleanText(r.GetVersion())
 	r.From = cleanText(r.GetFrom())
@@ -98,6 +99,7 @@ func sanitizeUpdateResult(h *agentv1.Hello) {
 	for k, v := range r.Args {
 		r.Args[k] = cleanText(v)
 	}
+	return true
 }
 
 // sanitizeReport limits the lists and the texts of a report in place and

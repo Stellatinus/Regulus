@@ -6,13 +6,18 @@ info:
     HTTP API of the Regulus hub, used by the dashboard.
 
     Everything under `/api/` needs a login (session cookie `regulus_session`) except
-    the `/api/auth/*` endpoints. State-changing requests (POST, PUT, PATCH, DELETE) must send
+    the `/api/auth/*` endpoints. A program can use an **API token** instead
+    (`Authorization: Bearer rgt_...`, see `/api/tokens`): it can do what its owner
+    may and the token lists, can never pass a step-up (`403`,
+    `code: step_up_not_available_to_tokens`), and cannot use `/api/account/*` or
+    `/api/stream` (`403`, `code: not_available_to_tokens`). State-changing requests (POST, PUT, PATCH, DELETE) must send
     `Content-Type: application/json` and, if they send an `Origin` header, it must
     be the hub's own. This file is served by the hub at `/api/openapi.yaml`.
 servers:
   - url: /
 security:
   - cookieAuth: []
+  - bearerAuth: []
 tags:
   - name: auth
   - name: agents
@@ -1422,6 +1427,90 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /api/tokens:
+    get:
+      tags: [accounts]
+      summary: The own API tokens (needs tokens.create), or everybody's with all=true (needs tokens.manage)
+      description: A token is never shown again after it was made; the list has its first eight characters (`prefix`). Revoked tokens stay in the list with `revoked_at`.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: all
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: The tokens, newest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiToken" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [accounts]
+      summary: Make an API token (needs tokens.create and a recent password confirmation)
+      description: >
+        The secret is in the answer **once**; only its hash is kept. Without
+        `permissions` the token is read only (every permission the user holds that ends
+        in `.read`). A token can never hold `users.manage`, `roles.manage`,
+        `tokens.create` or `tokens.manage`, and only permissions the user holds. The
+        default lifetime is 90 days; `no_expiry` needs tokens.manage.
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 64 }
+                permissions:
+                  type: array
+                  items: { type: string }
+                expires_in_days: { type: integer, minimum: 1, maximum: 3650 }
+                no_expiry: { type: boolean }
+      responses:
+        "201":
+          description: The token was made.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiToken"
+                  - type: object
+                    required: [token]
+                    properties:
+                      token: { type: string, description: "The secret, shown once." }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/tokens/{id}:
+    delete:
+      tags: [accounts]
+      summary: Revoke an API token (the own, or anybody's with tokens.manage)
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "204":
+          description: The token was revoked, from the next request on.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
   /api/roles:
     get:
       tags: [accounts]
@@ -1552,6 +1641,10 @@ components:
       type: apiKey
       in: cookie
       name: regulus_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: An API token, `rgt_` followed by 43 characters, made with `POST /api/tokens`. Never in a URL.
   parameters:
     Username:
       name: username
@@ -1865,6 +1958,22 @@ components:
       properties:
         two_factor_policy: { type: string, enum: [off, admins, all] }
         two_factor_available: { type: boolean }
+    ApiToken:
+      type: object
+      required: [id, owner, name, prefix, permissions, created_at, expires_at, last_used_at, revoked_at]
+      properties:
+        id: { type: integer }
+        owner: { type: string }
+        name: { type: string }
+        prefix: { type: string, description: "The first eight characters of the token." }
+        permissions:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, "null"], format: date-time }
+        last_used_at: { type: [string, "null"], format: date-time, description: "Written at most once a minute." }
+        last_used_ip: { type: string }
+        revoked_at: { type: [string, "null"], format: date-time }
     SessionInfo:
       type: object
       required: [id, remote_addr, user_agent, created_at, last_used_at, expires_at, current]

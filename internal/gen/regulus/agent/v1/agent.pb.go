@@ -847,8 +847,15 @@ func (x *Reject) GetMaxProtocolVersion() uint32 {
 
 // Heartbeat tells the hub the agent is alive.
 type Heartbeat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SentAt        *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	SentAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"`
+	// The update helper's result, sent when it differs from the one the hub
+	// already has (the one in Hello, or the last heartbeat). A helper that
+	// refuses a request ("failed") changes nothing and does not restart the
+	// agent, so no new Hello arrives: this is how the hub learns of it (#411).
+	// Added without a new version (add-only, docs/versioning.md); an older hub
+	// ignores it and an older agent does not send it.
+	UpdateResult  *UpdateResult `protobuf:"bytes,2,opt,name=update_result,json=updateResult,proto3" json:"update_result,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -886,6 +893,13 @@ func (*Heartbeat) Descriptor() ([]byte, []int) {
 func (x *Heartbeat) GetSentAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.SentAt
+	}
+	return nil
+}
+
+func (x *Heartbeat) GetUpdateResult() *UpdateResult {
+	if x != nil {
+		return x.UpdateResult
 	}
 	return nil
 }
@@ -2028,9 +2042,10 @@ const file_regulus_agent_v1_agent_proto_rawDesc = "" +
 	"\x12REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#REASON_UNSUPPORTED_PROTOCOL_VERSION\x10\x01\x12\x17\n" +
 	"\x13REASON_UNAUTHORIZED\x10\x02\x12\x18\n" +
-	"\x14REASON_AGENT_TOO_OLD\x10\x03\"@\n" +
+	"\x14REASON_AGENT_TOO_OLD\x10\x03\"\x85\x01\n" +
 	"\tHeartbeat\x123\n" +
-	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xef\x04\n" +
+	"\asent_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\x12C\n" +
+	"\rupdate_result\x18\x02 \x01(\v2\x1e.regulus.agent.v1.UpdateResultR\fupdateResult\"\xef\x04\n" +
 	"\rMetricsReport\x12=\n" +
 	"\fcollected_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcollectedAt\x12.\n" +
 	"\x03cpu\x18\x02 \x01(\v2\x1c.regulus.agent.v1.CpuMetricsR\x03cpu\x127\n" +
@@ -2188,29 +2203,30 @@ var file_regulus_agent_v1_agent_proto_depIdxs = []int32{
 	26, // 12: regulus.agent.v1.Welcome.metrics_interval:type_name -> google.protobuf.Duration
 	1,  // 13: regulus.agent.v1.Reject.reason:type_name -> regulus.agent.v1.Reject.Reason
 	25, // 14: regulus.agent.v1.Heartbeat.sent_at:type_name -> google.protobuf.Timestamp
-	25, // 15: regulus.agent.v1.MetricsReport.collected_at:type_name -> google.protobuf.Timestamp
-	13, // 16: regulus.agent.v1.MetricsReport.cpu:type_name -> regulus.agent.v1.CpuMetrics
-	14, // 17: regulus.agent.v1.MetricsReport.memory:type_name -> regulus.agent.v1.MemoryMetrics
-	15, // 18: regulus.agent.v1.MetricsReport.disks:type_name -> regulus.agent.v1.DiskMetrics
-	16, // 19: regulus.agent.v1.MetricsReport.networks:type_name -> regulus.agent.v1.NetworkMetrics
-	12, // 20: regulus.agent.v1.MetricsReport.plugins:type_name -> regulus.agent.v1.PluginStatus
-	11, // 21: regulus.agent.v1.MetricsReport.physical_disks:type_name -> regulus.agent.v1.PhysicalDisk
-	25, // 22: regulus.agent.v1.PluginStatus.since:type_name -> google.protobuf.Timestamp
-	18, // 23: regulus.agent.v1.Command.ping:type_name -> regulus.agent.v1.Ping
-	19, // 24: regulus.agent.v1.Command.set_intervals:type_name -> regulus.agent.v1.SetIntervals
-	21, // 25: regulus.agent.v1.Command.apply_update:type_name -> regulus.agent.v1.ApplyUpdate
-	26, // 26: regulus.agent.v1.SetIntervals.heartbeat_interval:type_name -> google.protobuf.Duration
-	26, // 27: regulus.agent.v1.SetIntervals.metrics_interval:type_name -> google.protobuf.Duration
-	0,  // 28: regulus.agent.v1.FetchUpdateRequest.file:type_name -> regulus.agent.v1.UpdateFile
-	2,  // 29: regulus.agent.v1.AgentService.Connect:input_type -> regulus.agent.v1.AgentMessage
-	22, // 30: regulus.agent.v1.AgentService.FetchUpdate:input_type -> regulus.agent.v1.FetchUpdateRequest
-	3,  // 31: regulus.agent.v1.AgentService.Connect:output_type -> regulus.agent.v1.HubMessage
-	23, // 32: regulus.agent.v1.AgentService.FetchUpdate:output_type -> regulus.agent.v1.FileChunk
-	31, // [31:33] is the sub-list for method output_type
-	29, // [29:31] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	5,  // 15: regulus.agent.v1.Heartbeat.update_result:type_name -> regulus.agent.v1.UpdateResult
+	25, // 16: regulus.agent.v1.MetricsReport.collected_at:type_name -> google.protobuf.Timestamp
+	13, // 17: regulus.agent.v1.MetricsReport.cpu:type_name -> regulus.agent.v1.CpuMetrics
+	14, // 18: regulus.agent.v1.MetricsReport.memory:type_name -> regulus.agent.v1.MemoryMetrics
+	15, // 19: regulus.agent.v1.MetricsReport.disks:type_name -> regulus.agent.v1.DiskMetrics
+	16, // 20: regulus.agent.v1.MetricsReport.networks:type_name -> regulus.agent.v1.NetworkMetrics
+	12, // 21: regulus.agent.v1.MetricsReport.plugins:type_name -> regulus.agent.v1.PluginStatus
+	11, // 22: regulus.agent.v1.MetricsReport.physical_disks:type_name -> regulus.agent.v1.PhysicalDisk
+	25, // 23: regulus.agent.v1.PluginStatus.since:type_name -> google.protobuf.Timestamp
+	18, // 24: regulus.agent.v1.Command.ping:type_name -> regulus.agent.v1.Ping
+	19, // 25: regulus.agent.v1.Command.set_intervals:type_name -> regulus.agent.v1.SetIntervals
+	21, // 26: regulus.agent.v1.Command.apply_update:type_name -> regulus.agent.v1.ApplyUpdate
+	26, // 27: regulus.agent.v1.SetIntervals.heartbeat_interval:type_name -> google.protobuf.Duration
+	26, // 28: regulus.agent.v1.SetIntervals.metrics_interval:type_name -> google.protobuf.Duration
+	0,  // 29: regulus.agent.v1.FetchUpdateRequest.file:type_name -> regulus.agent.v1.UpdateFile
+	2,  // 30: regulus.agent.v1.AgentService.Connect:input_type -> regulus.agent.v1.AgentMessage
+	22, // 31: regulus.agent.v1.AgentService.FetchUpdate:input_type -> regulus.agent.v1.FetchUpdateRequest
+	3,  // 32: regulus.agent.v1.AgentService.Connect:output_type -> regulus.agent.v1.HubMessage
+	23, // 33: regulus.agent.v1.AgentService.FetchUpdate:output_type -> regulus.agent.v1.FileChunk
+	32, // [32:34] is the sub-list for method output_type
+	30, // [30:32] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_regulus_agent_v1_agent_proto_init() }

@@ -2,7 +2,7 @@
 
 **CodexCircle Server Manager**, also known as **Regulus**, is a platform to manage one or more Linux servers from a single web dashboard.
 
-> **Project status:** early development. Hub, built-in and remote agents, dashboard, authentication and updates are implemented; plugins are not yet. No release has been published, and the release, the packages and the update path have not yet been tested on a real system (#81). See the [roadmap](#roadmap) and the [design decisions](docs/decisions.md).
+> **Project status:** early development. Hub, built-in and remote agents, dashboard, authentication and updates are implemented; the plugin runtime exists, but no plugin does anything for the dashboard yet. Pre-releases are published (`v0.3.0-alpha.1` is the newest) and there is no stable release. On 2026-11-24 the upgrade of a hub and the installation of a remote agent were run on two real Ubuntu 26.04 LTS amd64 VMs; an update installed from the dashboard and its rollback, Ubuntu 22.04 and 24.04, arm64, PostgreSQL and most browsers have not been tested on a real system (#81, [Verification status](docs/decisions.md#verification-status)). See the [roadmap](#roadmap) and the [design decisions](docs/decisions.md).
 
 ## How it works
 

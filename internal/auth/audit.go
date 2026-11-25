@@ -31,8 +31,8 @@ const (
 const enrollFailedEvent = "agent_enroll_failed"
 
 // unauthenticatedEvents are the events a stranger can cause: the login and the
-// enrollment are reachable without credentials.
-var unauthenticatedEvents = []string{EventLoginFailed, enrollFailedEvent}
+// enrollment are reachable without credentials, and so is a wrong API token.
+var unauthenticatedEvents = []string{EventLoginFailed, enrollFailedEvent, EventAPITokenAuthFailed}
 
 // IsUnauthenticatedEvent reports whether event is one that anybody can cause
 // without a login, and so shares a small budget in the audit log.

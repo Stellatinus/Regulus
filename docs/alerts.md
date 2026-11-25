@@ -1,6 +1,6 @@
 # Alerts
 
-**Status: design (#386), not implemented.** This page is the agreed design; the implementation issues listed at the end build it. Nothing here exists in the hub yet. Today Regulus shows the state of every server, but nobody is told when something goes wrong: the dashboard has to be open and looked at. The certificate warning of #245 is a log line and a field of the API, not a message to a person.
+**Status: design (#386); step 1 of the implementation is done (#404): the rules, the state and the evaluator on the hub.** This page is the agreed design; the implementation issues listed at the end build it. What exists: the tables, the evaluator and the state machine (`internal/alerts`), run by the hub every 30 seconds. What does not: delivery (email, webhooks), the Alerts page, the API, the permissions and the audit events; until delivery exists a change of state is a line in the hub log. See [What exists](#what-exists-404). Today Regulus shows the state of every server, but nobody is told when something goes wrong: the dashboard has to be open and looked at. The certificate warning of #245 is a log line and a field of the API, not a message to a person.
 
 ## What an alert is
 
@@ -76,6 +76,19 @@ Every text of the alerts feature is in English and Italian from the first versio
 ## What is not in the first version
 
 Per-server and per-group rules, maintenance windows, escalation chains, chat integrations other than a webhook, and alerts on the logs. Trend alerts (disk full in N days) need the persistent metrics history of #387.
+
+## What exists (#404)
+
+- **Tables** (migration 0020): `alert_rules`, one row per condition, written with the defaults above the first time the hub runs and never overwritten by it (a later release that changes a default does not change a rule an administrator may have set; a new condition is added with its default); `alerts`, one row per alert, resolved ones kept 90 days as history, at most one that is not resolved for a condition and a subject (a unique partial index).
+- **Evaluator** (`internal/alerts`): the hub builds a `Snapshot` (the registry and last seen times, the latest reports, the certificate dates, the failed rollouts, the lock) every 30 seconds and calls `Evaluate`. A *finding* is a condition that is true now for one subject. The engine keeps in memory, per condition and subject, since when it has been true, since when at the critical level and since when false. An alert **opens** when the finding has held for the rule's duration, **raises** to critical only when the critical level has held for the duration too, and **resolves** when the finding has been absent for the recovery time (the rule's, else its duration, never under one minute). `agent_offline` counts from the time the server was last seen, so a restart of the hub does not delay it.
+- **One message per change of state**, to a `Notifier`, after the change is written: `opened`, `escalated`, `resolved` (with the reason `recovered`, `subject_gone` or `rule_disabled`) and, when a rule has a reminder, `reminder`. A drop of severity sends nothing. An **acknowledged** alert sends nothing more, not even a raise, but still resolves with a message. Acknowledging is `Engine.Acknowledge`; the API that calls it is a later step.
+- **A server that is not reporting** (offline, an update-only session, a last report older than three intervals) is not evaluated for disks, memory or CPU: its disk alerts neither fire nor resolve until it reports again, so one outage is one alert.
+- **A server that is gone** (revoked, removed) resolves all its alerts at once with `subject_gone`; so do its certificate alerts.
+- **A restart of the hub** does not announce again what is in the table. The memory of the trackers is lost, so a condition that was true needs its duration again to open (if it has no alert yet) and one that is false needs its recovery time again to resolve.
+- **`hub_lock_lost`** is evaluated by the hub that lost the lock, at once (`demote`), with a snapshot that limits the evaluation to that one condition; it resolves after the usual recovery time once the hub holds the lock again and the timers run.
+- **`update_failed`** is a server whose entry in the last rollout is `failed` (which includes an update the installer rolled back) and that does not run the target version now. It resolves when a later rollout, or a manual update, no longer shows it.
+- **Subjects** are `agent:<id>`, `agent:<id>:disk:<mount>`, `agent:<id>:update`, `cert:ca`, `cert:listener`, `cert:agent:<id>` and `hub`; the arguments of an alert (`server`, `mount`, `percent`, `days`, ...) are what the later messages are built from.
+- Verified with unit tests on a fake clock and a real database (SQLite and PostgreSQL), and two hub tests. Not verified: a real mail server or a real outage (the `[Test]` of step 5).
 
 ## Implementation issues
 

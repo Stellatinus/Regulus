@@ -86,6 +86,7 @@ func APIRoutes(s *Service) []Route {
 		{"DELETE /api/account/sessions/{id}", RequireJSON(http.HandlerFunc(s.handleRevokeSession))},
 		{"POST /api/account/reauth", RequireJSON(http.HandlerFunc(s.handleReauth))},
 	}
+	routes = append(routes, tokenRoutes(s)...)
 	return append(routes, twoFactorRoutes(s)...)
 }
 
@@ -96,7 +97,7 @@ func (s *Service) fail(w http.ResponseWriter, err error) {
 	switch {
 	case isInputError(err):
 		writeFail(w, http.StatusBadRequest, err)
-	case errors.Is(err, ErrUserNotFound), errors.Is(err, ErrSessionNotFound), errors.Is(err, ErrRoleNotFound):
+	case errors.Is(err, ErrUserNotFound), errors.Is(err, ErrSessionNotFound), errors.Is(err, ErrRoleNotFound), errors.Is(err, ErrTokenNotFound):
 		writeFail(w, http.StatusNotFound, err)
 	case errors.Is(err, ErrUserExists), errors.Is(err, ErrLastAdmin), errors.Is(err, ErrRoleExists), errors.Is(err, ErrBuiltinRole), errors.Is(err, ErrRoleInUse):
 		writeFail(w, http.StatusConflict, err)

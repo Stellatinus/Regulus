@@ -22,6 +22,7 @@ const (
 	ErrBool            ErrorCode = "bool"             // none
 	ErrDuration        ErrorCode = "duration"         // none
 	ErrSize            ErrorCode = "size"             // none
+	ErrRetention       ErrorCode = "retention"        // none
 	ErrTooShort        ErrorCode = "too_short"        // the minimum
 	ErrChoice          ErrorCode = "choice"           // the choices, joined with ", "
 	ErrReadFile        ErrorCode = "read_file"        // the reason
@@ -47,6 +48,7 @@ var englishErrors = map[ErrorCode]string{
 	ErrBool:            "use true or false",
 	ErrDuration:        "use a duration such as 10s or 1m",
 	ErrSize:            "use a size such as 256MiB or 1GiB",
+	ErrRetention:       "use days such as 3d or 90d (or a duration such as 36h), or 0 to turn the tier off",
 	ErrTooShort:        "too short (minimum %s)",
 	ErrChoice:          "use one of: %s",
 	ErrReadFile:        "read config file: %s",

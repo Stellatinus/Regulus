@@ -18,13 +18,13 @@ Regulus v0.3.0  Hub ● running
    builtin_agent          true                       file
    metrics_interval       10s                        file
    metrics_budget         256MiB                     default
+   metrics_retention_1m   3d                         default
+   metrics_retention_15m  90d                        default
    plugins_dir            (empty)                    default
    log.level              info                       file
    log.format             text                       file
    updates.check          true                       default
    updates.apply          false                      default
-   prometheus.enabled     false                      default
-   prometheus.token       (empty)                    default
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 tab/←/→ section  ↑/↓ move  enter edit  r restart  q quit

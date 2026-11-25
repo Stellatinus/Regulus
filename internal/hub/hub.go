@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/CodexCircle/Regulus/internal/agent"
+	"github.com/CodexCircle/Regulus/internal/alerts"
 	"github.com/CodexCircle/Regulus/internal/auth"
 	"github.com/CodexCircle/Regulus/internal/config"
 	"github.com/CodexCircle/Regulus/internal/fleet"
@@ -47,6 +48,12 @@ type Hub struct {
 	cfg config.Config
 	log *slog.Logger
 	db  *sql.DB // store.Write
+	// history writes the completed metrics buckets to the database (#405).
+	history *metricsHistory
+	// alerts decides when something is a problem somebody should hear about
+	// (#404, alerts.go); alertEvery is how often it looks.
+	alerts     *alerts.Engine
+	alertEvery time.Duration
 	// store holds the database pools; unlockDir releases the lock of the
 	// data directory (see lockDataDir). Close does both.
 	store     *storage.HubDB
@@ -226,6 +233,13 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 	if cfg.MetricsInterval > 0 {
 		h.agents.metricsInterval = cfg.MetricsInterval
 	}
+	h.history = newMetricsHistory(db, log, cfg.MetricsRetention1m.Duration(), cfg.MetricsRetention15m.Duration())
+	h.agents.history = h.history
+	engine, err := alerts.New(ctx, db, log, h.alertLog())
+	if err != nil {
+		return fail(err)
+	}
+	h.alerts, h.alertEvery = engine, alertEvery
 	if cfg.MetricsBudget > 0 {
 		h.agents.metrics.budget = int64(cfg.MetricsBudget)
 	}
@@ -594,7 +608,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
-		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats))},
+		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, auth.RefuseTokens(streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(l.put)))), needsAuth: true},
 		{pattern: "GET /api/enrollment-tokens", handler: need(auth.PermServersManage, http.HandlerFunc(f.listTokens)), needsAuth: true},
