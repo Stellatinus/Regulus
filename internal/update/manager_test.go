@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -21,10 +22,14 @@ type fakeSource struct {
 	calls    int
 }
 
-func (f *fakeSource) Releases(context.Context) ([]Release, error) {
+func (f *fakeSource) Releases(ctx context.Context) ([]Release, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
+	if err := ctx.Err(); err != nil {
+		// Like the real source, whose request is cut off.
+		return nil, fmt.Errorf("cannot reach the release server: %w", err)
+	}
 	return f.releases, f.err
 }
 
@@ -194,6 +199,26 @@ func TestCheckFailureKeepsTheLastGoodAnswer(t *testing.T) {
 	r.src.set([]Release{r.rel.release()}, nil)
 	if st, err := r.m.Check(t.Context()); err != nil || st.CheckError != "" {
 		t.Errorf("status = %+v, err = %v", st, err)
+	}
+}
+
+// A check from the dashboard is not cut off when the browser stops waiting,
+// and a check cut off because the hub stops is not recorded as a failure of
+// the release server.
+func TestACancelledCheckIsNotAFailure(t *testing.T) {
+	r := newRig(t, "0.1.0", "0.2.0")
+	gone, cancel := context.WithCancel(t.Context())
+	cancel()
+	if st, err := r.m.Check(gone); err != nil || st.CheckError != "" || !st.UpdateAvailable {
+		t.Fatalf("check from a request that went away: status = %+v, err = %v", st, err)
+	}
+
+	*r.clock = r.clock.Add(24 * time.Hour)
+	if _, err := r.m.check(gone); !errors.Is(err, context.Canceled) {
+		t.Fatalf("background check while stopping: err = %v", err)
+	}
+	if st := r.status(t); st.CheckError != "" || st.Latest == nil || st.Latest.Version != "0.2.0" {
+		t.Errorf("status after a cancelled check = %+v", st)
 	}
 }
 
