@@ -244,7 +244,7 @@ func queryStrings(ctx context.Context, q querier, query string, args ...any) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var s string
