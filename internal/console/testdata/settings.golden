@@ -4,7 +4,7 @@ Regulus v0.3.0  Hub ● running
 ────────────────────────────────────────────────────────────────────────────────────────────────────
    Setting                Value                      Source
  ▸ listen                 :8080                      file
-   agent_listen           (empty)                    default
+   agent_listen           :8443                      dashboard
    data_dir               testdata/no-such-dir       file
    database.type          sqlite                     default
    database.host          (empty)                    default

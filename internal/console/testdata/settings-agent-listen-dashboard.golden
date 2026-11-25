@@ -1,0 +1,48 @@
+Regulus v0.3.0  Hub ● running
+
+ 1 Status   2 Settings   3 Logs   4 Health   5 Actions
+────────────────────────────────────────────────────────────────────────────────────────────────────
+   Setting                Value                      Source
+   listen                 :8080                      file
+ ▸ agent_listen           :8443                      dashboard
+   data_dir               testdata/no-such-dir       file
+   database.type          sqlite                     default
+   database.host          (empty)                    default
+   database.port          5432                       default
+   database.name          regulus                    default
+   database.user          regulus                    default
+   database.password      (empty)                    default
+   database.sslmode       prefer                     default
+   database.sslrootcert   (empty)                    default
+   database.schema        (empty)                    default
+   builtin_agent          true                       file
+   metrics_interval       10s                        file
+   metrics_budget         256MiB                     default
+   plugins_dir            (empty)                    default
+   log.level              info                       file
+   log.format             text                       file
+   updates.check          true                       default
+   updates.apply          false                      default
+   prometheus.enabled     false                      default
+   prometheus.token       (empty)                    default
+   console.tui            true                       default
+
+ agent_listen  default: (empty)
+ Address where remote agents connect (gRPC over TLS); empty keeps remote agents off
+ The hub reads it at start: restart it to apply.
+ Set from the dashboard (kept in the database). A value in the file or environment wins over it.
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+tab/←/→ section  ↑/↓ move  enter edit  r restart  q quit

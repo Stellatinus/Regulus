@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -25,6 +26,10 @@ var version = "dev"
 func main() {
 	if len(os.Args) < 2 {
 		os.Exit(runConsole(nil))
+	}
+	if isVersionArg(os.Args[1]) {
+		printVersion(os.Stdout)
+		return
 	}
 	// Flags of the console without its name: `regulus --no-tui`.
 	if strings.HasPrefix(os.Args[1], "-") && os.Args[1] != "-h" && os.Args[1] != "--help" {
@@ -48,8 +53,6 @@ func main() {
 		os.Exit(runUpdateApply(os.Args[2:]))
 	case "verify-release":
 		os.Exit(runVerifyRelease(os.Args[2:]))
-	case "version":
-		fmt.Println(version)
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -57,6 +60,18 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+}
+
+// isVersionArg tells whether the first argument asks for the version: the
+// subcommand `version` and the usual flags `--version` and `-v` all do (#441).
+func isVersionArg(a string) bool {
+	return a == "version" || a == "--version" || a == "-v"
+}
+
+// printVersion prints the version on one line. packaging/update-recover.sh
+// only checks that `regulus version` answers with something; keep it one line.
+func printVersion(w io.Writer) {
+	fmt.Fprintln(w, version)
 }
 
 func usage() {
@@ -81,7 +96,7 @@ Commands:
            (regulus-update.service), you do not need to
   verify-release
            check the signature of a release's checksums.txt (install.sh runs it)
-  version  print the version
+  version  print the version (also --version and -v)
 `)
 }
 

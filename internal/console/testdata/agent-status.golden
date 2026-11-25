@@ -1,0 +1,10 @@
+Role             agent
+Service          regulus-agent: active
+Version          v0.3.0
+Hub              hub.example:8443
+Link to the hub  connected
+Agent id         agent-7f3a
+Host name        web2
+Certificate      ends on 2027-02-01, in 98 days
+Data directory   /var/lib/regulus-agent
+Configuration    /etc/regulus/agent.yaml

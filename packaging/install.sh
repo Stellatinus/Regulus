@@ -939,15 +939,36 @@ wait_for_hub() {
 	return 1
 }
 
+# package_installed tells whether the regulus package is installed now. The
+# package's postinstall script treats "configure" without an old version as a
+# first installation (packaging/scripts/postinstall.sh); this is the same test.
+package_installed() {
+	have dpkg && dpkg -s regulus 2>/dev/null | grep -q '^Status: install ok installed'
+}
+
+# unit_active tells whether the systemd unit $1 is active.
+unit_active() {
+	have systemctl && systemctl is-active --quiet "$1" 2>/dev/null
+}
+
 # report tells the user how to continue: where the dashboard is, how to reach
-# it when it answers on this machine only (the default), and the setup token.
+# it when it answers on this machine only (the default), and, after a first
+# installation only, the setup token. main sets first_install (1 when the
+# package was not installed before, as the postinstall script decides) and
+# was_active (1 when regulus.service was running before the installation).
 report() {
 	port=$(listen_port)
 	[ -n "$port" ] || port=8080
 	scheme=$(dashboard_scheme)
 	host=$(hostname -I 2>/dev/null | awk '{print $1}')
+	first=${first_install:-1}
 	say ""
-	if wait_for_hub; then
+	if [ "${was_active:-1}" = 0 ] && ! unit_active regulus; then
+		# An upgrade keeps the state of the service (the usual dpkg rule): a hub
+		# stopped on purpose stays stopped, and that is not a failure (#422).
+		say "Regulus $version is installed. The service was stopped before and was left stopped, as it was."
+		say "  Start it with: sudo systemctl start regulus"
+	elif wait_for_hub; then
 		say "Regulus $version is installed and running."
 	else
 		warn "the hub did not answer within 30 seconds; see: journalctl -u regulus"
@@ -957,20 +978,30 @@ report() {
 	else
 		say "  Dashboard:   $scheme://${host:-<this server>}:$port"
 	fi
-	token=$($SUDO journalctl -u regulus -o cat --no-pager 2>/dev/null | sed -n 's/.*setup_token=\([^ ]*\).*/\1/p' | tail -n 1 || true)
-	if [ -n "$token" ]; then
-		say "  Setup token: $token"
-	else
-		say "  Setup token: journalctl -u regulus -o cat | grep setup_token"
+	if [ "$first" = 1 ]; then
+		token=$($SUDO journalctl -u regulus -o cat --no-pager 2>/dev/null | sed -n 's/.*setup_token=\([^ ]*\).*/\1/p' | tail -n 1 || true)
+		if [ -n "$token" ]; then
+			say "  Setup token: $token"
+		else
+			say "  Setup token: journalctl -u regulus -o cat | grep setup_token"
+		fi
 	fi
 	if local_only; then
-		say "From your computer, open a tunnel and the dashboard, and use the token to create the first admin account:"
+		if [ "$first" = 1 ]; then
+			say "From your computer, open a tunnel and the dashboard, and use the token to create the first admin account:"
+		else
+			say "From your computer, open a tunnel and the dashboard:"
+		fi
 		say "  ssh -L $port:127.0.0.1:$port ${USER:-you}@${host:-this-server}"
 		say "  $scheme://localhost:$port"
 		say "To reach the dashboard from the network, serve it over HTTPS (tls_cert and tls_key in $CONFIG_DIR/config.yaml)"
 		say "or put a reverse proxy with TLS in front; see \"Reaching the dashboard\" in docs/installation.md."
 	else
-		say "Open the dashboard and use the token to create the first admin account."
+		if [ "$first" = 1 ]; then
+			say "Open the dashboard and use the token to create the first admin account."
+		else
+			say "Open the dashboard."
+		fi
 		if [ "$scheme" = http ]; then
 			say "The dashboard uses plain HTTP on every interface: passwords cross the network in the clear. Set tls_cert and tls_key, or listen on 127.0.0.1 behind a reverse proxy with TLS."
 		fi
@@ -1171,6 +1202,12 @@ main() {
 		fi
 	fi
 	set_role
+
+	# What the package script will see, kept before it changes anything (#421, #422).
+	first_install=1
+	if package_installed; then first_install=0; fi
+	was_active=0
+	if unit_active regulus; then was_active=1; fi
 
 	say "Installing..."
 	# The package may be owned by the current user: apt (running as _apt)
