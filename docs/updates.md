@@ -43,6 +43,19 @@ Use `--role agent` options as shown on **Servers → Add a server** for a remote
 
 The directory that holds `request.json` belongs to the hub's unprivileged user, and systemd starts the helper for as long as the file exists. The helper therefore **removes whatever is at that place** (garbage, a file over 64 KiB, a symbolic link, a FIFO, a directory) before it does anything else, never follows a link and never blocks on a FIFO, writes a `failed` result that the Updates page shows ("the update request could not be read … it was removed"), and exits with an error. The path unit stays active, and the next valid request is installed normally. (Before this, an unreadable file was left in place and the helper was started again and again until the path unit gave up, so no later update ran until `systemctl reset-failed regulus-update.path`.) To test it on a real machine see the `[Test]` issue for the update helper under faults.
 
+## If the hub does not start after an update: "Permission denied" (#448)
+
+Up to and including **0.3.0-beta.1**, the update helper left the new executable (and, after a rollback, the old one) readable and runnable **only by root** (mode `0700`): the helper runs with `UMask=0077` and the mode it asked for was cut by the umask. The hub and the agent run as the `regulus` user, so systemd cannot start them: the console says the hub is **not running** and the service **starting**, and `journalctl -u regulus` shows `Failed to execute /usr/bin/regulus: Permission denied` (status `203/EXEC`). The hub does not need root: only the file mode is wrong.
+
+Repair a machine that has it:
+
+```bash
+sudo chmod 0755 /usr/bin/regulus
+sudo systemctl restart regulus.service   # regulus-agent.service on an agent
+```
+
+or install again with `install.sh` (the data is kept). From **0.3.0-beta.2** the helper sets the mode itself, whatever the umask. An update is installed by the helper of the version already in place, so an update **from** 0.3.0-beta.1 or older still runs the old helper; it does, however, run the new executable as root (`regulus version`, before it puts it in place), and from 0.3.0-beta.2 the executable then gives its own file mode `0755` (`cmd/regulus/execmode.go`). So the update to 0.3.0-beta.2 needs no `chmod` either, as long as the hub can start to ask for it: a machine that is already down needs the two commands above once.
+
 ## If the helper is interrupted
 
 Replacing the executable and checking the new version take a while (the health check holds for up to 90 seconds), and the helper can be cut off in the middle: out of memory, `systemctl stop`, its 20-minute limit, a power cut. What is done about it (`internal/update/pending.go`, `installer.go`):

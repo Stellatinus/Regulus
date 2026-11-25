@@ -531,8 +531,7 @@ func extractBinary(archive, dest string) error {
 		if hdr.Typeflag != tar.TypeReg || path.Base(hdr.Name) != "regulus" {
 			continue
 		}
-		_ = os.Remove(dest)
-		out, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
+		out, err := createExecutable(dest)
 		if err != nil {
 			return err
 		}
@@ -553,6 +552,24 @@ func extractBinary(archive, dest string) error {
 	}
 }
 
+// createExecutable creates dest, replacing it, with mode 0755 whatever the
+// umask: the helpers run with UMask=0077, and an executable left 0700 and owned
+// by root cannot be started by the service user (the hub, the agent), which
+// systemd reports as "Permission denied" (status 203/EXEC).
+func createExecutable(dest string) (*os.File, error) {
+	_ = os.Remove(dest)
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
+	if err != nil {
+		return nil, err
+	}
+	if err := out.Chmod(0o755); err != nil {
+		_ = out.Close()
+		_ = os.Remove(dest)
+		return nil, err
+	}
+	return out, nil
+}
+
 // copyExecutable copies a file to dest with mode 0755, replacing dest.
 func copyExecutable(src, dest string) error {
 	in, err := os.Open(src)
@@ -560,8 +577,7 @@ func copyExecutable(src, dest string) error {
 		return err
 	}
 	defer func() { _ = in.Close() }()
-	_ = os.Remove(dest)
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
+	out, err := createExecutable(dest)
 	if err != nil {
 		return err
 	}
