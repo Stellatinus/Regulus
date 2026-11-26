@@ -35,6 +35,9 @@
 //   - rollout.go: the update of the agents in waves, driven by an administrator.
 //   - plugins.go: the hub's own plugins (plugins_dir, role hub), run beside its
 //     servers, and GET /api/plugins with the plugins the agents report.
+//   - pluginui.go: the pages of plugins in the dashboard (GET /api/plugins/ui,
+//     the sandboxed page and module of each) and the bridge that runs the read
+//     operations a plugin's page asks for (POST /api/plugins/{id}/call).
 //   - certs.go: when the CA, the agent listener and each agent certificate end
 //     (GET /api/certificates, the local status, a daily warning in the log).
 //     It only reports: renewing them (#128) is not done here.

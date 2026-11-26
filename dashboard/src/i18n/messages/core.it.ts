@@ -146,4 +146,12 @@ export const coreIt: Record<keyof typeof core, string> = {
   "hub.error.name_too_long": "Il nome può avere al massimo {max} caratteri.",
   "hub.error.name_control_chars": "Il nome non può contenere caratteri di controllo.",
   "hub.error.token_ttl_range": "La durata di un token deve essere tra {min} e {max}.",
+  "hub.error.plugin_not_found": "Quel plugin non è installato.",
+  "hub.error.plugin_no_ui": "Quel plugin non ha una pagina per la dashboard.",
+  "hub.error.plugin_unsafe_module": "La pagina del plugin non può essere mostrata: il suo codice potrebbe uscire dal proprio riquadro.",
+  "hub.error.plugin_op_unknown": "Il plugin ha chiesto qualcosa che Regulus non offre ai plugin.",
+  "hub.error.plugin_permission_not_requested": "Il plugin non ha richiesto il permesso che serve a questo.",
+  "hub.error.plugin_forbidden": "Non hai il permesso che serve a questo.",
+  "hub.error.plugin_bad_params": "Il plugin ha inviato parametri non validi.",
+  "hub.error.plugin_op_unavailable": "Questi dati non sono disponibili su questo hub.",
 };

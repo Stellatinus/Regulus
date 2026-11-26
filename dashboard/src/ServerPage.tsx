@@ -10,16 +10,19 @@ import {
   ApiError,
   can,
   fetchAgent,
+  fetchPluginUIs,
   renameAgent,
   revokeAgent,
   type Agent,
+  type PluginUI,
 } from "./api";
 import { serverIdFromHash } from "./route";
 import { useSession } from "./session";
 import { errorMessage } from "./useApiList";
 import { ConfirmButton, PanelBoundary } from "./ui";
 import { daysLeft } from "./CertificateBanner";
-import { useT, type MessageKey } from "./i18n";
+import { useLanguage, useT, type MessageKey } from "./i18n";
+import { PluginFrame } from "./PluginFrame";
 import { registry } from "./widgets";
 import { widgetTitle } from "./widgets/registry";
 import { metricsSummary } from "./limits";
@@ -143,7 +146,27 @@ function CloseIcon() {
   );
 }
 
-type Part = "general" | "terminal" | "files";
+// A tab is one of the node window's own parts, or a plugin's ("plugin:<id>", #21).
+type Part = "general" | "terminal" | "files" | `plugin:${string}`;
+
+// The plugins that add a tab to the node window. A failed or odd answer is no
+// plugin: the window must work without them.
+function usePluginTabs(): PluginUI[] {
+  const [plugins, setPlugins] = useState<PluginUI[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPluginUIs(controller.signal).then(
+      (list) => setPlugins(Array.isArray(list) ? list.filter((p) => p.node_tab) : []),
+      () => undefined,
+    );
+    return () => controller.abort();
+  }, []);
+  return plugins;
+}
+
+// The Disks plugin replaces the core's Physical disks panel (#497): with it
+// installed the panel is not drawn, so the same disks are not shown twice.
+const hasDisksPlugin = (plugins: PluginUI[]) => plugins.some((p) => p.id === "disks" && p.node_tab?.id === "disks");
 
 function NodeWindow({
   agent,
@@ -161,10 +184,17 @@ function NodeWindow({
   const t = useT();
   const typeOf = useNodeTypes();
   const type = typeOf(agent);
+  const { lang } = useLanguage();
+  const pluginTabs = usePluginTabs();
   const [part, setPart] = useState<Part>("general");
   const [editing, setEditing] = useState(false);
-  const parts: { id: Part; label: MessageKey; icon: React.ReactNode }[] = [
+  const parts: { id: Part; label?: MessageKey; text?: string; icon: React.ReactNode }[] = [
     { id: "general", label: "nodes.part.general", icon: <path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z" /> },
+    ...pluginTabs.map((p) => ({
+      id: `plugin:${p.id}` as Part,
+      text: (lang === "it" ? p.node_tab?.title.it : p.node_tab?.title.en) ?? p.id,
+      icon: <path strokeLinejoin="round" d="M4 7.5 10 4l6 3.5v5L10 16l-6-3.5zM4 7.5l6 3.5 6-3.5M10 11v5" />,
+    })),
     { id: "terminal", label: "nodes.part.terminal", icon: <><rect x="3" y="4" width="14" height="12" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 8.5L9 10.5 6.5 12.5M10.5 12.5h3" /></> },
     { id: "files", label: "nodes.part.files", icon: <path strokeLinejoin="round" d="M3 5.5A1.5 1.5 0 0 1 4.5 4h3.2l1.6 1.8h6.2A1.5 1.5 0 0 1 17 7.3v7.2a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z" /> },
   ];
@@ -206,7 +236,7 @@ function NodeWindow({
                 <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true" focusable="false">
                   {p.icon}
                 </svg>
-                <span>{t(p.label)}</span>
+                <span>{p.text ?? (p.label ? t(p.label) : "")}</span>
               </button>
             ))}
           </div>
@@ -220,7 +250,10 @@ function NodeWindow({
           </button>
         </div>
       </div>
-      {part === "general" && <General agent={agent} canManage={canManage} canSeeDisks={canSeeDisks} onChanged={onChanged} />}
+      {part === "general" && (
+        <General agent={agent} canManage={canManage} canSeeDisks={canSeeDisks && !hasDisksPlugin(pluginTabs)} onChanged={onChanged} />
+      )}
+      {pluginTabs.map((p) => part === `plugin:${p.id}` && <PluginFrame key={p.id} plugin={p} node={agent.id} />)}
       {part === "terminal" && (
         <div className="node-body single">
           <div className="placeholder-pane">

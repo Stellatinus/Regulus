@@ -146,6 +146,14 @@ export function apiErrorText(
 // errorCodes) that have a text of their own in the catalogs, "hub.error.<code>"
 // (#330). Any other answer shows the hub's English text.
 const HUB_ERROR_CODES = new Set([
+  "plugin_not_found",
+  "plugin_no_ui",
+  "plugin_unsafe_module",
+  "plugin_op_unknown",
+  "plugin_permission_not_requested",
+  "plugin_forbidden",
+  "plugin_bad_params",
+  "plugin_op_unavailable",
   "step_up_not_available_to_tokens",
   "not_available_to_tokens",
   "invalid_token",
@@ -1153,3 +1161,23 @@ export const fetchStore = (signal?: AbortSignal) =>
 // message as it is.
 export const installStorePlugin = (id: string, version?: string) =>
   request<unknown>("POST", `/api/store/plugins/${encodeURIComponent(id)}/install`, version ? { version } : undefined);
+
+// A plugin that has a page in the dashboard (GET /api/plugins/ui, #21). node_tab
+// is set when the plugin adds a tab to the node window.
+export interface PluginUI {
+  id: string;
+  version: string;
+  module: string;
+  node_tab?: { id: string; title: { en: string; it: string } };
+  permissions: string[];
+}
+
+export const fetchPluginUIs = (signal?: AbortSignal) =>
+  request<{ plugins: PluginUI[] }>("GET", "/api/plugins/ui", undefined, signal).then((r) => r.plugins);
+
+// callPluginOp is the read door of a plugin's page (POST /api/plugins/{id}/call,
+// #261): the dashboard makes the call on behalf of the plugin's frame. The hub
+// answers with the same JSON as the route behind the operation, or an error
+// with a code (ApiError.code).
+export const callPluginOp = (id: string, op: string, params?: unknown) =>
+  request<unknown>("POST", `/api/plugins/${encodeURIComponent(id)}/call`, { op, params });
