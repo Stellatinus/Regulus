@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -114,7 +114,8 @@ describe("App", () => {
     const card = await screen.findByRole("link", { name: "Open the node srv1" });
     expect(card).toHaveAttribute("href", "#/servers/local");
     expect(within(card).getByText("online")).toBeInTheDocument();
-    // The notch counts the servers that are connected.
+    // The notch counts the servers that are connected, once the stream is up.
+    act(() => FakeSocket.last.open());
     expect(await screen.findByText("1/1 Online")).toBeInTheDocument();
     expect(hub.calls.find((c) => c.path === "/api/auth/login")?.body).toEqual({
       username: "admin",

@@ -24,11 +24,21 @@ export function AccountPage() {
   return (
     <section aria-labelledby="account-heading">
       <h2 id="account-heading">{t("account.title")}</h2>
+      <AccountSecurity />
+      <Appearance />
+    </section>
+  );
+}
+
+// AccountSecurity is the password, the second factor and the sessions: the
+// "Account and security" tab of Settings.
+export function AccountSecurity() {
+  return (
+    <>
       <PasswordForm />
       <TwoFactor />
       <Sessions />
-      <Appearance />
-    </section>
+    </>
   );
 }
 

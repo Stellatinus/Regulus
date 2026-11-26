@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { AccountPage } from "./AccountPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { Dashboard } from "./Dashboard";
 import { ServersPage } from "./ServersPage";
 import { SettingsPage } from "./SettingsPage";
-import { useRoute, type Route } from "./route";
+import { useRoute, useTab, type Route } from "./route";
 import { can } from "./api";
 import { AgentsProvider, useSharedAgents } from "./agents";
 import { CertificateBanner } from "./CertificateBanner";
@@ -14,24 +13,26 @@ import { useT, type MessageKey } from "./i18n";
 import type { Session } from "./session";
 import { UpdatesPage } from "./UpdatesPage";
 import { UsersPage } from "./UsersPage";
-import { PluginsPage } from "./PluginsPage";
+import { ServicesPage } from "./ServicesPage";
 import { icons } from "./icons";
 
 function Page({ route }: { route: Route }) {
+  const tab = useTab();
   switch (route) {
     case "/servers":
     case "/server":
       return <ServersPage />;
     case "/plugins":
-      return <PluginsPage />;
+      return <ServicesPage />;
     case "/automations":
       return <AutomationsPage />;
     case "/users":
-      return <UsersPage />;
+      return <UsersPage part={tab === "roles" ? "roles" : tab === "activity" ? "activity" : "accounts"} />;
     case "/updates":
       return <UpdatesPage />;
     case "/account":
-      return <AccountPage />;
+      // The account page moved into Settings.
+      return <SettingsPage category="account" />;
     case "/settings":
       return <SettingsPage />;
     default:
@@ -43,39 +44,6 @@ function Page({ route }: { route: Route }) {
 // error colour (#435). A hub restart takes a few seconds and the dashboard
 // reconnects by itself, so a shorter outage is only a warning.
 export const LONG_OUTAGE_MS = 60_000;
-
-// LiveState shows whether the live updates (/api/stream) are flowing:
-// colour and a word, announced politely when it changes. Connected is green
-// ("Online"); connecting or reconnecting is the warning colour; the error
-// colour and its own text come only when the stream stayed down for
-// LONG_OUTAGE_MS.
-export function LiveState() {
-  const t = useT();
-  const connection = useConnection();
-  const [longOutage, setLongOutage] = useState(false);
-  const live = connection === "live";
-  useEffect(() => {
-    if (live) return;
-    const timer = setTimeout(() => setLongOutage(true), LONG_OUTAGE_MS);
-    return () => {
-      clearTimeout(timer);
-      setLongOutage(false);
-    };
-  }, [live]);
-  const look = live
-    ? { sev: "var(--ok)", text: t("live.connected") }
-    : longOutage
-      ? { sev: "var(--crit)", text: t("live.failed") }
-      : connection === "connecting"
-        ? { sev: "var(--warn)", text: t("live.connecting") }
-        : { sev: "var(--warn)", text: t("live.lost") };
-  return (
-    <span className="live-state" role="status" style={{ "--sev": look.sev } as CSSProperties} title={t("live.title")}>
-      <i aria-hidden="true" />
-      {look.text}
-    </span>
-  );
-}
 
 // The raccord of the notch: a concave curve that joins the island to the top
 // edge of the page.
@@ -97,16 +65,39 @@ function Fillet({ side }: { side: "left" | "right" }) {
   );
 }
 
-// The "6/8 Online" pill of the notch: how many enrolled servers are connected.
-function MeshPill() {
+// The pill of the notch is the connection indicator too: "6/8 Online" while the
+// live stream to the hub flows (so the hub is online and the servers are online
+// in part), and the warning colour with "Reconnecting…" while it does not. The
+// error colour and its own text come only when the stream stayed down for
+// LONG_OUTAGE_MS.
+export function MeshPill() {
   const t = useT();
   const shared = useSharedAgents();
+  const connection = useConnection();
+  const [longOutage, setLongOutage] = useState(false);
+  const live = connection === "live";
+  useEffect(() => {
+    if (live) return;
+    const timer = setTimeout(() => setLongOutage(true), LONG_OUTAGE_MS);
+    return () => {
+      clearTimeout(timer);
+      setLongOutage(false);
+    };
+  }, [live]);
   const agents = shared?.state.kind === "ready" ? shared.state.agents : null;
-  const online = agents ? agents.filter((a) => a.status === "connected").length : null;
+  const online = agents ? agents.filter((a) => a.status === "connected").length : 0;
+  let sev = "var(--ok)";
+  let text = agents ? t("shell.online", { online, total: agents.length }) : t("live.connected");
+  let title = t("shell.meshTitle");
+  if (!live) {
+    sev = longOutage ? "var(--crit)" : "var(--warn)";
+    text = longOutage ? t("live.failed") : connection === "connecting" ? t("live.connecting") : t("live.lost");
+    title = t("live.title");
+  }
   return (
-    <a className="mesh-pill" href="#/servers" title={t("shell.meshTitle")}>
+    <a className="mesh-pill" href="#/servers" title={title} role="status" style={{ "--sev": sev } as CSSProperties}>
       <span className="pulse-dot" aria-hidden="true" />
-      <span>{agents ? t("shell.online", { online: online ?? 0, total: agents.length }) : t("servers.loading")}</span>
+      <span>{text}</span>
     </a>
   );
 }
@@ -158,9 +149,9 @@ function AccountMenu({ user, signOut }: Pick<Session, "user" | "signOut">) {
             <span className="badge-role">{user.role}</span>
           </div>
         </div>
-        <a className="menu-item" role="menuitem" href="#/account" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>
-          {icons.user}
-          <span>{t("nav.account")}</span>
+        <a className="menu-item" role="menuitem" href="#/settings" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>
+          {icons.settings}
+          <span>{t("nav.settings")}</span>
         </a>
         <div className="menu-divider" />
         <button type="button" className="menu-item danger" role="menuitem" tabIndex={open ? 0 : -1} onClick={() => void signOut()}>
@@ -172,9 +163,9 @@ function AccountMenu({ user, signOut }: Pick<Session, "user" | "signOut">) {
   );
 }
 
-// Notch is the top island: the brand, how many servers are online, the live
-// state, the settings cog and the account.
-function Notch({ user, signOut, route }: Pick<Session, "user" | "signOut"> & { route: Route }) {
+// Notch is the top island: the brand, the connection and online-count pill, and
+// the account menu (account page, Settings, sign out).
+function Notch({ user, signOut }: Pick<Session, "user" | "signOut">) {
   const t = useT();
   return (
     <header className="top-header">
@@ -194,10 +185,6 @@ function Notch({ user, signOut, route }: Pick<Session, "user" | "signOut"> & { r
               <span className="brand-name">{t("app.brand").toUpperCase()}</span>
             </a>
             <MeshPill />
-            <LiveState />
-            <a className="notch-icon-btn" href="#/settings" aria-label={t("nav.settings")} title={t("nav.settings")} aria-current={route === "/settings" ? "page" : undefined}>
-              {icons.settings}
-            </a>
             <AccountMenu user={user} signOut={signOut} />
           </div>
           <Fillet side="right" />
@@ -221,15 +208,16 @@ interface DockItem {
 function Dock({ user, route }: { user: Session["user"]; route: Route }) {
   const t = useT();
   const [automations] = useFeature("automations");
-  const canUsers = ["users.manage", "roles.manage", "audit.read"].some((p) => can(user, p));
-  const canUpdates = can(user, "core.update");
-  const adminHref = canUsers ? "#/users" : canUpdates ? "#/updates" : null;
+  const [plugins] = useFeature("plugins");
+  const [apps] = useFeature("apps");
+  const adminTabs = adminTabsOf(user);
+  const adminHref = adminTabs[0]?.href ?? null;
 
   const items: DockItem[] = [
     { id: "dashboard", href: "#/", label: "nav.dashboard", icon: icons.dashboard, routes: ["/"] },
     { id: "nodes", href: "#/servers", label: "nav.nodes", icon: icons.nodes, routes: ["/servers", "/server"] },
   ];
-  if (can(user, "servers.read")) items.push({ id: "services", href: "#/plugins", label: "nav.services", icon: icons.services, routes: ["/plugins"] });
+  if ((plugins || apps) && can(user, "servers.read")) items.push({ id: "services", href: "#/plugins", label: "nav.services", icon: icons.services, routes: ["/plugins"] });
   if (automations) items.push({ id: "automations", href: "#/automations", label: "nav.automations", icon: icons.automations, routes: ["/automations"] });
 
   return (
@@ -244,7 +232,7 @@ function Dock({ user, route }: { user: Session["user"]; route: Route }) {
         {adminHref && (
           <>
             <span className="dock-divider" aria-hidden="true" />
-            <a className="dock-item" href={adminHref} aria-current={route === "/users" || route === "/updates" ? "page" : undefined} title={t("nav.admin")}>
+            <a className="dock-item" href={adminHref} aria-current={route === "/users" ? "page" : undefined} title={t("nav.admin")}>
               {icons.admin}
               <span className="dock-label">{t("nav.admin")}</span>
             </a>
@@ -255,20 +243,28 @@ function Dock({ user, route }: { user: Session["user"]; route: Route }) {
   );
 }
 
+// The pages of the Admin section, for those who may use them: accounts, roles
+// and the activity log.
+function adminTabsOf(user: Session["user"]) {
+  const tabs: { id: string; href: string; label: MessageKey; allowed: boolean }[] = [
+    { id: "", href: "#/users", label: "users.tab.accounts", allowed: can(user, "users.manage") },
+    { id: "roles", href: "#/users/roles", label: "users.tab.roles", allowed: can(user, "roles.manage") },
+    { id: "activity", href: "#/users/activity", label: "users.tab.activity", allowed: can(user, "audit.read") },
+  ];
+  return tabs.filter((x) => x.allowed);
+}
+
 // AdminTabs switches between the pages of the Admin section. It shows above
 // them, only with more than one page to choose from.
-function AdminTabs({ user, route }: { user: Session["user"]; route: Route }) {
+function AdminTabs({ user }: { user: Session["user"] }) {
   const t = useT();
-  const tabs: { route: Route; href: string; label: MessageKey; allowed: boolean }[] = [
-    { route: "/users", href: "#/users", label: "nav.users", allowed: ["users.manage", "roles.manage", "audit.read"].some((p) => can(user, p)) },
-    { route: "/updates", href: "#/updates", label: "nav.updates", allowed: can(user, "core.update") },
-  ];
-  const shown = tabs.filter((x) => x.allowed);
+  const tab = useTab();
+  const shown = adminTabsOf(user);
   if (shown.length < 2) return null;
   return (
     <nav className="admin-tabs" aria-label={t("nav.admin")}>
       {shown.map((x) => (
-        <a key={x.route} href={x.href} aria-current={route === x.route ? "page" : undefined}>
+        <a key={x.id} href={x.href} aria-current={tab === x.id ? "page" : undefined}>
           {t(x.label)}
         </a>
       ))}
@@ -281,13 +277,13 @@ function AdminTabs({ user, route }: { user: Session["user"]; route: Route }) {
 // at the bottom with the sections.
 export function Shell({ user, signOut }: Session) {
   const route = useRoute();
-  const admin = route === "/users" || route === "/updates";
+  const admin = route === "/users";
   return (
     <AgentsProvider>
-      <Notch user={user} signOut={signOut} route={route} />
+      <Notch user={user} signOut={signOut} />
       <main className="main-container">
         <CertificateBanner />
-        {admin && <AdminTabs user={user} route={route} />}
+        {admin && <AdminTabs user={user} />}
         <Page route={route} />
       </main>
       <Dock user={user} route={route} />

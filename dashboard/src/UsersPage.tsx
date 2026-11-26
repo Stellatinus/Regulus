@@ -29,8 +29,11 @@ import { errorMessage, useApiList } from "./useApiList";
 
 // UsersPage is where accounts, roles and the audit log are managed; each part
 // shows to those who hold its permission (users.manage, roles.manage,
-// audit.read).
-export function UsersPage() {
+// audit.read). The Admin section shows one part per tab ("accounts", "roles",
+// "activity"); without a part the page holds all of them.
+export type UsersPart = "all" | "accounts" | "roles" | "activity";
+
+export function UsersPage({ part = "all" }: { part?: UsersPart }) {
   const t = useT();
   const session = useSession();
   const user = session?.user;
@@ -45,12 +48,18 @@ export function UsersPage() {
       </section>
     );
   }
+  const accounts = part === "all" || part === "accounts";
+  const roles = part === "all" || part === "roles";
+  const activity = part === "all" || part === "activity";
+  const heading = part === "roles" ? t("users.tab.roles") : part === "activity" ? t("users.tab.activity") : t("users.title");
   return (
     <section aria-labelledby="users-heading">
-      <h2 id="users-heading">{t("users.title")}</h2>
-      {(manageUsers || manageRoles) && <Accounts self={user.username} manageUsers={manageUsers} manageRoles={manageRoles} />}
-      {manageUsers && <Security />}
-      {readAudit && <Audit />}
+      <h2 id="users-heading">{heading}</h2>
+      {((accounts && manageUsers) || (roles && manageRoles)) && (
+        <Accounts self={user.username} manageUsers={manageUsers && accounts} manageRoles={manageRoles && roles} />
+      )}
+      {accounts && manageUsers && <Security />}
+      {activity && readAudit && <Audit />}
     </section>
   );
 }

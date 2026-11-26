@@ -61,6 +61,12 @@ async function signIn(page, code) {
   await page.getByRole("link", { name: "Nodes" }).waitFor();
 }
 
+async function openSettings(page) {
+  await page.getByRole("button", { name: /^Account: admin/ }).click();
+  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Appearance and language" }).click();
+}
+
 const luminance = (rgb) => {
   const [r, g, b] = rgb.match(/\d+/g).map(Number);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -90,7 +96,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       await page.getByRole("heading", { name: "Nodes" }).first().waitFor();
       assert.equal(await page.getByRole("link", { name: "Open the node web1" }).count(), 0, "no server yet");
       // The page is open on a live stream (a WebSocket) before the agent exists.
-      await page.getByText("Online", { exact: true }).waitFor();
+      await page.getByText(/^\d+\/\d+ Online$/).waitFor();
 
       await context.request.post("/api/account/reauth", { data: { password: PASSWORD } });
       const res = await context.request.post("/api/enrollment-tokens", { data: { name: "web1" } });
@@ -106,8 +112,8 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
   it("switches between English and Italian", () =>
     scenario("language", async (page) => {
       await signIn(page);
-      // The language is chosen in Settings, behind the cog of the notch.
-      await page.getByRole("link", { name: "Settings" }).click();
+      // The language is chosen in Settings, in the account menu of the notch.
+      await openSettings(page);
       await page.getByLabel("Language").selectOption("it");
       await page.getByRole("link", { name: "Nodi" }).waitFor();
       assert.equal(await page.getByRole("link", { name: "Nodes" }).count(), 0);
@@ -120,7 +126,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
   it("has a light and a dark theme", () =>
     scenario("themes", async (page) => {
       await signIn(page);
-      await page.getByRole("link", { name: "Settings" }).click();
+      await openSettings(page);
       const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       await page.getByRole("button", { name: "Light" }).click();
       assert.equal(await page.locator("html").getAttribute("data-theme"), "light");
@@ -136,7 +142,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       "phone layout",
       async (page) => {
         await signIn(page);
-        const routes = ["/", "/servers", "/plugins", "/users", "/updates", "/account", "/settings"];
+        const routes = ["/", "/servers", "/plugins", "/plugins/store", "/users", "/users/roles", "/users/activity", "/updates", "/automations", "/settings", "/settings/appearance", "/settings/features", "/settings/updates"];
         for (const r of routes) {
           await page.goto(`/#${r}`);
           await page.waitForLoadState("networkidle");

@@ -2,6 +2,9 @@ import type { users } from "./users.en";
 
 // Italian draft, to be read by the maintainer.
 export const usersIt: Record<keyof typeof users, string> = {
+  "users.tab.accounts": "Account",
+  "users.tab.roles": "Ruoli e permessi",
+  "users.tab.activity": "Attività recente",
   "users.title": "Utenti",
   "users.notAllowed": "Non hai il permesso di gestire gli utenti.",
   "users.rolesLoadFailed": "Impossibile caricare i ruoli: {message}",

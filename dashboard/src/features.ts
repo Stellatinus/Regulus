@@ -1,21 +1,30 @@
 import { useCallback, useSyncExternalStore } from "react";
 
-// Features an administrator can switch on or off for this browser. Automations
-// are a plugin that does not exist yet (docs/design-system.md), so they start
-// off and the dock hides them until the setting is on. The choice is kept in
-// this browser; a hub-wide setting needs a design issue.
+// The features an administrator can switch on or off: Plugins, Apps and
+// Automations. Plugins exist on the hub and start on; Apps and Automations do
+// not exist yet (they will have their own stores, #475) and start off. The
+// dock shows the Services section when Plugins or Apps are on, and
+// Automations only while their switch is on. For now the choice is kept in
+// this browser; a setting for the whole hub needs a design (#474).
 
-export type Feature = "automations";
+export type Feature = "plugins" | "apps" | "automations";
+
+export const FEATURES: readonly Feature[] = ["plugins", "apps", "automations"];
+
+const DEFAULTS: Record<Feature, boolean> = { plugins: true, apps: false, automations: false };
 
 const key = (f: Feature) => `regulus.feature.${f}`;
 const CHANGED = "regulus:features";
 
 function read(f: Feature): boolean {
   try {
-    return window.localStorage.getItem(key(f)) === "on";
+    const v = window.localStorage.getItem(key(f));
+    if (v === "on") return true;
+    if (v === "off") return false;
   } catch {
-    return false;
+    // no storage
   }
+  return DEFAULTS[f];
 }
 
 function subscribe(callback: () => void) {
@@ -31,7 +40,7 @@ export function useFeature(f: Feature): [boolean, (on: boolean) => void] {
   const on = useSyncExternalStore(
     subscribe,
     () => read(f),
-    () => false,
+    () => DEFAULTS[f],
   );
   const set = useCallback(
     (next: boolean) => {
