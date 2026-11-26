@@ -249,10 +249,7 @@ func TestServiceRefusesWhatItCannotVerify(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			var v Verifier = c.v
-			if c.v == nil {
-				v = nil
-			}
+			v := c.v
 			cat := newService(t, c.files, v, &clock{t0}).Catalogue(context.Background())
 			if cat.Sources[0].State != StateError || !strings.Contains(cat.Sources[0].Error, c.want) || len(cat.Plugins) != 0 {
 				t.Fatalf("cat = %+v", cat)

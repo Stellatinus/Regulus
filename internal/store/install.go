@@ -265,7 +265,7 @@ func (i *Installer) download(ctx context.Context, a Artifact, dst string) error 
 	if err != nil || u.Host == "" {
 		return errf(ErrCodeDownload, "the package address is not a URL")
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && isLoopback(u.Hostname())) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !isLoopback(u.Hostname())) {
 		return errf(ErrCodeDownload, "the package address is not https")
 	}
 	c := i.Client
