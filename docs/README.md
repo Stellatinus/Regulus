@@ -16,6 +16,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | scrape the hub and its servers with Prometheus | [Metrics for Prometheus](metrics.md) |
 | use the API | [HTTP API](http-api.md) and `internal/hub/openapi.yaml` (also served at `/api/openapi.yaml`) |
 | learn what the dashboard offers | [Dashboard](dashboard.md) |
+| see the look and the structure the dashboard is built to (notch, dock, nodes, tokens) | [Design system v3](design-system.md), with the reference in `design-system/regulus-console-v3.html` |
 | understand how the parts fit together | [Architecture](architecture.md), with diagrams and the code map |
 | find my way in the biggest source files | [Code map](code-map.md) |
 | see how a disk keeps one identity between servers (disk identity, `inventory.read`) | [Disks](disks.md) |

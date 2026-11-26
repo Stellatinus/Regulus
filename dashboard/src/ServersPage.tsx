@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AgentList } from "./AgentList";
+import { useAgentsPolling, useSharedAgents, type AgentsValue } from "./agents";
+import { NodesView } from "./NodesView";
+import { ServerPage } from "./ServerPage";
+import { useRoute } from "./route";
 import {
   createEnrollment,
   enableRemoteAgents,
@@ -16,12 +19,26 @@ import { useCan } from "./session";
 import { ConfirmButton, CopyIconButton } from "./ui";
 import { errorMessage, useApiList, type ListState } from "./useApiList";
 
-// ServersPage lists the servers and, for those who may manage servers, adds new
-// ones. While remote agents are off it says so first, and lets those who may
-// manage servers turn them on, instead of offering a token that cannot work.
+// ServersPage is the Nodes page: the servers as cards, a list or the map of the
+// mesh, and for those who may manage servers a way to add new ones. A server
+// opens in a window over the page (the address #/servers/<id>). While remote
+// agents are off it says so first, and lets those who may manage servers turn
+// them on, instead of offering a token that cannot work.
 export function ServersPage() {
+  const shared = useSharedAgents();
+  return shared ? <Servers agents={shared} /> : <StandaloneServers />;
+}
+
+// StandaloneServers reads the list itself, for a page shown outside the shell.
+function StandaloneServers() {
+  return <Servers agents={useAgentsPolling()} />;
+}
+
+function Servers({ agents }: { agents: AgentsValue }) {
+  const t = useT();
   const canManage = useCan("servers.manage");
-  const [reload, setReload] = useState(0);
+  const route = useRoute();
+  const { reload } = agents;
   // undefined while loading; null when the hub does not say (an older hub).
   const [listener, setListener] = useState<AgentListener | null | undefined>(undefined);
   useEffect(() => {
@@ -44,37 +61,41 @@ export function ServersPage() {
   useEffect(() => {
     if (lastConnected.current === connected) return;
     lastConnected.current = connected;
-    setReload((n) => n + 1);
-  }, [connected]);
+    reload();
+  }, [connected, reload]);
   // "Add a server" is needed rarely: it is closed until the + button of the
-  // title row opens it (#428).
+  // control bar opens it (#428).
   const [adding, setAdding] = useState(false);
   const canAdd = canManage && listener !== undefined && !off;
+  const state = agents.state;
   return (
-    <>
-      <AgentList
-        all
-        reloadKey={reload}
-        actions={canAdd ? <AddButton open={adding} onToggle={() => setAdding((v) => !v)} /> : undefined}
-        belowTitle={
-          canAdd && adding ? (
-            <AddServer onAdded={() => setReload((n) => n + 1)} onClose={() => setAdding(false)} />
-          ) : undefined
-        }
-      />
+    <section aria-labelledby="agents-heading">
+      <h2 id="agents-heading" className="visually-hidden">
+        {t("nodes.title")}
+      </h2>
+      {state.kind === "loading" && <p>{t("servers.loading")}</p>}
+      {state.kind === "error" && <p role="alert">{t("servers.list.loadError", { message: state.message })}</p>}
+      {state.kind === "ready" && (
+        <NodesView
+          agents={state.agents}
+          actions={canAdd ? <AddButton open={adding} onToggle={() => setAdding((v) => !v)} /> : undefined}
+          belowControls={canAdd && adding ? <AddServer onAdded={reload} onClose={() => setAdding(false)} /> : undefined}
+        />
+      )}
       {off && <RemoteAgentsOff listener={listener} canManage={canManage} onEnabled={setListener} />}
-    </>
+      {route === "/server" && <ServerPage />}
+    </section>
   );
 }
 
-// AddButton is the + at the right of the title row. It has an accessible name
-// and a tooltip, and says whether the panel it controls is open.
+// AddButton is the + in the control bar. It has an accessible name and a
+// tooltip, and says whether the panel it controls is open.
 function AddButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
   const t = useT();
   return (
     <button
       type="button"
-      className="icon-button"
+      className="icon-btn"
       aria-label={t("servers.add.title")}
       title={t("servers.add.title")}
       aria-expanded={open}

@@ -7,6 +7,10 @@ export default defineConfig({
   build: {
     outDir: "../internal/webui/dist",
     emptyOutDir: false,
+    // The hub's CSP is default-src 'self': it blocks a font inlined as a data:
+    // URI, which Vite does for any file under 4 KiB (the small subsets of
+    // Inter and JetBrains Mono). Nothing is inlined, so every font is a file.
+    assetsInlineLimit: 0,
   },
   server: {
     proxy: { "/api": "http://127.0.0.1:8080" },

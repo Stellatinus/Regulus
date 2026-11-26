@@ -1,0 +1,4095 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Regulus — Console Multiserver Mesh</title>
+
+  <!-- Font Inter & JetBrains Mono con fallback di sistema -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ==========================================================================
+       1. DESIGN TOKENS & RESET
+       ========================================================================== */
+    :root {
+      --bg-canvas: #0e1014;
+      --bg-surface: #161920;
+      --bg-elevated: #1d212b;
+      --bg-deep: #11141b;
+      --text-primary: #eef0f5;
+      --text-secondary: #9aa3b5;
+      --text-muted: #70798d;
+
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.16);
+      --border-strong: rgba(255, 255, 255, 0.26);
+
+      --accent-online: #10b981;
+      --accent-offline: #ef4444;
+      --accent-apt: #06b6d4;
+      --accent-ubuntu: #f59e0b;
+      --accent-mesh: #8b5cf6;
+
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-xl: 22px;
+      --radius-pill: 9999px;
+
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+      --shadow-card: 0 10px 28px -14px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      --shadow-elevated: 0 22px 48px -12px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      min-height: 100%;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+    }
+
+    body {
+      background-image:
+        radial-gradient(ellipse 75% 42% at 50% -6%, rgba(255, 255, 255, 0.038), transparent 72%),
+        radial-gradient(ellipse 55% 32% at 50% 106%, rgba(139, 92, 246, 0.04), transparent 70%);
+      background-attachment: fixed;
+    }
+
+    button, input {
+      font-family: inherit;
+      color: inherit;
+    }
+
+    button {
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    /* Scrollbar minimalista */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .mono { font-family: var(--font-mono); }
+    .hidden { display: none !important; }
+
+    /* ==========================================================================
+       2. NOTCH SUPERIORE SCOLPITA (ORGANIC ISLAND)
+       ========================================================================== */
+    .top-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      pointer-events: none;
+    }
+
+    .top-frame-line {
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 18%, rgba(255, 255, 255, 0.08) 82%, transparent 100%);
+    }
+
+    .notch-wrapper {
+      display: flex;
+      justify-content: center;
+      padding: 0 12px;
+    }
+
+    .notch-shell {
+      display: flex;
+      align-items: flex-start;
+      pointer-events: auto;
+      position: relative;
+    }
+
+    .notch-fillet {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      color: #151821;
+      display: block;
+    }
+
+    .notch-fillet.left { margin-right: -1px; }
+    .notch-fillet.right { margin-left: -1px; }
+
+    .organic-notch {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 36px;
+      padding: 10px 30px;
+      background: linear-gradient(180deg, #171b24 0%, #13161e 100%);
+      border-left: 1px solid rgba(255, 255, 255, 0.075);
+      border-right: 1px solid rgba(255, 255, 255, 0.075);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 0 0 26px 26px;
+      box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.88), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      flex-shrink: 0;
+    }
+
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-primary);
+    }
+
+    .brand-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: var(--text-primary);
+    }
+
+    .mesh-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 13px;
+      border-radius: var(--radius-pill);
+      background: rgba(16, 185, 129, 0.09);
+      border: 1px solid rgba(16, 185, 129, 0.22);
+      color: #a7f3d0;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background-color: var(--accent-online);
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+      animation: subtlePulse 2.6s ease-in-out infinite;
+    }
+
+    @keyframes subtlePulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.84); }
+    }
+
+    /* Account Button & Dropdown */
+    .account-wrapper {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .account-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 10px 4px 5px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .account-btn:hover {
+      background: rgba(255, 255, 255, 0.085);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .account-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2c3345 0%, #191d28 100%);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+    }
+
+    .account-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.15;
+    }
+
+    .account-name {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .account-role {
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    .account-chevron {
+      width: 14px;
+      height: 14px;
+      color: var(--text-secondary);
+      transition: transform 0.2s ease;
+    }
+
+    .account-btn[aria-expanded="true"] .account-chevron {
+      transform: rotate(180deg);
+    }
+
+    .floating-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 10px);
+      background: rgba(22, 25, 32, 0.96);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      box-shadow: var(--shadow-elevated);
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 60;
+    }
+
+    .floating-menu.open {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+    }
+
+    .account-dropdown {
+      width: 248px;
+      padding: 8px;
+    }
+
+    .account-card {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-bottom: 6px;
+    }
+
+    .account-card-top {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .account-card-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .account-card-email {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .account-card-badge-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    .badge-root {
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.28);
+      color: #c4b5fd;
+      font-weight: 500;
+    }
+
+    .menu-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 11px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      text-align: left;
+      transition: background-color 0.15s ease;
+    }
+
+    .menu-item:hover {
+      background: rgba(255, 255, 255, 0.065);
+    }
+
+    .menu-item svg {
+      width: 16px;
+      height: 16px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .menu-item.danger {
+      color: #f87171;
+    }
+
+    .menu-item.danger svg {
+      color: #f87171;
+    }
+
+    .menu-item.danger:hover {
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .menu-divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+      margin: 6px 4px;
+    }
+
+    /* ==========================================================================
+       3. LAYOUT PRINCIPALE & BARRA DI CONTROLLO UNIFICATA
+       ========================================================================== */
+    .main-container {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 96px 24px 116px;
+    }
+
+    .control-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      height: 42px;
+      padding: 0 42px 0 40px;
+      border-radius: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-size: 13.5px;
+      outline: none;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .search-input:focus {
+      background: var(--bg-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .shortcut-kbd {
+      position: absolute;
+      right: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .clear-search-btn {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+    }
+
+    .clear-search-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .control-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .counter-chip {
+      height: 42px;
+      padding: 0 13px;
+      border-radius: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+
+    .counter-chip strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .counter-label {
+      font-family: var(--font-sans);
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-left: 2px;
+    }
+
+    /* Filter Button & Popover */
+    .filter-wrapper {
+      position: relative;
+    }
+
+    .icon-btn {
+      position: relative;
+      height: 42px;
+      padding: 0 13px;
+      border-radius: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      color: var(--text-secondary);
+      font-size: 12.5px;
+      font-weight: 500;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .icon-btn:hover,
+    .icon-btn.active {
+      background: var(--bg-elevated);
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    .filter-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      min-width: 19px;
+      height: 19px;
+      padding: 0 5px;
+      border-radius: var(--radius-pill);
+      background: var(--text-primary);
+      color: #0e1014;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    .filter-popover {
+      width: 356px;
+      padding: 16px;
+    }
+
+    .popover-title {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    .status-chips-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+    }
+
+    .filter-chip:hover {
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-primary);
+    }
+
+    .filter-chip.selected {
+      background: rgba(255, 255, 255, 0.13);
+      border-color: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+    }
+
+    .dot-indicator {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .role-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 240px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .role-option {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 9px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .role-option:hover {
+      background: rgba(255, 255, 255, 0.055);
+      color: var(--text-primary);
+    }
+
+    .role-option.selected {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.22);
+      color: #ffffff;
+    }
+
+    .role-option-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .role-mini-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .popover-reset-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 9px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      transition: background-color 0.15s ease;
+    }
+
+    .popover-reset-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Selettore 3 Viste a SOLE ICONE */
+    .view-switcher {
+      height: 42px;
+      padding: 4px;
+      border-radius: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .view-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all 0.18s ease;
+    }
+
+    .view-btn:hover {
+      color: var(--text-primary);
+    }
+
+    .view-btn.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+    }
+
+    /* ==========================================================================
+       4. RUOLI COLORI & CARD GRIGLIA / LISTA COMPATTA
+       ========================================================================== */
+    .role-hub        { --role-bg: rgba(238, 240, 245, 0.07); --role-bd: rgba(238, 240, 245, 0.18); --role-fg: #eef0f5; }
+    .role-hub-backup { --role-bg: rgba(148, 163, 184, 0.09); --role-bd: rgba(148, 163, 184, 0.24); --role-fg: #cbd5e1; }
+    .role-compute    { --role-bg: rgba(56, 189, 248, 0.09);  --role-bd: rgba(56, 189, 248, 0.24);  --role-fg: #7dd3fc; }
+    .role-generic    { --role-bg: rgba(161, 161, 170, 0.09); --role-bd: rgba(161, 161, 170, 0.24); --role-fg: #d4d4d8; }
+    .role-proxy      { --role-bg: rgba(45, 212, 191, 0.09);  --role-bd: rgba(45, 212, 191, 0.24);  --role-fg: #5eead4; }
+    .role-storage    { --role-bg: rgba(251, 191, 36, 0.09);  --role-bd: rgba(251, 191, 36, 0.24);  --role-fg: #fcd34d; }
+    .role-dev-ai     { --role-bg: rgba(139, 92, 246, 0.12);  --role-bd: rgba(139, 92, 246, 0.28);  --role-fg: #c4b5fd; }
+
+    .role-icon-box {
+      background: var(--role-bg);
+      border: 1px solid var(--role-bd);
+      color: var(--role-fg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .role-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 9px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 500;
+      background: var(--role-bg);
+      border: 1px solid var(--role-bd);
+      color: var(--role-fg);
+      white-space: nowrap;
+    }
+
+    /* Status Pill */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .status-pill.online {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.22);
+      color: #34d399;
+    }
+
+    .status-pill.offline {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.22);
+      color: #f87171;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .status-dot.online {
+      background: var(--accent-online);
+      animation: subtlePulse 2.6s ease-in-out infinite;
+    }
+
+    .status-dot.offline {
+      background: var(--accent-offline);
+    }
+
+    /* Update Badges */
+    .update-badges {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .upd-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 7px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    .upd-pill.apt {
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.26);
+      color: #22d3ee;
+    }
+
+    .upd-pill.ubuntu {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.26);
+      color: #fbbf24;
+    }
+
+    .upd-pill.mesh {
+      background: rgba(139, 92, 246, 0.14);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #c4b5fd;
+    }
+
+    .upd-pill.ok {
+      font-family: var(--font-sans);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      color: var(--text-secondary);
+    }
+
+    /* Vista Griglia */
+    .servers-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .server-card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.024) 0%, rgba(255, 255, 255, 0) 48%), var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      cursor: pointer;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+    }
+
+    .server-card:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.005) 55%), var(--bg-elevated);
+      border-color: var(--border-hover);
+    }
+
+    .server-card.offline-card {
+      opacity: 0.74;
+    }
+
+    .server-card.offline-card:hover {
+      opacity: 1;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .card-identity {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .card-logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      transition: transform 0.2s ease;
+    }
+
+    .server-card:hover .card-logo {
+      transform: scale(1.04);
+    }
+
+    .card-name {
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-ip {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .card-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 14px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+    }
+
+    .last-contact {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .card-arrow {
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+    .server-card:hover .card-arrow {
+      transform: translateX(2px);
+      color: var(--text-primary);
+    }
+
+    /* Vista Compatta */
+    .servers-list {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+
+    .server-row {
+      display: grid;
+      grid-template-columns: 2.2fr 1.2fr 1.4fr 2fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      transition: background-color 0.16s ease, opacity 0.16s ease;
+    }
+
+    .server-row:last-child {
+      border-bottom: none;
+    }
+
+    .server-row:hover {
+      background: var(--bg-elevated);
+    }
+
+    .server-row.offline-card {
+      opacity: 0.74;
+    }
+
+    .server-row.offline-card:hover {
+      opacity: 1;
+    }
+
+    .row-logo {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+    }
+
+    .row-status-col {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Empty State */
+    .empty-state {
+      padding: 64px 24px;
+      text-align: center;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+    }
+
+    .empty-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 14px;
+      border-radius: 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+    }
+
+    .empty-btn {
+      margin-top: 16px;
+      padding: 9px 16px;
+      border-radius: 10px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-hover);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .empty-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* ==========================================================================
+       5. VISTA TOPOLOGICA INTERATTIVA (MESH MAP)
+       ========================================================================== */
+    .topology-wrapper {
+      position: relative;
+      height: 600px;
+      border-radius: var(--radius-xl);
+      background-color: #101319;
+      background-image:
+        radial-gradient(rgba(255, 255, 255, 0.095) 1px, transparent 1px),
+        radial-gradient(ellipse 65% 55% at 50% 45%, rgba(139, 92, 246, 0.045), transparent 72%);
+      background-size: 24px 24px, 100% 100%;
+      background-position: 0px 0px, center center;
+      border: 1px solid var(--border-subtle);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 18px 42px -16px rgba(0, 0, 0, 0.85);
+      overflow: hidden;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .topology-wrapper.dragging {
+      cursor: grabbing;
+    }
+
+    .topo-badge-title {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 13px;
+      border-radius: var(--radius-pill);
+      background: rgba(22, 25, 32, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      pointer-events: none;
+    }
+
+    .topo-controls {
+      position: absolute;
+      bottom: 14px;
+      right: 16px;
+      z-index: 20;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 12px;
+      background: rgba(22, 25, 32, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.65);
+    }
+
+    .topo-ctrl-btn {
+      height: 30px;
+      min-width: 30px;
+      padding: 0 8px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      font-size: 11.5px;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .topo-ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .topo-world {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    .topo-svg-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .topo-edge {
+      transition: opacity 0.2s ease, stroke-width 0.2s ease;
+    }
+
+    @keyframes dashFlow {
+      to { stroke-dashoffset: -28; }
+    }
+    .failover-dash {
+      animation: dashFlow 2.2s linear infinite;
+    }
+
+    .failover-label {
+      position: absolute;
+      z-index: 14;
+      transform: translate(-50%, -50%);
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      background: #101319;
+      border: 1px solid rgba(16, 185, 129, 0.34);
+      color: #34d399;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+    }
+
+    .topo-node {
+      position: absolute;
+      width: 232px;
+      height: 84px;
+      box-sizing: border-box;
+      padding: 10px 13px;
+      border-radius: 15px;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.005) 55%), var(--bg-surface);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.88), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+      cursor: pointer;
+      transition: border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+      z-index: 12;
+    }
+
+    .topo-node:hover {
+      background: var(--bg-elevated);
+      border-color: rgba(255, 255, 255, 0.26);
+      box-shadow: 0 18px 36px -10px rgba(0, 0, 0, 0.94), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      z-index: 25;
+    }
+
+    .topo-node.dimmed {
+      opacity: 0.22;
+    }
+
+    .topo-node-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .topo-node-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+    }
+
+    .topo-node-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .topo-node-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .topo-node-name {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .topo-node-role {
+      font-size: 10.5px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .topo-node-foot {
+      margin-top: 0;
+      padding-top: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.065);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .topo-node-ip {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    .topo-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .topo-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    /* ==========================================================================
+       6. FLOATING DOCK INFERIORE
+       ========================================================================== */
+    .bottom-dock-nav {
+      position: fixed;
+      bottom: 20px;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      display: flex;
+      justify-content: center;
+      padding: 0 12px;
+      pointer-events: none;
+    }
+
+    .floating-dock {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px;
+      border-radius: var(--radius-pill);
+      background: rgba(22, 25, 32, 0.78);
+      backdrop-filter: blur(18px) saturate(140%);
+      -webkit-backdrop-filter: blur(18px) saturate(140%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 22px 46px -12px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    .dock-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 15px;
+      border-radius: var(--radius-pill);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+
+    .dock-item:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .dock-item.active {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .dock-item svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .dock-divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.12);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    /* ==========================================================================
+       7. FINESTRA OVERLAY MODALE 90vw x 90vh (WORKSTATION 2 COLONNE)
+       ========================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(6, 8, 12, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .server-modal {
+      width: 90vw;
+      height: 90vh;
+      background: #12151c;
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: 22px;
+      box-shadow: 0 32px 80px -16px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.97) translateY(8px);
+      transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-backdrop.open .server-modal {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-header {
+      padding: 20px 26px;
+      background: rgba(22, 25, 32, 0.9);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .modal-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .modal-node-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 15px;
+    }
+
+    .modal-title-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .modal-node-name {
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+    }
+
+    .modal-sub-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .ip-copy-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.055);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--text-primary);
+      transition: background-color 0.15s ease;
+    }
+
+    .ip-copy-chip:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .modal-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 13px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      transition: all 0.15s ease;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.11);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .action-btn.warn:hover:not(:disabled) {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.35);
+      color: #fcd34d;
+    }
+
+    .modal-close-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-left: 4px;
+      transition: all 0.15s ease;
+    }
+
+    .modal-close-btn:hover {
+      background: rgba(255, 255, 255, 0.11);
+      color: #ffffff;
+    }
+
+    /* Corpo 2 colonne workstation */
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 26px;
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    .ws-column {
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      min-width: 0;
+    }
+
+    .ws-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .ws-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--text-muted);
+    }
+
+    /* 4 Card Telemetria */
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .telemetry-card {
+      padding: 15px 16px;
+      border-radius: 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .telemetry-card.dim {
+      opacity: 0.52;
+    }
+
+    .telemetry-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+
+    .telemetry-label {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .telemetry-value {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      border-radius: var(--radius-pill);
+      background: rgba(255, 255, 255, 0.07);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: var(--radius-pill);
+      transition: width 0.35s ease;
+    }
+
+    .telemetry-sub {
+      margin-top: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    /* Hub Aggiornamenti */
+    .updates-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .update-card {
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .update-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .update-title-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .update-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .update-desc {
+      margin-top: 5px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .pkg-tags {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .pkg-tag {
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--bg-canvas);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+
+    .update-run-btn {
+      padding: 7px 13px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
+    }
+
+    .update-run-btn.apt {
+      background: rgba(6, 182, 212, 0.14);
+      border: 1px solid rgba(6, 182, 212, 0.32);
+      color: #67e8f9;
+    }
+    .update-run-btn.apt:hover:not(:disabled) { background: rgba(6, 182, 212, 0.24); }
+
+    .update-run-btn.ubuntu {
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid rgba(245, 158, 11, 0.32);
+      color: #fcd34d;
+    }
+    .update-run-btn.ubuntu:hover:not(:disabled) { background: rgba(245, 158, 11, 0.24); }
+
+    .update-run-btn.mesh {
+      background: rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(139, 92, 246, 0.36);
+      color: #ddd6fe;
+    }
+    .update-run-btn.mesh:hover:not(:disabled) { background: rgba(139, 92, 246, 0.28); }
+
+    .update-all-btn {
+      padding: 6px 12px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      font-size: 12px;
+      font-weight: 500;
+      color: #ffffff;
+      transition: background-color 0.15s ease;
+    }
+
+    .update-all-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.17);
+    }
+
+    .update-progress-box {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+    }
+
+    .update-progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .offline-banner {
+      padding: 11px 14px;
+      border-radius: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #fca5a5;
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    /* Specifiche Sistema & Servizi (Colonna destra) */
+    .specs-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .spec-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 12.5px;
+    }
+
+    .spec-row:last-child {
+      border-bottom: none;
+    }
+
+    .spec-key {
+      color: var(--text-secondary);
+    }
+
+    .spec-val {
+      font-family: var(--font-mono);
+      color: var(--text-primary);
+      text-align: right;
+    }
+
+    .services-list {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    .service-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .service-row:last-child {
+      border-bottom: none;
+    }
+
+    .service-name {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .service-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .service-state {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+    }
+
+    .service-state.running {
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .service-state.stopped {
+      background: rgba(239, 68, 68, 0.1);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    /* Console Log Live */
+    .console-box {
+      background: #0b0d11;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.65;
+      max-height: 230px;
+      overflow-y: auto;
+    }
+
+    .log-line {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+
+    .log-msg.info { color: #cbd5e1; }
+    .log-msg.success { color: #34d399; }
+    .log-msg.warn { color: #fbbf24; }
+    .log-msg.error { color: #f87171; }
+    .log-msg.mesh { color: #c4b5fd; }
+
+    /* ==========================================================================
+       8. MODALE LIBRERIA LOGHI RUOLI
+       ========================================================================== */
+    .logo-modal {
+      width: min(920px, 92vw);
+      max-height: 86vh;
+      background: #13161e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      box-shadow: var(--shadow-elevated);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.97);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-backdrop.open .logo-modal {
+      transform: scale(1);
+    }
+
+    .logo-grid {
+      padding: 22px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .logo-card {
+      padding: 18px;
+      border-radius: 16px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .logo-card-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-card-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+    }
+
+    .logo-card-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* ==========================================================================
+       9. TOAST NOTIFICATIONS
+       ========================================================================== */
+    .toast-container {
+      position: fixed;
+      bottom: 92px;
+      right: 20px;
+      z-index: 120;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      border-radius: 12px;
+      background: rgba(22, 25, 32, 0.96);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 16px 34px rgba(0, 0, 0, 0.8);
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ==========================================================================
+       10. RESPONSIVE BREAKPOINTS
+       ========================================================================== */
+    @media (max-width: 1180px) {
+      .servers-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 960px) {
+      .servers-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .modal-body { grid-template-columns: 1fr; }
+      .server-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .logo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 680px) {
+      .organic-notch {
+        gap: 16px;
+        padding: 9px 16px;
+      }
+      .notch-fillet { display: none; }
+      .account-meta { display: none; }
+      .main-container { padding: 86px 14px 108px; }
+      .servers-grid { grid-template-columns: 1fr; }
+      .counter-label { display: none; }
+      .filter-btn-label { display: none; }
+      .filter-popover { width: 296px; }
+      .dock-label { display: none; }
+      .telemetry-grid { grid-template-columns: 1fr; }
+      .logo-grid { grid-template-columns: 1fr; }
+      .modal-header { padding: 16px; }
+      .modal-body { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== 1. NOTCH SUPERIORE SCOLPITA ==================== -->
+  <header class="top-header">
+    <div class="top-frame-line"></div>
+    <div class="notch-wrapper">
+      <div class="notch-shell">
+        <!-- Raccordo concavo sinistro -->
+        <svg class="notch-fillet left" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path d="M28 0H0C15.464 0 28 12.536 28 28V0Z" fill="currentColor" />
+          <path d="M0 0.5C15.188 0.5 27.5 12.812 27.5 28" stroke="rgba(255,255,255,0.085)" stroke-width="1" />
+        </svg>
+
+        <!-- Corpo centrale della Notch -->
+        <div class="organic-notch">
+          <!-- Brand Regulus -->
+          <div class="brand-group">
+            <div class="brand-mark">
+              <svg width="18" height="18" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+                <polygon points="14,2.5 24,8.25 24,19.75 14,25.5 4,19.75 4,8.25" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.35" />
+                <path d="M14 6.2L16.3 11.7L21.8 14L16.3 16.3L14 21.8L11.7 16.3L6.2 14L11.7 11.7L14 6.2Z" fill="currentColor" fill-opacity="0.16" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round" />
+                <circle cx="14" cy="14" r="1.8" fill="currentColor" />
+              </svg>
+            </div>
+            <span class="brand-name">REGULUS</span>
+          </div>
+
+          <!-- Pillola stato live mesh -->
+          <div class="mesh-status-pill" title="Stato in tempo reale dei nodi nella mesh">
+            <span class="pulse-dot"></span>
+            <span id="notchOnlineSummary">6/8 Online</span>
+          </div>
+
+          <!-- Account & Dropdown -->
+          <div class="account-wrapper" id="accountWrapper">
+            <button
+              id="btnToggleAccount"
+              class="account-btn"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              <span class="account-avatar">GM</span>
+              <span class="account-meta">
+                <span class="account-name">Giacomo</span>
+                <span class="account-role">Admin</span>
+              </span>
+              <svg class="account-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 6.5L8 10l3.5-3.5" />
+              </svg>
+            </button>
+
+            <div id="accountDropdown" class="floating-menu account-dropdown" role="menu">
+              <div class="account-card">
+                <div class="account-card-top">
+                  <span class="account-avatar">GM</span>
+                  <div>
+                    <div class="account-card-title">Giacomo Moretti</div>
+                    <div class="account-card-email">giacomo@regulus.mesh</div>
+                  </div>
+                </div>
+                <div class="account-card-badge-row">
+                  <span>Livello accesso</span>
+                  <span class="badge-root">Admin</span>
+                </div>
+              </div>
+
+              <button id="btnOpenLogoLibrary" class="menu-item" type="button">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65">
+                  <rect x="3" y="3" width="6" height="6" rx="1.4" />
+                  <rect x="11" y="3" width="6" height="6" rx="1.4" />
+                  <rect x="3" y="11" width="6" height="6" rx="1.4" />
+                  <rect x="11" y="11" width="6" height="6" rx="1.4" />
+                </svg>
+                <span>Libreria Loghi Ruoli</span>
+              </button>
+
+              <button id="btnAccountPrefs" class="menu-item" type="button">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65">
+                  <circle cx="10" cy="10" r="2.6" />
+                  <path stroke-linecap="round" d="M10 3.2v1.6M10 15.2v1.6M3.2 10h1.6M15.2 10h1.6M5.2 5.2l1.1 1.1M13.7 13.7l1.1 1.1M14.8 5.2l-1.1 1.1M6.3 13.7l-1.1 1.1" />
+                </svg>
+                <span>Preferenze</span>
+              </button>
+
+              <div class="menu-divider"></div>
+
+              <button id="btnAccountLogout" class="menu-item danger" type="button">
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.65">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 16.5H4.8A1.8 1.8 0 0 1 3 14.7V5.3a1.8 1.8 0 0 1 1.8-1.8h2.7M13 13.5L16.5 10 13 6.5M16.5 10H8" />
+                </svg>
+                <span>Disconnetti</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raccordo concavo destro -->
+        <svg class="notch-fillet right" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <path d="M0 0H28C12.536 0 0 12.536 0 28V0Z" fill="currentColor" />
+          <path d="M28 0.5C12.812 0.5 0.5 12.812 0.5 28" stroke="rgba(255,255,255,0.085)" stroke-width="1" />
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 2. AREA PRINCIPALE ==================== -->
+  <main class="main-container">
+
+    <!-- BARRA DI CONTROLLO UNIFICATA (UNA SOLA RIGA) -->
+    <section class="control-bar" aria-label="Controlli e filtri nodi">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="9" cy="9" r="5.5" />
+          <path stroke-linecap="round" d="M13.5 13.5L17 17" />
+        </svg>
+        <input
+          id="searchInput"
+          class="search-input"
+          type="text"
+          placeholder="Cerca per nome, IP, hostname o ruolo..."
+          autocomplete="off"
+        />
+        <kbd id="searchShortcutHint" class="shortcut-kbd">/</kbd>
+        <button id="btnClearSearch" class="clear-search-btn hidden" type="button" title="Cancella ricerca" aria-label="Cancella ricerca">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" d="M6 6l8 8M14 6l-8 8" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="control-actions">
+        <!-- Contatore dinamico compatto a fianco del filtro -->
+        <div class="counter-chip" title="Nodi visualizzati sul totale">
+          <strong id="counterVisible">8</strong>
+          <span>/</span>
+          <span id="counterTotal">8</span>
+          <span class="counter-label">nodi</span>
+        </div>
+
+        <!-- Pulsante Filtro Unico + Popover -->
+        <div class="filter-wrapper" id="filterWrapper">
+          <button
+            id="btnToggleFilter"
+            class="icon-btn"
+            type="button"
+            aria-haspopup="true"
+            aria-expanded="false"
+            title="Filtra nodi per stato, aggiornamenti o ruolo"
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" d="M3.5 5.5h13M6 10h8M8.5 14.5h3" />
+            </svg>
+            <span class="filter-btn-label">Filtro</span>
+            <span id="filterActiveBadge" class="filter-badge hidden">0</span>
+          </button>
+
+          <div id="filterPopover" class="floating-menu filter-popover" role="menu">
+            <span class="popover-title">Stato &amp; Aggiornamenti</span>
+            <div id="popoverStatusOptions" class="status-chips-grid"></div>
+
+            <div class="menu-divider" style="margin: 14px 0;"></div>
+
+            <span class="popover-title">Ruolo Server</span>
+            <div id="popoverRoleOptions" class="role-list"></div>
+
+            <button id="btnPopoverReset" class="popover-reset-btn hidden" type="button">
+              Resetta filtri
+            </button>
+          </div>
+        </div>
+
+        <!-- Selettore 3 Viste a SOLE ICONE -->
+        <div class="view-switcher" role="group" aria-label="Modalità di visualizzazione">
+          <button id="btnViewGrid" class="view-btn active" type="button" title="Vista Griglia (Card)" aria-label="Vista Griglia">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+              <rect x="3" y="3" width="6" height="6" rx="1.3" />
+              <rect x="11" y="3" width="6" height="6" rx="1.3" />
+              <rect x="3" y="11" width="6" height="6" rx="1.3" />
+              <rect x="11" y="11" width="6" height="6" rx="1.3" />
+            </svg>
+          </button>
+
+          <button id="btnViewCompact" class="view-btn" type="button" title="Vista Compatta (Lista)" aria-label="Vista Compatta">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+              <path stroke-linecap="round" d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13" />
+            </svg>
+          </button>
+
+          <button id="btnViewTopology" class="view-btn" type="button" title="Vista Topologia (Mappa Mesh)" aria-label="Vista Topologia">
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+              <circle cx="4.5" cy="10" r="2" />
+              <circle cx="15" cy="5" r="2" />
+              <circle cx="15" cy="15" r="2" />
+              <path d="M6.4 9.1L13.1 5.9M6.4 10.9L13.1 14.1" stroke-opacity="0.85" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTENITORE PRINCIPALE NODI -->
+    <section id="serversContainer" aria-live="polite"></section>
+
+    <!-- STATO VUOTO -->
+    <div id="emptyState" class="empty-state hidden">
+      <div class="empty-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <circle cx="9" cy="9" r="5.5" />
+          <path stroke-linecap="round" d="M13.5 13.5L17 17" />
+        </svg>
+      </div>
+      <div style="font-size: 14px; font-weight: 600;">Nessun nodo trovato</div>
+      <div style="font-size: 12.5px; color: var(--text-secondary); margin-top: 4px;">
+        Modifica la ricerca o i filtri attivi per visualizzare i server della mesh Regulus.
+      </div>
+      <button id="btnEmptyReset" class="empty-btn" type="button">Resetta filtri</button>
+    </div>
+
+  </main>
+
+  <!-- ==================== 3. FLOATING DOCK INFERIORE ==================== -->
+  <nav class="bottom-dock-nav" aria-label="Navigazione sezioni Regulus">
+    <div id="bottomDock" class="floating-dock">
+      <button data-section="nodi" class="dock-item active" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <rect x="3" y="3.5" width="14" height="5" rx="1.4" />
+          <rect x="3" y="11.5" width="14" height="5" rx="1.4" />
+          <circle cx="6.2" cy="6" r="0.85" fill="currentColor" />
+          <circle cx="6.2" cy="14" r="0.85" fill="currentColor" />
+        </svg>
+        <span class="dock-label">Nodi</span>
+      </button>
+
+      <button data-section="servizi" class="dock-item" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path d="M10 3L16.5 6.75V13.25L10 17L3.5 13.25V6.75L10 3Z" stroke-linejoin="round" />
+          <path d="M3.5 6.75L10 10.5L16.5 6.75M10 10.5V17" stroke-opacity="0.65" />
+        </svg>
+        <span class="dock-label">Servizi</span>
+      </button>
+
+      <button data-section="automazioni" class="dock-item" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M11 2.8L4.8 11h4.7l-.5 6.2L15.2 9h-4.7l.5-6.2Z" />
+        </svg>
+        <span class="dock-label">Automazioni</span>
+      </button>
+
+      <span class="dock-divider" aria-hidden="true"></span>
+
+      <button data-section="admin" class="dock-item" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path d="M10 2.8L16 5.3V10.1C16 13.9 13.4 16.6 10 17.8C6.6 16.6 4 13.9 4 10.1V5.3L10 2.8Z" stroke-linejoin="round" />
+          <circle cx="10" cy="9.5" r="1.4" />
+          <path stroke-linecap="round" d="M10 11v2" />
+        </svg>
+        <span class="dock-label">Admin</span>
+      </button>
+
+      <button data-section="impostazioni" class="dock-item" type="button">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7">
+          <circle cx="10" cy="10" r="2.6" />
+          <path stroke-linecap="round" d="M10 3.2v1.6M10 15.2v1.6M3.2 10h1.6M15.2 10h1.6M5.2 5.2l1.1 1.1M13.7 13.7l1.1 1.1M14.8 5.2l-1.1 1.1M6.3 13.7l-1.1 1.1" />
+        </svg>
+        <span class="dock-label">Impostazioni</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ==================== 4. OVERLAY MODALE SERVER 90vw x 90vh ==================== -->
+  <div id="serverModalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div id="serverModalWindow" class="server-modal" role="dialog" aria-modal="true" aria-label="Dettagli nodo server">
+      <!-- Popolato dinamicamente da JS -->
+    </div>
+  </div>
+
+  <!-- ==================== 5. MODALE LIBRERIA LOGHI RUOLI ==================== -->
+  <div id="logoModalBackdrop" class="modal-backdrop" aria-hidden="true">
+    <div class="logo-modal" role="dialog" aria-modal="true" aria-labelledby="logoModalTitle">
+      <div class="modal-header" style="padding: 18px 22px;">
+        <div>
+          <h2 id="logoModalTitle" style="font-size: 16px; font-weight: 600;">Libreria Loghi Ruoli — Regulus</h2>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+            I 7 simboli vettoriali SVG progettati per identificare i ruoli nella server mesh
+          </p>
+        </div>
+        <button id="btnCloseLogoModal" class="modal-close-btn" type="button" aria-label="Chiudi libreria loghi">
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" d="M5 5l10 10M15 5L5 15" />
+          </svg>
+        </button>
+      </div>
+      <div id="logoLibraryGrid" class="logo-grid"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 6. TOAST CONTAINER ==================== -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- ==================== VANILLA JAVASCRIPT ==================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* ------------------------------------------------------------------------
+         1. DEFINIZIONE DEI 7 RUOLI & LOGHI SVG PERSONALIZZATI
+         ------------------------------------------------------------------------ */
+      const ROLES = {
+        hub: {
+          id: 'hub',
+          label: 'Hub Primario',
+          shortLabel: 'Hub',
+          cssClass: 'role-hub',
+          concept: 'Nucleo stellare centrale con nodi orbitali connessi: rappresenta il coordinatore primario e il cervello di controllo della mesh Regulus.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<circle cx="14" cy="14" r="9.2" stroke="currentColor" stroke-width="1.3" stroke-opacity="0.3" stroke-dasharray="2.5 2.5"/>' +
+              '<path d="M14 5.2L16.2 11.4L22.5 14L16.2 16.6L14 22.8L11.8 16.6L5.5 14L11.8 11.4L14 5.2Z" fill="currentColor" fill-opacity="0.16" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+              '<circle cx="14" cy="14" r="2" fill="currentColor"/>' +
+              '<circle cx="14" cy="4.2" r="1.4" fill="currentColor"/>' +
+              '<circle cx="22.8" cy="18.8" r="1.4" fill="currentColor" fill-opacity="0.75"/>' +
+              '<circle cx="5.2" cy="18.8" r="1.4" fill="currentColor" fill-opacity="0.75"/>' +
+              '</svg>'
+            );
+          }
+        },
+        'hub-backup': {
+          id: 'hub-backup',
+          label: 'Hub Secondario',
+          shortLabel: 'Hub Backup',
+          cssClass: 'role-hub-backup',
+          concept: 'Scudo di continuità con doppio arco di ridondanza: garantisce failover immediato in caso di crash dell’Hub Primario.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<path d="M14 3.4L22.4 6.9V13.7C22.4 19 18.8 22.8 14 24.6C9.2 22.8 5.6 19 5.6 13.7V6.9L14 3.4Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>' +
+              '<path d="M10.1 13.4A3.9 3.9 0 0 1 17.4 11.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/>' +
+              '<path d="M17.9 14.6A3.9 3.9 0 0 1 10.6 16.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-opacity="0.5"/>' +
+              '<path d="M16.6 9.6L17.7 11.8L15.4 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+              '<circle cx="14" cy="14" r="1.5" fill="currentColor"/>' +
+              '</svg>'
+            );
+          }
+        },
+        compute: {
+          id: 'compute',
+          label: 'Nodo di Calcolo',
+          shortLabel: 'Calcolo',
+          cssClass: 'role-compute',
+          concept: 'Processore geometrico multi-core con bus perimetrali: identifica server ad alta densità CPU per workload di elaborazione.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<rect x="7.5" y="7.5" width="13" height="13" rx="2.4" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1.55"/>' +
+              '<rect x="11" y="11" width="6" height="6" rx="1" fill="currentColor" fill-opacity="0.28" stroke="currentColor" stroke-width="1.4"/>' +
+              '<path d="M11 4V7.5M14 4V7.5M17 4V7.5M11 20.5V24M14 20.5V24M17 20.5V24M4 11H7.5M4 14H7.5M4 17H7.5M20.5 11H24M20.5 14H24M20.5 17H24" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-opacity="0.7"/>' +
+              '</svg>'
+            );
+          }
+        },
+        generic: {
+          id: 'generic',
+          label: 'Nodo Generico',
+          shortLabel: 'Generico',
+          cssClass: 'role-generic',
+          concept: 'Modulo cubico esagonale equilibrato: denota un nodo flessibile destinato a microservizi, container e carichi generici.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<path d="M14 4.2L22.5 9V19L14 23.8L5.5 19V9L14 4.2Z" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"/>' +
+              '<path d="M5.5 9L14 13.8L22.5 9" stroke="currentColor" stroke-width="1.45" stroke-linejoin="round" stroke-opacity="0.65"/>' +
+              '<path d="M14 13.8V23.8" stroke="currentColor" stroke-width="1.45" stroke-opacity="0.65"/>' +
+              '<circle cx="14" cy="9" r="1.2" fill="currentColor" fill-opacity="0.85"/>' +
+              '</svg>'
+            );
+          }
+        },
+        proxy: {
+          id: 'proxy',
+          label: 'Proxy / Gateway',
+          shortLabel: 'Proxy',
+          cssClass: 'role-proxy',
+          concept: 'Portale direzionale con flussi bidirezionali protetti: rappresenta il punto di accesso remoto e instradamento verso la mesh.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<rect x="11" y="4.5" width="6" height="19" rx="3" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1.5"/>' +
+              '<path d="M4 11H14.5M14.5 11L12 8.5M14.5 11L12 13.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/>' +
+              '<path d="M24 17H13.5M13.5 17L16 14.5M13.5 17L16 19.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.72"/>' +
+              '</svg>'
+            );
+          }
+        },
+        storage: {
+          id: 'storage',
+          label: 'Storage / NAS',
+          shortLabel: 'Storage',
+          cssClass: 'role-storage',
+          concept: 'Array di dischi impilati ad alta solidità: comunica persistenza dati, volumi ZFS/RAID interni e backup centralizzati.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<rect x="4.5" y="5" width="19" height="5.2" rx="1.6" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5"/>' +
+              '<rect x="4.5" y="11.4" width="19" height="5.2" rx="1.6" fill="currentColor" fill-opacity="0.08" stroke="currentColor" stroke-width="1.5"/>' +
+              '<rect x="4.5" y="17.8" width="19" height="5.2" rx="1.6" fill="currentColor" fill-opacity="0.05" stroke="currentColor" stroke-width="1.5"/>' +
+              '<circle cx="8" cy="7.6" r="1" fill="currentColor"/>' +
+              '<circle cx="8" cy="14" r="1" fill="currentColor"/>' +
+              '<circle cx="8" cy="20.4" r="1" fill="currentColor"/>' +
+              '<path d="M16.5 7.6H20M16.5 14H20M16.5 20.4H20" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.55"/>' +
+              '</svg>'
+            );
+          }
+        },
+        'dev-ai': {
+          id: 'dev-ai',
+          label: 'Nodo Dev & AI',
+          shortLabel: 'Dev & AI',
+          cssClass: 'role-dev-ai',
+          concept: 'Terminale di sviluppo unito a scintilla neurale: identifica ambienti di sviluppo, inferenza AI e nodi con permessi estesi.',
+          svg: function (size) {
+            return (
+              '<svg width="' + size + '" height="' + size + '" viewBox="0 0 28 28" fill="none" aria-hidden="true">' +
+              '<rect x="4" y="6" width="20" height="16" rx="3" fill="currentColor" fill-opacity="0.09" stroke="currentColor" stroke-width="1.5"/>' +
+              '<path d="M8 11.5L11 14L8 16.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+              '<path d="M12.2 16.8H14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-opacity="0.6"/>' +
+              '<path d="M18.5 9.5L19.4 12.1L22 13L19.4 13.9L18.5 16.5L17.6 13.9L15 13L17.6 12.1L18.5 9.5Z" fill="currentColor" stroke="currentColor" stroke-width="0.6" stroke-linejoin="round"/>' +
+              '</svg>'
+            );
+          }
+        }
+      };
+
+      /* ------------------------------------------------------------------------
+         2. DATASET DEI 8 NODI DELLA MESH REGULUS (6 ONLINE, 2 OFFLINE)
+         ------------------------------------------------------------------------ */
+      const serversData = [
+        {
+          id: 'olympus',
+          name: 'OLYMPUS',
+          hostname: 'olympus.core.regulus.internal',
+          role: 'hub',
+          ip: '10.10.0.1',
+          status: 'online',
+          lastContact: 'Adesso',
+          uptime: '48g 12h 18m',
+          os: 'Ubuntu 24.04.2 LTS',
+          kernel: '6.8.0-51-generic',
+          arch: 'x86_64 · 16 vCPU',
+          regulusVersion: 'v2.4.0',
+          metrics: { cpu: 28, ram: 42, disk: 36, net: '142 Mbps', netPct: 28 },
+          services: [
+            { name: 'regulus-hubd', meta: 'Consenso Raft · Porta 7443', running: true },
+            { name: 'etcd-cluster', meta: 'Key-Value Store Mesh', running: true },
+            { name: 'coredns-mesh', meta: 'Risoluzione DNS interna', running: true },
+            { name: 'prometheus-core', meta: 'Raccolta metriche', running: true }
+          ],
+          logs: [
+            { time: '23:58:12', type: 'mesh', msg: 'Heartbeat sincronizzato con ATHENA (1.2ms)' },
+            { time: '23:51:04', type: 'info', msg: 'Verifica certificati mTLS completata (validi 84g)' },
+            { time: '23:40:19', type: 'warn', msg: 'Rilevato aggiornamento Regulus Mesh v2.4.1 disponibile' }
+          ],
+          updates: {
+            apt: { available: true, count: 4, packages: ['openssl (3.0.13)', 'systemd (255.4)', 'ca-certificates (20240203)', 'curl (8.5.0)'] },
+            ubuntu: { available: false, summary: '24.04.2 LTS', detail: 'Sistema Ubuntu aggiornato alle ultime patch di sicurezza.' },
+            regulus: { available: true, from: 'v2.4.0', to: 'v2.4.1', changelog: 'Ottimizzazione consenso Raft e riduzione latenza heartbeat del 16%.' }
+          }
+        },
+        {
+          id: 'athena',
+          name: 'ATHENA',
+          hostname: 'athena.failover.regulus.internal',
+          role: 'hub-backup',
+          ip: '10.10.0.2',
+          status: 'online',
+          lastContact: '4s fa',
+          uptime: '48g 12h 15m',
+          os: 'Ubuntu 24.04.1 LTS',
+          kernel: '6.8.0-49-generic',
+          arch: 'x86_64 · 16 vCPU',
+          regulusVersion: 'v2.4.1',
+          metrics: { cpu: 11, ram: 24, disk: 31, net: '64 Mbps', netPct: 14 },
+          services: [
+            { name: 'regulus-hubd', meta: 'Standby Hot-Failover', running: true },
+            { name: 'etcd-replica', meta: 'Replica sincrona stato', running: true },
+            { name: 'keepalived', meta: 'VIP Failover Monitor', running: true }
+          ],
+          logs: [
+            { time: '23:58:10', type: 'success', msg: 'Snapshot stato mesh replicato da OLYMPUS' },
+            { time: '23:30:00', type: 'info', msg: 'Test failover passivo superato (0 pacchetti persi)' }
+          ],
+          updates: {
+            apt: { available: false, count: 0, packages: [] },
+            ubuntu: { available: true, summary: '24.04.2 LTS', detail: 'Point release Ubuntu 24.04.2 LTS e patch kernel pronte.' },
+            regulus: { available: false, from: 'v2.4.1', to: 'v2.4.1', changelog: 'Agente Regulus Mesh già all’ultima versione stabile.' }
+          }
+        },
+        {
+          id: 'astraeus',
+          name: 'ASTRAEUS',
+          hostname: 'astraeus.compute.regulus.internal',
+          role: 'compute',
+          ip: '10.10.0.10',
+          status: 'online',
+          lastContact: '3s fa',
+          uptime: '19g 06h 42m',
+          os: 'Ubuntu 24.04.2 LTS',
+          kernel: '6.8.0-48-generic',
+          arch: 'x86_64 · 64 vCPU',
+          regulusVersion: 'v2.4.1',
+          metrics: { cpu: 74, ram: 68, disk: 52, net: '418 Mbps', netPct: 62 },
+          services: [
+            { name: 'regulus-agent', meta: 'Worker Node Daemon', running: true },
+            { name: 'dockerd', meta: '14 container di calcolo attivi', running: true },
+            { name: 'nomad-client', meta: 'Orchestratore batch', running: true }
+          ],
+          logs: [
+            { time: '23:57:48', type: 'info', msg: 'Job #4921 (render-pipeline) completato in 42.3s' },
+            { time: '23:44:12', type: 'warn', msg: 'Carico CPU sostenuto (74%) — thermal OK (61°C)' }
+          ],
+          updates: {
+            apt: { available: true, count: 12, packages: ['docker-ce (27.4.1)', 'containerd.io (1.7.24)', 'libssl3 (3.0.13)', 'python3.12 (3.12.3)', '+ altri 8 pacchetti'] },
+            ubuntu: { available: true, summary: 'Kernel 6.8.0-51', detail: 'Aggiornamento Kernel Linux con ottimizzazioni scheduler multi-core.' },
+            regulus: { available: false, from: 'v2.4.1', to: 'v2.4.1', changelog: 'Agente Regulus Mesh già aggiornato.' }
+          }
+        },
+        {
+          id: 'hermes',
+          name: 'HERMES',
+          hostname: 'hermes.edge.regulus.internal',
+          role: 'proxy',
+          ip: '10.10.0.5',
+          status: 'online',
+          lastContact: '2s fa',
+          uptime: '92g 04h 11m',
+          os: 'Ubuntu 24.04.2 LTS',
+          kernel: '6.8.0-51-generic',
+          arch: 'x86_64 · 8 vCPU',
+          regulusVersion: 'v2.4.1',
+          metrics: { cpu: 16, ram: 31, disk: 22, net: '620 Mbps', netPct: 78 },
+          services: [
+            { name: 'traefik-edge', meta: 'Reverse Proxy TLS 1.3', running: true },
+            { name: 'wireguard-gw', meta: 'Tunnel VPN accesso remoto', running: true },
+            { name: 'crowdsec-bouncer', meta: 'Protezione perimetrale', running: true }
+          ],
+          logs: [
+            { time: '23:58:02', type: 'info', msg: 'Sessione remota admin autenticata via WireGuard' },
+            { time: '23:20:11', type: 'success', msg: 'Rinnovo certificato ACME *.regulus.mesh riuscito' }
+          ],
+          updates: {
+            apt: { available: false, count: 0, packages: [] },
+            ubuntu: { available: false, summary: '24.04.2 LTS', detail: 'Sistema operativo aggiornato.' },
+            regulus: { available: false, from: 'v2.4.1', to: 'v2.4.1', changelog: 'Agente Regulus Mesh già aggiornato.' }
+          }
+        },
+        {
+          id: 'hades',
+          name: 'HADES',
+          hostname: 'hades.nas.regulus.internal',
+          role: 'storage',
+          ip: '10.10.0.20',
+          status: 'online',
+          lastContact: '6s fa',
+          uptime: '114g 18h 05m',
+          os: 'Ubuntu 24.04.2 LTS',
+          kernel: '6.8.0-51-generic',
+          arch: 'x86_64 · 12 vCPU',
+          regulusVersion: 'v2.4.1',
+          metrics: { cpu: 19, ram: 55, disk: 71, net: '310 Mbps', netPct: 48 },
+          services: [
+            { name: 'zfs-zed', meta: 'Pool RAIDZ2 · 48 TB (34 TB usati)', running: true },
+            { name: 'nfs-kernel-server', meta: 'Volumi condivisi mesh', running: true },
+            { name: 'minio-s3', meta: 'Object Storage interno', running: true },
+            { name: 'restic-backup', meta: 'Snapshot automatici notturni', running: true }
+          ],
+          logs: [
+            { time: '23:55:00', type: 'success', msg: 'Scrub ZFS pool tank0 completato: 0 errori rilevati' },
+            { time: '23:00:05', type: 'info', msg: 'Snapshot orario /tank0/mesh-volumes creato' }
+          ],
+          updates: {
+            apt: { available: true, count: 3, packages: ['zfsutils-linux (2.2.2)', 'smartmontools (7.4)', 'samba-common (4.19.5)'] },
+            ubuntu: { available: false, summary: '24.04.2 LTS', detail: 'Sistema operativo aggiornato.' },
+            regulus: { available: false, from: 'v2.4.1', to: 'v2.4.1', changelog: 'Agente Regulus Mesh già aggiornato.' }
+          }
+        },
+        {
+          id: 'prometheus',
+          name: 'PROMETHEUS',
+          hostname: 'prometheus.ai.regulus.internal',
+          role: 'dev-ai',
+          ip: '10.10.0.30',
+          status: 'online',
+          lastContact: '2s fa',
+          uptime: '11g 03h 51m',
+          os: 'Ubuntu 24.04.1 LTS',
+          kernel: '6.8.0-49-generic',
+          arch: 'x86_64 · 32 vCPU · 2x GPU',
+          regulusVersion: 'v2.4.0',
+          metrics: { cpu: 82, ram: 79, disk: 64, net: '285 Mbps', netPct: 45 },
+          services: [
+            { name: 'vllm-inference', meta: 'Endpoint modelli AI · Porta 8000', running: true },
+            { name: 'code-server', meta: 'IDE remoto sviluppo', running: true },
+            { name: 'gitea-runner', meta: 'CI/CD Pipeline Builder', running: true },
+            { name: 'nvidia-dcgm', meta: 'Telemetria GPU CUDA 12.6', running: true }
+          ],
+          logs: [
+            { time: '23:58:01', type: 'mesh', msg: 'Modello locale caricato in VRAM (44.2 GB / 48 GB)' },
+            { time: '23:49:20', type: 'info', msg: 'Build container dev-sandbox #118 completata' }
+          ],
+          updates: {
+            apt: { available: true, count: 7, packages: ['nvidia-cuda-toolkit (12.6)', 'nodejs (22.12.0)', 'git (2.43.0)', 'python3-pip (24.0)', '+ altri 3 pacchetti'] },
+            ubuntu: { available: true, summary: '24.04.2 HWE', detail: 'Aggiornamento Ubuntu 24.04.2 LTS con stack HWE e driver GPU.' },
+            regulus: { available: true, from: 'v2.4.0', to: 'v2.4.1', changelog: 'Supporto port-forwarding dinamico Dev/AI e policy sandbox aggiornate.' }
+          }
+        },
+        {
+          id: 'pluto',
+          name: 'PLUTO',
+          hostname: 'pluto.node.regulus.internal',
+          role: 'generic',
+          ip: '10.10.0.40',
+          status: 'offline',
+          lastContact: '3h 14m fa',
+          uptime: 'Offline',
+          os: 'Ubuntu 24.04.2 LTS',
+          kernel: '6.8.0-51-generic',
+          arch: 'x86_64 · 8 vCPU',
+          regulusVersion: 'v2.4.0',
+          metrics: { cpu: 0, ram: 0, disk: 44, net: '0 Mbps', netPct: 0 },
+          services: [
+            { name: 'regulus-agent', meta: 'Connessione persa', running: false },
+            { name: 'dockerd', meta: '6 container in pausa', running: false },
+            { name: 'redis-cache', meta: 'Non raggiungibile', running: false }
+          ],
+          logs: [
+            { time: '20:44:09', type: 'error', msg: 'Heartbeat timeout dopo 3 tentativi consecutivi' },
+            { time: '20:43:39', type: 'warn', msg: 'Latenza anomala verso OLYMPUS (>2500ms)' }
+          ],
+          updates: {
+            apt: { available: false, count: 0, packages: [] },
+            ubuntu: { available: false, summary: '24.04.2 LTS', detail: 'Sistema aggiornato all’ultimo contatto.' },
+            regulus: { available: true, from: 'v2.4.0', to: 'v2.4.1', changelog: 'In attesa di riconnessione per aggiornare l’agente Regulus a v2.4.1.' }
+          }
+        },
+        {
+          id: 'kronos',
+          name: 'KRONOS',
+          hostname: 'kronos.compute.regulus.internal',
+          role: 'compute',
+          ip: '10.10.0.11',
+          status: 'offline',
+          lastContact: '2g 5h fa',
+          uptime: 'Offline',
+          os: 'Ubuntu 24.04.1 LTS',
+          kernel: '6.8.0-47-generic',
+          arch: 'x86_64 · 64 vCPU',
+          regulusVersion: 'v2.4.1',
+          metrics: { cpu: 0, ram: 0, disk: 58, net: '0 Mbps', netPct: 0 },
+          services: [
+            { name: 'regulus-agent', meta: 'Spento per manutenzione', running: false },
+            { name: 'dockerd', meta: 'Fermo', running: false }
+          ],
+          logs: [
+            { time: '24 Nov', type: 'warn', msg: 'Spegnimento programmato per sostituzione modulo RAM' },
+            { time: '24 Nov', type: 'info', msg: 'Workload migrati automaticamente su ASTRAEUS' }
+          ],
+          updates: {
+            apt: { available: true, count: 9, packages: ['docker-ce (27.4.1)', 'libssl3 (3.0.13)', 'systemd (255.4)', '+ altri 6 pacchetti'] },
+            ubuntu: { available: true, summary: 'Security Patch', detail: 'Patch di sicurezza Ubuntu in coda fino al rientro online.' },
+            regulus: { available: false, from: 'v2.4.1', to: 'v2.4.1', changelog: 'Agente Regulus Mesh già aggiornato.' }
+          }
+        }
+      ];
+
+      /* ------------------------------------------------------------------------
+         3. MOTORE ALGORITMICO SCALABILE PER LA TOPOLOGIA (ZERO SOVRAPPOSIZIONI)
+         ------------------------------------------------------------------------ */
+      const TOPO_METRICS = {
+        NODE_W: 232,
+        NODE_H: 84,
+        ROW_GAP: 38,
+        ROW_STEP: 122, // NODE_H (84) + ROW_GAP (38)
+        COL_GAP: 136,
+        COL_STEP: 368, // NODE_W (232) + COL_GAP (136)
+        MAX_PER_COL: 6,
+        LEFT_START_X: -(232 + 170),  // -402
+        RIGHT_START_X: 232 + 190,    // +422
+        SECONDARY_START_Y: 210
+      };
+
+      /**
+       * Calcola in modo deterministico e scalabile le posizioni di tutti i nodi,
+       * i percorsi SVG senza occlusione (curve dirette per Col 0 e dorsali con
+       * corridoio superiore + canale verticale dedicato per Col >= 1) e il bounding box.
+       */
+      function computeTopologyLayout(nodes) {
+        const M = TOPO_METRICS;
+        const halfW = M.NODE_W / 2;
+        const halfH = M.NODE_H / 2;
+
+        const positions = {};
+        const edges = [];
+        const failoverLabels = [];
+
+        const primaryHubs = nodes.filter(function (n) { return n.role === 'hub'; });
+        const secondaryHubs = nodes.filter(function (n) { return n.role === 'hub-backup'; });
+        const proxyNodes = nodes.filter(function (n) { return n.role === 'proxy'; });
+        const workerNodes = nodes.filter(function (n) {
+          return n.role !== 'hub' && n.role !== 'hub-backup' && n.role !== 'proxy';
+        });
+
+        // 1. Tier Centrale: Hub Primario a (0, 0) e Hub Secondari in verticale sotto
+        const mainHub = primaryHubs[0] || nodes[0];
+        primaryHubs.forEach(function (node, idx) {
+          positions[node.id] = { x: 0, y: idx * -M.ROW_STEP, tier: 'core', col: 0 };
+        });
+
+        const hubPos = positions[mainHub.id] || { x: 0, y: 0 };
+        const hubLeftX = hubPos.x - halfW;
+        const hubRightX = hubPos.x + halfW;
+        const hubCenterY = hubPos.y;
+        const hubBottomY = hubPos.y + halfH;
+
+        secondaryHubs.forEach(function (node, idx) {
+          const y = M.SECONDARY_START_Y + idx * M.ROW_STEP;
+          positions[node.id] = { x: 0, y: y, tier: 'failover', col: 0 };
+
+          if (idx === 0) {
+            const targetTopY = y - halfH;
+            edges.push({
+              id: 'edge-' + mainHub.id + '-' + node.id,
+              from: mainHub.id,
+              to: node.id,
+              type: 'failover',
+              d: 'M ' + hubPos.x + ' ' + hubBottomY + ' L ' + hubPos.x + ' ' + targetTopY
+            });
+            failoverLabels.push({
+              x: hubPos.x,
+              y: (hubBottomY + targetTopY) / 2,
+              text: 'Failover · Heartbeat'
+            });
+          } else {
+            const prevNode = secondaryHubs[idx - 1];
+            const prevBottomY = positions[prevNode.id].y + halfH;
+            edges.push({
+              id: 'edge-' + prevNode.id + '-' + node.id,
+              from: prevNode.id,
+              to: node.id,
+              type: 'failover',
+              d: 'M 0 ' + prevBottomY + ' L 0 ' + (y - halfH)
+            });
+          }
+        });
+
+        // 2. Tier Sinistro: Nodi Proxy / Gateway centrati verticalmente attorno a y = 0
+        const proxyCount = proxyNodes.length;
+        proxyNodes.forEach(function (node, i) {
+          const col = Math.floor(i / M.MAX_PER_COL);
+          const rowInCol = i % M.MAX_PER_COL;
+          const itemsInCol = Math.min(M.MAX_PER_COL, proxyCount - col * M.MAX_PER_COL);
+          const x = M.LEFT_START_X - col * M.COL_STEP;
+          const y = (rowInCol - (itemsInCol - 1) / 2) * M.ROW_STEP;
+          positions[node.id] = { x: x, y: y, tier: 'proxy', col: col };
+        });
+
+        // 3. Tier Destro: Nodi Satellite / Worker distribuiti in colonne da MAX_PER_COL
+        const workerCount = workerNodes.length;
+        let minRightTopY = Infinity;
+        let maxRightCol = 0;
+
+        workerNodes.forEach(function (node, i) {
+          const col = Math.floor(i / M.MAX_PER_COL);
+          const rowInCol = i % M.MAX_PER_COL;
+          const itemsInCol = Math.min(M.MAX_PER_COL, workerCount - col * M.MAX_PER_COL);
+          const x = M.RIGHT_START_X + col * M.COL_STEP;
+          const y = (rowInCol - (itemsInCol - 1) / 2) * M.ROW_STEP;
+          positions[node.id] = { x: x, y: y, tier: 'worker', col: col };
+          if (y - halfH < minRightTopY) minRightTopY = y - halfH;
+          if (col > maxRightCol) maxRightCol = col;
+        });
+
+        if (!isFinite(minRightTopY)) minRightTopY = -halfH;
+
+        // 4. Instradamento Proxy -> Hub Primario (porta destra proxy -> porta sinistra OLYMPUS)
+        let minLeftTopY = Infinity;
+        proxyNodes.forEach(function (node) {
+          const p = positions[node.id];
+          if (p.y - halfH < minLeftTopY) minLeftTopY = p.y - halfH;
+        });
+        if (!isFinite(minLeftTopY)) minLeftTopY = -halfH;
+
+        proxyNodes.forEach(function (node) {
+          const p = positions[node.id];
+          const pRightX = p.x + halfW;
+          let d;
+          if (p.col === 0) {
+            const dx = hubLeftX - pRightX;
+            const c1x = pRightX + dx * 0.48;
+            const c2x = hubLeftX - dx * 0.48;
+            d = 'M ' + pRightX + ' ' + p.y + ' C ' + c1x + ' ' + p.y + ', ' + c2x + ' ' + hubCenterY + ', ' + hubLeftX + ' ' + hubCenterY;
+          } else {
+            // Dorsale superiore per colonne proxy aggiuntive (col >= 1)
+            const corridorY = minLeftTopY - 58 - (p.col - 1) * 18;
+            const channelX = pRightX + 58;
+            const entryX = hubLeftX - 44 - (p.col - 1) * 12;
+            const r = 16;
+            d =
+              'M ' + pRightX + ' ' + p.y +
+              ' L ' + (channelX - r) + ' ' + p.y +
+              ' Q ' + channelX + ' ' + p.y + ', ' + channelX + ' ' + (p.y - r) +
+              ' L ' + channelX + ' ' + (corridorY + r) +
+              ' Q ' + channelX + ' ' + corridorY + ', ' + (channelX + r) + ' ' + corridorY +
+              ' L ' + (entryX - r) + ' ' + corridorY +
+              ' Q ' + entryX + ' ' + corridorY + ', ' + entryX + ' ' + (corridorY + r) +
+              ' C ' + entryX + ' ' + (hubCenterY - 24) + ', ' + (hubLeftX - 24) + ' ' + hubCenterY + ', ' + hubLeftX + ' ' + hubCenterY;
+          }
+
+          edges.push({
+            id: 'edge-' + node.id + '-' + mainHub.id,
+            from: node.id,
+            to: mainHub.id,
+            type: 'gateway',
+            d: d
+          });
+        });
+
+        // 5. Instradamento Hub Primario -> Nodi Destri (Zero Occlusione)
+        workerNodes.forEach(function (node) {
+          const p = positions[node.id];
+          const nodeLeftX = p.x - halfW;
+          let d;
+
+          if (p.col === 0) {
+            // Colonna 0: curva Bezier cubica pulita nello spazio vuoto tra OLYMPUS e Colonna 0
+            const dx = nodeLeftX - hubRightX;
+            const c1x = hubRightX + dx * 0.48;
+            const c2x = nodeLeftX - dx * 0.48;
+            d = 'M ' + hubRightX + ' ' + hubCenterY + ' C ' + c1x + ' ' + hubCenterY + ', ' + c2x + ' ' + p.y + ', ' + nodeLeftX + ' ' + p.y;
+          } else {
+            // Colonne col >= 1: dorsale nel corridoio superiore libero -> canale verticale dedicato -> raccordo morbido nella porta sinistra
+            const corridorY = minRightTopY - 58 - (p.col - 1) * 18;
+            const channelX = nodeLeftX - 58;
+            const exitX = hubRightX + 44 + (p.col - 1) * 14;
+            const r = 16;
+            const dirY = p.y >= corridorY ? 1 : -1;
+
+            d =
+              'M ' + hubRightX + ' ' + hubCenterY +
+              ' C ' + (hubRightX + 26) + ' ' + hubCenterY + ', ' + exitX + ' ' + (hubCenterY - 26) + ', ' + exitX + ' ' + (corridorY + r) +
+              ' Q ' + exitX + ' ' + corridorY + ', ' + (exitX + r) + ' ' + corridorY +
+              ' L ' + (channelX - r) + ' ' + corridorY +
+              ' Q ' + channelX + ' ' + corridorY + ', ' + channelX + ' ' + (corridorY + r) +
+              ' L ' + channelX + ' ' + (p.y - dirY * r) +
+              ' Q ' + channelX + ' ' + p.y + ', ' + (channelX + r) + ' ' + p.y +
+              ' L ' + nodeLeftX + ' ' + p.y;
+          }
+
+          edges.push({
+            id: 'edge-' + mainHub.id + '-' + node.id,
+            from: mainHub.id,
+            to: node.id,
+            type: 'mesh',
+            d: d
+          });
+        });
+
+        // 6. Calcolo Bounding Box reale (inclusi eventuali corridoi superiori delle dorsali)
+        let minX = Infinity;
+        let maxX = -Infinity;
+        let minY = Infinity;
+        let maxY = -Infinity;
+
+        Object.keys(positions).forEach(function (id) {
+          const p = positions[id];
+          if (p.x - halfW < minX) minX = p.x - halfW;
+          if (p.x + halfW > maxX) maxX = p.x + halfW;
+          if (p.y - halfH < minY) minY = p.y - halfH;
+          if (p.y + halfH > maxY) maxY = p.y + halfH;
+        });
+
+        if (maxRightCol >= 1) {
+          const topBusY = minRightTopY - 58 - (maxRightCol - 1) * 18 - 14;
+          if (topBusY < minY) minY = topBusY;
+        }
+
+        if (!isFinite(minX)) {
+          minX = -halfW; maxX = halfW; minY = -halfH; maxY = halfH;
+        }
+
+        return {
+          positions: positions,
+          edges: edges,
+          failoverLabels: failoverLabels,
+          bounds: {
+            minX: minX,
+            maxX: maxX,
+            minY: minY,
+            maxY: maxY,
+            width: maxX - minX,
+            height: maxY - minY
+          }
+        };
+      }
+
+      const STATUS_OPTIONS = [
+        { id: 'all',     label: 'Tutti' },
+        { id: 'online',  label: 'Online' },
+        { id: 'offline', label: 'Offline' },
+        { id: 'updates', label: 'Con aggiornamenti' },
+        { id: 'apt',     label: 'APT',          dot: '#06b6d4' },
+        { id: 'ubuntu',  label: 'Ubuntu',       dot: '#f59e0b' },
+        { id: 'regulus', label: 'Regulus Mesh', dot: '#8b5cf6' }
+      ];
+
+      const SECTION_LABELS = {
+        nodi: 'Nodi',
+        servizi: 'Servizi',
+        automazioni: 'Automazioni',
+        admin: 'Admin',
+        impostazioni: 'Impostazioni'
+      };
+
+      /* ------------------------------------------------------------------------
+         4. STATO APPLICAZIONE
+         ------------------------------------------------------------------------ */
+      const state = {
+        search: '',
+        statusFilter: 'all',
+        roleFilter: 'all',
+        viewMode: 'grid',
+        activeSection: 'nodi',
+        filterOpen: false,
+        accountOpen: false,
+        selectedServerId: null,
+        activeUpdates: {},
+        topo: {
+          scale: 1,
+          panX: 0,
+          panY: 0,
+          initialized: false
+        }
+      };
+
+      /* ------------------------------------------------------------------------
+         5. FUNZIONI DI UTILITÀ, FILTRAGGIO & TOAST
+         ------------------------------------------------------------------------ */
+      function hasAnyUpdate(srv) {
+        return srv.updates.apt.available || srv.updates.ubuntu.available || srv.updates.regulus.available;
+      }
+
+      function countPendingCategories(srv) {
+        let count = 0;
+        if (srv.updates.apt.available) count++;
+        if (srv.updates.ubuntu.available) count++;
+        if (srv.updates.regulus.available) count++;
+        return count;
+      }
+
+      function matchesFilters(srv) {
+        const q = state.search.trim().toLowerCase();
+        if (q) {
+          const role = ROLES[srv.role];
+          const haystack = (
+            srv.name + ' ' +
+            srv.ip + ' ' +
+            srv.hostname + ' ' +
+            (role ? role.label + ' ' + role.shortLabel : '')
+          ).toLowerCase();
+          if (haystack.indexOf(q) === -1) return false;
+        }
+
+        if (state.statusFilter === 'online' && srv.status !== 'online') return false;
+        if (state.statusFilter === 'offline' && srv.status !== 'offline') return false;
+        if (state.statusFilter === 'updates' && !hasAnyUpdate(srv)) return false;
+        if (state.statusFilter === 'apt' && !srv.updates.apt.available) return false;
+        if (state.statusFilter === 'ubuntu' && !srv.updates.ubuntu.available) return false;
+        if (state.statusFilter === 'regulus' && !srv.updates.regulus.available) return false;
+
+        if (state.roleFilter !== 'all' && srv.role !== state.roleFilter) return false;
+
+        return true;
+      }
+
+      function getFilteredServers() {
+        return serversData.filter(matchesFilters);
+      }
+
+      function addNodeLog(srv, type, msg) {
+        const now = new Date();
+        const pad = function (n) { return String(n).padStart(2, '0'); };
+        const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+        srv.logs.unshift({ time: timeStr, type: type || 'info', msg: msg });
+        if (srv.logs.length > 25) srv.logs.pop();
+      }
+
+      function showToast(message, type) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const colors = {
+          success: '#10b981',
+          warn: '#f59e0b',
+          error: '#ef4444',
+          info: '#8b5cf6'
+        };
+        const dotColor = colors[type] || colors.info;
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.innerHTML =
+          '<span class="dot-indicator" style="background:' + dotColor + '"></span>' +
+          '<span>' + message + '</span>';
+
+        container.appendChild(toast);
+        requestAnimationFrame(function () {
+          toast.classList.add('show');
+        });
+
+        setTimeout(function () {
+          toast.classList.remove('show');
+          setTimeout(function () {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+          }, 220);
+        }, 3000);
+      }
+
+      function copyToClipboard(text, label) {
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.focus();
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          showToast((label || 'Testo') + ' copiato: ' + text, 'success');
+        } catch (err) {
+          showToast('Impossibile copiare negli appunti', 'error');
+        }
+      }
+
+      /* ------------------------------------------------------------------------
+         6. NOTCH, DOCK, SELETTORE VISTE & POPOVER MENU
+         ------------------------------------------------------------------------ */
+      function updateNotchStatus() {
+        const onlineCount = serversData.filter(function (s) { return s.status === 'online'; }).length;
+        const el = document.getElementById('notchOnlineSummary');
+        if (el) el.textContent = onlineCount + '/' + serversData.length + ' Online';
+      }
+
+      function renderDock() {
+        document.querySelectorAll('#bottomDock .dock-item').forEach(function (btn) {
+          btn.classList.toggle('active', btn.dataset.section === state.activeSection);
+        });
+      }
+
+      function renderViewToggle() {
+        document.getElementById('btnViewGrid').classList.toggle('active', state.viewMode === 'grid');
+        document.getElementById('btnViewCompact').classList.toggle('active', state.viewMode === 'compact');
+        document.getElementById('btnViewTopology').classList.toggle('active', state.viewMode === 'topology');
+      }
+
+      function toggleFilterPopover(force) {
+        state.filterOpen = typeof force === 'boolean' ? force : !state.filterOpen;
+        if (state.filterOpen && state.accountOpen) toggleAccountDropdown(false);
+        const pop = document.getElementById('filterPopover');
+        const btn = document.getElementById('btnToggleFilter');
+        pop.classList.toggle('open', state.filterOpen);
+        btn.classList.toggle('active', state.filterOpen || state.statusFilter !== 'all' || state.roleFilter !== 'all');
+        btn.setAttribute('aria-expanded', String(state.filterOpen));
+      }
+
+      function toggleAccountDropdown(force) {
+        state.accountOpen = typeof force === 'boolean' ? force : !state.accountOpen;
+        if (state.accountOpen && state.filterOpen) toggleFilterPopover(false);
+        const menu = document.getElementById('accountDropdown');
+        const btn = document.getElementById('btnToggleAccount');
+        menu.classList.toggle('open', state.accountOpen);
+        btn.setAttribute('aria-expanded', String(state.accountOpen));
+      }
+
+      function renderFilterPopover() {
+        const statusContainer = document.getElementById('popoverStatusOptions');
+        const roleContainer = document.getElementById('popoverRoleOptions');
+        const badge = document.getElementById('filterActiveBadge');
+        const btnReset = document.getElementById('btnPopoverReset');
+        const btnFilter = document.getElementById('btnToggleFilter');
+
+        statusContainer.innerHTML = STATUS_OPTIONS.map(function (opt) {
+          const selected = state.statusFilter === opt.id;
+          const dotHtml = opt.dot ? '<span class="dot-indicator" style="background:' + opt.dot + '"></span>' : '';
+          return (
+            '<button type="button" class="filter-chip' + (selected ? ' selected' : '') + '" data-status-opt="' + opt.id + '">' +
+              dotHtml +
+              '<span>' + opt.label + '</span>' +
+            '</button>'
+          );
+        }).join('');
+
+        const roleKeys = Object.keys(ROLES);
+        const allRolesSelected = state.roleFilter === 'all';
+        roleContainer.innerHTML =
+          '<button type="button" class="role-option' + (allRolesSelected ? ' selected' : '') + '" data-role-opt="all">' +
+            '<span class="role-option-left">' +
+              '<span class="role-mini-icon" style="background:rgba(255,255,255,0.05);color:var(--text-secondary);">' +
+                '<svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="11" y="3" width="6" height="6" rx="1"/><rect x="3" y="11" width="6" height="6" rx="1"/><rect x="11" y="11" width="6" height="6" rx="1"/></svg>' +
+              '</span>' +
+              '<span>Tutti i ruoli</span>' +
+            '</span>' +
+            '<span class="mono" style="font-size:11px;color:var(--text-muted);">' + serversData.length + '</span>' +
+          '</button>' +
+          roleKeys.map(function (key) {
+            const role = ROLES[key];
+            const selected = state.roleFilter === key;
+            const count = serversData.filter(function (s) { return s.role === key; }).length;
+            return (
+              '<button type="button" class="role-option' + (selected ? ' selected' : '') + '" data-role-opt="' + key + '">' +
+                '<span class="role-option-left">' +
+                  '<span class="role-mini-icon role-icon-box ' + role.cssClass + '">' + role.svg(15) + '</span>' +
+                  '<span>' + role.label + '</span>' +
+                '</span>' +
+                '<span class="mono" style="font-size:11px;color:var(--text-muted);">' + count + '</span>' +
+              '</button>'
+            );
+          }).join('');
+
+        statusContainer.querySelectorAll('[data-status-opt]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.statusFilter = btn.dataset.statusOpt;
+            renderAll();
+          });
+        });
+
+        roleContainer.querySelectorAll('[data-role-opt]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            state.roleFilter = btn.dataset.roleOpt;
+            renderAll();
+          });
+        });
+
+        let activeCount = 0;
+        if (state.statusFilter !== 'all') activeCount++;
+        if (state.roleFilter !== 'all') activeCount++;
+
+        badge.textContent = String(activeCount);
+        badge.classList.toggle('hidden', activeCount === 0);
+        btnReset.classList.toggle('hidden', activeCount === 0);
+        btnFilter.classList.toggle('active', state.filterOpen || activeCount > 0);
+      }
+
+      /* ------------------------------------------------------------------------
+         7. RENDERING BADGE AGGIORNAMENTI & VISTE GRIGLIA / COMPATTA
+         ------------------------------------------------------------------------ */
+      function renderUpdateBadges(srv) {
+        const pills = [];
+        if (srv.updates.apt.available) {
+          pills.push('<span class="upd-pill apt" title="Pacchetti APT disponibili">' + srv.updates.apt.count + ' APT</span>');
+        }
+        if (srv.updates.ubuntu.available) {
+          pills.push('<span class="upd-pill ubuntu" title="Aggiornamento sistema Ubuntu">Ubuntu</span>');
+        }
+        if (srv.updates.regulus.available) {
+          pills.push('<span class="upd-pill mesh" title="Aggiornamento Regulus Mesh">Mesh</span>');
+        }
+        if (!pills.length) {
+          pills.push('<span class="upd-pill ok">Aggiornato</span>');
+        }
+        return '<div class="update-badges">' + pills.join('') + '</div>';
+      }
+
+      function renderGridView(container, list) {
+        container.innerHTML =
+          '<div class="servers-grid">' +
+            list.map(function (srv) {
+              const role = ROLES[srv.role];
+              const isOnline = srv.status === 'online';
+              return (
+                '<article class="server-card' + (isOnline ? '' : ' offline-card') + '" data-server-id="' + srv.id + '" tabindex="0" role="button" aria-label="Apri dettagli nodo ' + srv.name + '">' +
+                  '<div>' +
+                    '<div class="card-top">' +
+                      '<div class="card-identity">' +
+                        '<div class="card-logo role-icon-box ' + role.cssClass + '">' + role.svg(23) + '</div>' +
+                        '<div style="min-width:0;">' +
+                          '<div class="card-name">' + srv.name + '</div>' +
+                          '<div class="card-ip">' + srv.ip + '</div>' +
+                        '</div>' +
+                      '</div>' +
+                      '<span class="status-pill ' + (isOnline ? 'online' : 'offline') + '">' +
+                        '<span class="status-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+                        (isOnline ? 'Online' : 'Offline') +
+                      '</span>' +
+                    '</div>' +
+                    '<div class="card-meta-row">' +
+                      '<span class="role-pill ' + role.cssClass + '">' + role.label + '</span>' +
+                      '<span class="last-contact" title="Ultimo contatto">' + srv.lastContact + '</span>' +
+                    '</div>' +
+                  '</div>' +
+                  '<div class="card-footer">' +
+                    renderUpdateBadges(srv) +
+                    '<svg class="card-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 5l5 5-5 5"/></svg>' +
+                  '</div>' +
+                '</article>'
+              );
+            }).join('') +
+          '</div>';
+
+        bindServerCardEvents(container);
+      }
+
+      function renderCompactView(container, list) {
+        container.innerHTML =
+          '<div class="servers-list">' +
+            list.map(function (srv) {
+              const role = ROLES[srv.role];
+              const isOnline = srv.status === 'online';
+              return (
+                '<div class="server-row' + (isOnline ? '' : ' offline-card') + '" data-server-id="' + srv.id + '" tabindex="0" role="button" aria-label="Apri dettagli nodo ' + srv.name + '">' +
+                  '<div class="card-identity">' +
+                    '<div class="row-logo role-icon-box ' + role.cssClass + '">' + role.svg(19) + '</div>' +
+                    '<div style="min-width:0;">' +
+                      '<div class="card-name">' + srv.name + '</div>' +
+                      '<div class="card-ip">' + srv.ip + '</div>' +
+                    '</div>' +
+                  '</div>' +
+                  '<div><span class="role-pill ' + role.cssClass + '">' + role.label + '</span></div>' +
+                  '<div class="row-status-col">' +
+                    '<span class="status-pill ' + (isOnline ? 'online' : 'offline') + '">' +
+                      '<span class="status-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+                      (isOnline ? 'Online' : 'Offline') +
+                    '</span>' +
+                    '<span class="last-contact">' + srv.lastContact + '</span>' +
+                  '</div>' +
+                  '<div>' + renderUpdateBadges(srv) + '</div>' +
+                  '<svg class="card-arrow" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 5l5 5-5 5"/></svg>' +
+                '</div>'
+              );
+            }).join('') +
+          '</div>';
+
+        bindServerCardEvents(container);
+      }
+
+      function bindServerCardEvents(container) {
+        container.querySelectorAll('[data-server-id]').forEach(function (el) {
+          el.addEventListener('click', function () {
+            openServerModal(el.dataset.serverId);
+          });
+          el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openServerModal(el.dataset.serverId);
+            }
+          });
+        });
+      }
+
+      /* ------------------------------------------------------------------------
+         8. ROUTER VISTE PRINCIPALI
+         ------------------------------------------------------------------------ */
+      function renderServers() {
+        const container = document.getElementById('serversContainer');
+        const emptyState = document.getElementById('emptyState');
+        const filtered = getFilteredServers();
+
+        document.getElementById('counterVisible').textContent = String(filtered.length);
+        document.getElementById('counterTotal').textContent = String(serversData.length);
+
+        if (state.viewMode === 'topology') {
+          emptyState.classList.add('hidden');
+          renderTopologyView(container);
+          return;
+        }
+
+        if (!filtered.length) {
+          container.innerHTML = '';
+          emptyState.classList.remove('hidden');
+          return;
+        }
+
+        emptyState.classList.add('hidden');
+        if (state.viewMode === 'compact') {
+          renderCompactView(container, filtered);
+        } else {
+          renderGridView(container, filtered);
+        }
+      }
+
+      /* ------------------------------------------------------------------------
+         9. VISTA TOPOLOGICA INTERATTIVA (PAN & ZOOM LIBERI + LAYOUT ALGORITMICO)
+         ------------------------------------------------------------------------ */
+      function renderTopologyView(container) {
+        const layout = computeTopologyLayout(serversData);
+        const hasFilter = Boolean(state.search.trim()) || state.statusFilter !== 'all' || state.roleFilter !== 'all';
+        const byId = {};
+        serversData.forEach(function (s) { byId[s.id] = s; });
+
+        // Curve SVG + impulsi animati nel sistema di coordinate unificato di #topoWorld
+        const edgesSvg = layout.edges.map(function (edge, idx) {
+          const fromSrv = byId[edge.from];
+          const toSrv = byId[edge.to];
+          const bothOnline = fromSrv && toSrv && fromSrv.status === 'online' && toSrv.status === 'online';
+          const isFailover = edge.type === 'failover';
+
+          let stroke = 'rgba(255,255,255,0.18)';
+          let dash = '';
+          let extraCls = '';
+
+          if (!bothOnline) {
+            stroke = 'rgba(239,68,68,0.34)';
+            dash = '5 6';
+          } else if (isFailover) {
+            stroke = 'rgba(16,185,129,0.58)';
+            dash = '6 6';
+            extraCls = ' failover-dash';
+          } else if (edge.type === 'gateway') {
+            stroke = 'rgba(45,212,191,0.46)';
+          }
+
+          const pulseColor = edge.type === 'gateway' ? '#2dd4bf' : '#a78bfa';
+          const dur = (2.6 + (idx % 4) * 0.55).toFixed(2);
+          const pulseSvg = (bothOnline && !isFailover)
+            ? '<circle r="2.8" fill="' + pulseColor + '" opacity="0.95" filter="url(#pulseGlow)"><animateMotion dur="' + dur + 's" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href="#' + edge.id + '"/></animateMotion></circle>'
+            : '';
+
+          return (
+            '<g class="topo-edge-group" data-from="' + edge.from + '" data-to="' + edge.to + '">' +
+              '<path id="' + edge.id + '" d="' + edge.d + '" fill="none" stroke="' + stroke + '" stroke-width="' + (isFailover ? '1.9' : '1.55') + '"' +
+              (dash ? ' stroke-dasharray="' + dash + '"' : '') + ' stroke-linecap="round" stroke-linejoin="round" class="topo-edge' + extraCls + '"/>' +
+              pulseSvg +
+            '</g>'
+          );
+        }).join('');
+
+        const failoverLabelsHtml = layout.failoverLabels.map(function (lbl) {
+          return '<div class="failover-label" style="left:' + lbl.x + 'px;top:' + lbl.y + 'px;">' + lbl.text + '</div>';
+        }).join('');
+
+        // Nodi interattivi (232x84px garantiti)
+        const nodesHtml = serversData.map(function (srv) {
+          const role = ROLES[srv.role];
+          const pos = layout.positions[srv.id];
+          if (!pos) return '';
+          const isOnline = srv.status === 'online';
+          const dimmedByFilter = hasFilter && !matchesFilters(srv);
+
+          const dots = [];
+          if (srv.updates.apt.available) dots.push('<span class="topo-dot" style="background:#06b6d4" title="APT: ' + srv.updates.apt.count + ' pacchetti"></span>');
+          if (srv.updates.ubuntu.available) dots.push('<span class="topo-dot" style="background:#f59e0b" title="Ubuntu: ' + srv.updates.ubuntu.summary + '"></span>');
+          if (srv.updates.regulus.available) dots.push('<span class="topo-dot" style="background:#8b5cf6" title="Regulus Mesh: ' + srv.updates.regulus.to + '"></span>');
+
+          return (
+            '<div class="topo-node' + (dimmedByFilter ? ' dimmed' : '') + '" data-topo-node="' + srv.id + '" data-filter-dim="' + (dimmedByFilter ? '1' : '0') + '" tabindex="0" role="button" aria-label="Ispeziona nodo ' + srv.name + '" style="left:' + pos.x + 'px;top:' + pos.y + 'px;">' +
+              '<div class="topo-node-head">' +
+                '<div class="topo-node-icon role-icon-box ' + role.cssClass + '">' + role.svg(19) + '</div>' +
+                '<div class="topo-node-info">' +
+                  '<div class="topo-node-title-row">' +
+                    '<span class="topo-node-name">' + srv.name + '</span>' +
+                    '<span class="status-dot ' + (isOnline ? 'online' : 'offline') + '" title="' + (isOnline ? 'Online' : 'Offline') + '"></span>' +
+                  '</div>' +
+                  '<div class="topo-node-role">' + role.label + '</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="topo-node-foot">' +
+                '<span class="topo-node-ip">' + srv.ip + '</span>' +
+                '<div class="topo-dots">' + (dots.length ? dots.join('') : '<span style="font-size:10px;color:#10b981;font-weight:600;">OK</span>') + '</div>' +
+              '</div>' +
+            '</div>'
+          );
+        }).join('');
+
+        container.innerHTML =
+          '<div id="topoWrapper" class="topology-wrapper">' +
+            '<div class="topo-badge-title">' +
+              '<span class="dot-indicator" style="background:#8b5cf6"></span>' +
+              '<span>Mappa Mesh Regulus · Trascina per esplorare</span>' +
+            '</div>' +
+            '<div class="topo-controls">' +
+              '<button id="btnZoomOut" class="topo-ctrl-btn" type="button" title="Riduci zoom" aria-label="Riduci zoom">' +
+                '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M3.5 8h9"/></svg>' +
+              '</button>' +
+              '<span id="zoomPercentLabel" class="topo-ctrl-btn mono" style="pointer-events:none;">100%</span>' +
+              '<button id="btnZoomIn" class="topo-ctrl-btn" type="button" title="Aumenta zoom" aria-label="Aumenta zoom">' +
+                '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M8 3.5v9M3.5 8h9"/></svg>' +
+              '</button>' +
+              '<button id="btnZoomCenter" class="topo-ctrl-btn" type="button" title="Centra e ripristina vista" aria-label="Centra vista">' +
+                '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="3"/><path stroke-linecap="round" d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>' +
+              '</button>' +
+            '</div>' +
+            '<div id="topoWorld" class="topo-world">' +
+              '<svg class="topo-svg-layer" fill="none">' +
+                '<defs>' +
+                  '<filter id="pulseGlow" x="-120%" y="-120%" width="340%" height="340%">' +
+                    '<feGaussianBlur stdDeviation="2.2" result="blur"/>' +
+                    '<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>' +
+                  '</filter>' +
+                '</defs>' +
+                edgesSvg +
+              '</svg>' +
+              failoverLabelsHtml +
+              nodesHtml +
+            '</div>' +
+          '</div>';
+
+        const wrapper = document.getElementById('topoWrapper');
+        const world = document.getElementById('topoWorld');
+        const zoomLabel = document.getElementById('zoomPercentLabel');
+
+        function applyTopoTransform() {
+          world.style.transform = 'translate(' + state.topo.panX + 'px, ' + state.topo.panY + 'px) scale(' + state.topo.scale + ')';
+          wrapper.style.backgroundPosition = state.topo.panX + 'px ' + state.topo.panY + 'px, center center';
+          zoomLabel.textContent = Math.round(state.topo.scale * 100) + '%';
+        }
+
+        function centerTopology() {
+          const rect = wrapper.getBoundingClientRect();
+          const b = layout.bounds;
+          const padX = 72;
+          const padY = 64;
+          const availW = Math.max(200, rect.width - padX * 2);
+          const availH = Math.max(200, rect.height - padY * 2);
+          const fitScale = Math.min(1, Math.max(0.35, Math.min(availW / b.width, availH / b.height)));
+
+          const centerX = (b.minX + b.maxX) / 2;
+          const centerY = (b.minY + b.maxY) / 2;
+
+          state.topo.scale = Number(fitScale.toFixed(2));
+          state.topo.panX = Math.round(rect.width / 2 - centerX * state.topo.scale);
+          state.topo.panY = Math.round(rect.height / 2 - centerY * state.topo.scale);
+          state.topo.initialized = true;
+          applyTopoTransform();
+        }
+
+        if (!state.topo.initialized) {
+          centerTopology();
+        } else {
+          applyTopoTransform();
+        }
+
+        // Pan libero con soglia > 5px per distinguere drag da click
+        let isPointerDown = false;
+        let hasDragged = false;
+        let startX = 0;
+        let startY = 0;
+        let originPanX = 0;
+        let originPanY = 0;
+
+        wrapper.addEventListener('pointerdown', function (e) {
+          if (e.target.closest('.topo-controls')) return;
+          isPointerDown = true;
+          hasDragged = false;
+          startX = e.clientX;
+          startY = e.clientY;
+          originPanX = state.topo.panX;
+          originPanY = state.topo.panY;
+        });
+
+        wrapper.addEventListener('pointermove', function (e) {
+          if (!isPointerDown) return;
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          if (!hasDragged && Math.hypot(dx, dy) > 5) {
+            hasDragged = true;
+            wrapper.classList.add('dragging');
+          }
+          if (hasDragged) {
+            state.topo.panX = originPanX + dx;
+            state.topo.panY = originPanY + dy;
+            applyTopoTransform();
+          }
+        });
+
+        function endPointer() {
+          isPointerDown = false;
+          wrapper.classList.remove('dragging');
+        }
+
+        wrapper.addEventListener('pointerup', endPointer);
+        wrapper.addEventListener('pointercancel', endPointer);
+        wrapper.addEventListener('pointerleave', endPointer);
+
+        // Zoom con rotella centrato sul puntatore
+        wrapper.addEventListener('wheel', function (e) {
+          e.preventDefault();
+          const rect = wrapper.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          const oldScale = state.topo.scale;
+          const delta = e.deltaY < 0 ? 0.1 : -0.1;
+          const nextScale = Math.min(1.65, Math.max(0.32, Number((oldScale + delta).toFixed(2))));
+          if (nextScale === oldScale) return;
+
+          const ratio = nextScale / oldScale;
+          state.topo.panX = mouseX - (mouseX - state.topo.panX) * ratio;
+          state.topo.panY = mouseY - (mouseY - state.topo.panY) * ratio;
+          state.topo.scale = nextScale;
+          applyTopoTransform();
+        }, { passive: false });
+
+        // Controlli Zoom pulsanti
+        function zoomAroundCenter(delta) {
+          const rect = wrapper.getBoundingClientRect();
+          const cx = rect.width / 2;
+          const cy = rect.height / 2;
+          const oldScale = state.topo.scale;
+          const nextScale = Math.min(1.65, Math.max(0.32, Number((oldScale + delta).toFixed(2))));
+          if (nextScale === oldScale) return;
+          const ratio = nextScale / oldScale;
+          state.topo.panX = cx - (cx - state.topo.panX) * ratio;
+          state.topo.panY = cy - (cy - state.topo.panY) * ratio;
+          state.topo.scale = nextScale;
+          applyTopoTransform();
+        }
+
+        document.getElementById('btnZoomIn').addEventListener('click', function () { zoomAroundCenter(0.14); });
+        document.getElementById('btnZoomOut').addEventListener('click', function () { zoomAroundCenter(-0.14); });
+        document.getElementById('btnZoomCenter').addEventListener('click', centerTopology);
+
+        // Click & Hover sui nodi
+        const topoNodes = wrapper.querySelectorAll('[data-topo-node]');
+        const edgeGroups = wrapper.querySelectorAll('.topo-edge-group');
+
+        function applyHover(hoveredId) {
+          if (!hoveredId) {
+            topoNodes.forEach(function (n) {
+              n.classList.toggle('dimmed', n.dataset.filterDim === '1');
+            });
+            edgeGroups.forEach(function (g) {
+              g.style.opacity = '1';
+              const p = g.querySelector('path');
+              if (p) p.style.strokeWidth = '';
+            });
+            return;
+          }
+
+          const connected = {};
+          connected[hoveredId] = true;
+          layout.edges.forEach(function (edge) {
+            if (edge.from === hoveredId) connected[edge.to] = true;
+            if (edge.to === hoveredId) connected[edge.from] = true;
+          });
+
+          topoNodes.forEach(function (n) {
+            n.classList.toggle('dimmed', !connected[n.dataset.topoNode]);
+          });
+
+          edgeGroups.forEach(function (g) {
+            const direct = g.dataset.from === hoveredId || g.dataset.to === hoveredId;
+            g.style.opacity = direct ? '1' : '0.15';
+            const p = g.querySelector('path');
+            if (p) p.style.strokeWidth = direct ? '2.5' : '';
+          });
+        }
+
+        topoNodes.forEach(function (nodeEl) {
+          nodeEl.addEventListener('mouseenter', function () { applyHover(nodeEl.dataset.topoNode); });
+          nodeEl.addEventListener('mouseleave', function () { applyHover(null); });
+          nodeEl.addEventListener('click', function () {
+            if (hasDragged) return;
+            openServerModal(nodeEl.dataset.topoNode);
+          });
+          nodeEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openServerModal(nodeEl.dataset.topoNode);
+            }
+          });
+        });
+      }
+
+      /* ------------------------------------------------------------------------
+         10. FINESTRA OVERLAY MODALE 90vw x 90vh (WORKSTATION 2 COLONNE)
+         ------------------------------------------------------------------------ */
+      function openServerModal(serverId) {
+        state.selectedServerId = serverId;
+        toggleFilterPopover(false);
+        toggleAccountDropdown(false);
+        renderServerModal();
+        const backdrop = document.getElementById('serverModalBackdrop');
+        backdrop.classList.add('open');
+        backdrop.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeServerModal() {
+        state.selectedServerId = null;
+        const backdrop = document.getElementById('serverModalBackdrop');
+        backdrop.classList.remove('open');
+        backdrop.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }
+
+      function renderServerModal() {
+        const win = document.getElementById('serverModalWindow');
+        const srv = serversData.find(function (s) { return s.id === state.selectedServerId; });
+        if (!srv) return;
+
+        const role = ROLES[srv.role];
+        const isOnline = srv.status === 'online';
+        const pendingCount = countPendingCategories(srv);
+
+        function isUpdating(cat) {
+          return Boolean(state.activeUpdates[srv.id + ':' + cat]);
+        }
+
+        function renderTelemetryCard(label, displayVal, pct, subText, accentColor) {
+          const width = isOnline ? pct : 0;
+          const barColor = !isOnline ? 'rgba(255,255,255,0.12)' : (accentColor || (pct >= 78 ? '#f59e0b' : '#eef0f5'));
+          return (
+            '<div class="telemetry-card' + (isOnline ? '' : ' dim') + '">' +
+              '<div class="telemetry-top">' +
+                '<span class="telemetry-label">' + label + '</span>' +
+                '<span class="telemetry-value">' + (isOnline ? displayVal : '—') + '</span>' +
+              '</div>' +
+              '<div class="progress-track"><div class="progress-fill" style="width:' + width + '%;background:' + barColor + ';"></div></div>' +
+              '<div class="telemetry-sub">' + subText + '</div>' +
+            '</div>'
+          );
+        }
+
+        function renderUpdateProgress(cat, color) {
+          const active = state.activeUpdates[srv.id + ':' + cat];
+          if (!active) return '';
+          return (
+            '<div class="update-progress-box">' +
+              '<div class="update-progress-meta">' +
+                '<span style="color:var(--text-primary);font-weight:500;">' + active.step + '</span>' +
+                '<span class="mono" style="color:var(--text-secondary);">' + active.progress + '%</span>' +
+              '</div>' +
+              '<div class="progress-track"><div class="progress-fill" style="width:' + active.progress + '%;background:' + color + ';"></div></div>' +
+            '</div>'
+          );
+        }
+
+        const servicesHtml = srv.services.map(function (svc) {
+          const running = isOnline && svc.running;
+          return (
+            '<div class="service-row">' +
+              '<div>' +
+                '<div class="service-name">' + svc.name + '</div>' +
+                '<div class="service-meta">' + svc.meta + '</div>' +
+              '</div>' +
+              '<span class="service-state ' + (running ? 'running' : 'stopped') + '">' +
+                '<span class="dot-indicator" style="background:' + (running ? '#10b981' : '#ef4444') + '"></span>' +
+                (running ? 'attivo' : 'fermo') +
+              '</span>' +
+            '</div>'
+          );
+        }).join('');
+
+        const logsHtml = srv.logs.map(function (log) {
+          return (
+            '<div class="log-line">' +
+              '<span class="log-time">[' + log.time + ']</span>' +
+              '<span class="log-msg ' + log.type + '">' + log.msg + '</span>' +
+            '</div>'
+          );
+        }).join('');
+
+        win.innerHTML =
+          /* HEADER FISSO */
+          '<div class="modal-header">' +
+            '<div class="modal-header-left">' +
+              '<div class="modal-node-logo role-icon-box ' + role.cssClass + '">' + role.svg(28) + '</div>' +
+              '<div style="min-width:0;">' +
+                '<div class="modal-title-row">' +
+                  '<h2 class="modal-node-name">' + srv.name + '</h2>' +
+                  '<span class="role-pill ' + role.cssClass + '">' + role.label + '</span>' +
+                  '<span class="status-pill ' + (isOnline ? 'online' : 'offline') + '">' +
+                    '<span class="status-dot ' + (isOnline ? 'online' : 'offline') + '"></span>' +
+                    (isOnline ? 'Online' : 'Offline') +
+                  '</span>' +
+                '</div>' +
+                '<div class="modal-sub-row">' +
+                  '<button id="btnCopyIp" class="ip-copy-chip" type="button" title="Copia indirizzo IP">' +
+                    '<span>' + srv.ip + '</span>' +
+                    '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V4a1 1 0 0 1 1-1h7"/></svg>' +
+                  '</button>' +
+                  '<span class="mono">' + srv.hostname + '</span>' +
+                  '<span>·</span>' +
+                  '<span>Ultimo contatto: <strong style="color:var(--text-primary);font-weight:500;">' + srv.lastContact + '</strong></span>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+
+            '<div class="modal-header-right">' +
+              '<button id="btnActionPing" class="action-btn" type="button">' +
+                '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" d="M3 10h3l2-5 4 10 2-5h3"/></svg>' +
+                '<span>Ping</span>' +
+              '</button>' +
+              '<button id="btnActionSsh" class="action-btn" type="button"' + (isOnline ? '' : ' disabled') + '>' +
+                '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="14" height="12" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M6.5 8.5L9 10.5 6.5 12.5M10.5 12.5h3"/></svg>' +
+                '<span>Terminale SSH</span>' +
+              '</button>' +
+              '<button id="btnActionReboot" class="action-btn warn" type="button"' + (isOnline ? '' : ' disabled') + '>' +
+                '<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" d="M15.5 10a5.5 5.5 0 1 1-1.6-3.9M15.5 4.5v3h-3"/></svg>' +
+                '<span>Riavvia Nodo</span>' +
+              '</button>' +
+              '<button id="btnCloseServerModal" class="modal-close-btn" type="button" aria-label="Chiudi finestra nodo">' +
+                '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M5 5l10 10M15 5L5 15"/></svg>' +
+              '</button>' +
+            '</div>' +
+          '</div>' +
+
+          /* CORPO SCROLLABILE 2 COLONNE */
+          '<div class="modal-body">' +
+            /* COLONNA SINISTRA: TELEMETRIA + HUB AGGIORNAMENTI */
+            '<div class="ws-column">' +
+              '<div>' +
+                '<div class="ws-section-head"><span class="ws-section-title">Telemetria Real-Time</span></div>' +
+                '<div class="telemetry-grid">' +
+                  renderTelemetryCard('CPU', srv.metrics.cpu + '%', srv.metrics.cpu, srv.arch) +
+                  renderTelemetryCard('RAM', srv.metrics.ram + '%', srv.metrics.ram, isOnline ? 'Allocazione memoria attiva' : 'Nodo non raggiungibile') +
+                  renderTelemetryCard('Disco', srv.metrics.disk + '%', srv.metrics.disk, 'Volume root / NVMe', '#06b6d4') +
+                  renderTelemetryCard('Rete Mesh', srv.metrics.net, srv.metrics.netPct, 'Tunnel crittografato WireGuard', '#8b5cf6') +
+                '</div>' +
+              '</div>' +
+
+              '<div>' +
+                '<div class="ws-section-head">' +
+                  '<span class="ws-section-title">Hub Aggiornamenti</span>' +
+                  (pendingCount > 1 && isOnline ? '<button id="btnUpdateAll" class="update-all-btn" type="button">Aggiorna Tutto</button>' : '') +
+                '</div>' +
+                (!isOnline ? '<div class="offline-banner">Nodo offline: gli aggiornamenti remoti sono sospesi fino al ripristino della connessione.</div>' : '') +
+                '<div class="updates-stack">' +
+
+                  /* 1. APT */
+                  '<div class="update-card">' +
+                    '<div class="update-card-head">' +
+                      '<div>' +
+                        '<div class="update-title-row">' +
+                          '<span class="dot-indicator" style="background:#06b6d4"></span>' +
+                          '<span class="update-title">Pacchetti APT</span>' +
+                          (srv.updates.apt.available
+                            ? '<span class="upd-pill apt">' + srv.updates.apt.count + ' pacchetti</span>'
+                            : '<span class="upd-pill ok">Aggiornato</span>') +
+                        '</div>' +
+                        '<p class="update-desc">' + (srv.updates.apt.available ? 'Pacchetti Ubuntu pronti per l’aggiornamento tramite APT.' : 'Nessun pacchetto APT in attesa di installazione.') + '</p>' +
+                      '</div>' +
+                      (srv.updates.apt.available
+                        ? '<button class="update-run-btn apt" data-update-cat="apt" type="button"' + (!isOnline || isUpdating('apt') ? ' disabled' : '') + '>' + (isUpdating('apt') ? 'In corso...' : 'Aggiorna APT') + '</button>'
+                        : '') +
+                    '</div>' +
+                    (srv.updates.apt.available && srv.updates.apt.packages.length
+                      ? '<div class="pkg-tags">' + srv.updates.apt.packages.map(function (p) { return '<span class="pkg-tag">' + p + '</span>'; }).join('') + '</div>'
+                      : '') +
+                    renderUpdateProgress('apt', '#06b6d4') +
+                  '</div>' +
+
+                  /* 2. UBUNTU */
+                  '<div class="update-card">' +
+                    '<div class="update-card-head">' +
+                      '<div>' +
+                        '<div class="update-title-row">' +
+                          '<span class="dot-indicator" style="background:#f59e0b"></span>' +
+                          '<span class="update-title">Sistema Ubuntu</span>' +
+                          (srv.updates.ubuntu.available
+                            ? '<span class="upd-pill ubuntu">' + srv.updates.ubuntu.summary + '</span>'
+                            : '<span class="upd-pill ok">Aggiornato</span>') +
+                        '</div>' +
+                        '<p class="update-desc">' + srv.updates.ubuntu.detail + '</p>' +
+                      '</div>' +
+                      (srv.updates.ubuntu.available
+                        ? '<button class="update-run-btn ubuntu" data-update-cat="ubuntu" type="button"' + (!isOnline || isUpdating('ubuntu') ? ' disabled' : '') + '>' + (isUpdating('ubuntu') ? 'In corso...' : 'Aggiorna OS') + '</button>'
+                        : '') +
+                    '</div>' +
+                    renderUpdateProgress('ubuntu', '#f59e0b') +
+                  '</div>' +
+
+                  /* 3. REGULUS MESH */
+                  '<div class="update-card">' +
+                    '<div class="update-card-head">' +
+                      '<div>' +
+                        '<div class="update-title-row">' +
+                          '<span class="dot-indicator" style="background:#8b5cf6"></span>' +
+                          '<span class="update-title">Regulus Mesh</span>' +
+                          (srv.updates.regulus.available
+                            ? '<span class="upd-pill mesh">' + srv.updates.regulus.from + ' → ' + srv.updates.regulus.to + '</span>'
+                            : '<span class="upd-pill ok mono">' + srv.updates.regulus.from + '</span>') +
+                        '</div>' +
+                        '<p class="update-desc">' + srv.updates.regulus.changelog + '</p>' +
+                      '</div>' +
+                      (srv.updates.regulus.available
+                        ? '<button class="update-run-btn mesh" data-update-cat="regulus" type="button"' + (!isOnline || isUpdating('regulus') ? ' disabled' : '') + '>' + (isUpdating('regulus') ? 'In corso...' : 'Aggiorna Mesh') + '</button>'
+                        : '') +
+                    '</div>' +
+                    renderUpdateProgress('regulus', '#8b5cf6') +
+                  '</div>' +
+
+                '</div>' +
+              '</div>' +
+            '</div>' +
+
+            /* COLONNA DESTRA: IDENTITA & SISTEMA + SERVIZI + CONSOLE LOG */
+            '<div class="ws-column">' +
+              '<div>' +
+                '<div class="ws-section-head"><span class="ws-section-title">Identità &amp; Sistema</span></div>' +
+                '<div class="specs-panel">' +
+                  '<div class="spec-row"><span class="spec-key">Sistema Operativo</span><span class="spec-val">' + srv.os + '</span></div>' +
+                  '<div class="spec-row"><span class="spec-key">Kernel Linux</span><span class="spec-val">' + srv.kernel + '</span></div>' +
+                  '<div class="spec-row"><span class="spec-key">Uptime</span><span class="spec-val" style="color:' + (isOnline ? '#34d399' : '#f87171') + ';">' + srv.uptime + '</span></div>' +
+                  '<div class="spec-row"><span class="spec-key">Architettura</span><span class="spec-val">' + srv.arch + '</span></div>' +
+                  '<div class="spec-row"><span class="spec-key">Versione Regulus Mesh</span><span class="spec-val">' + srv.regulusVersion + '</span></div>' +
+                '</div>' +
+              '</div>' +
+
+              '<div>' +
+                '<div class="ws-section-head"><span class="ws-section-title">Servizi &amp; Container Attivi</span></div>' +
+                '<div class="services-list">' + servicesHtml + '</div>' +
+              '</div>' +
+
+              '<div>' +
+                '<div class="ws-section-head"><span class="ws-section-title">Console Attività / Log Nodo</span></div>' +
+                '<div class="console-box">' + logsHtml + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+
+        // Eventi pulsanti modale
+        document.getElementById('btnCloseServerModal').addEventListener('click', closeServerModal);
+        document.getElementById('btnCopyIp').addEventListener('click', function () {
+          copyToClipboard(srv.ip, 'IP');
+        });
+
+        document.getElementById('btnActionPing').addEventListener('click', function () {
+          if (srv.status === 'online') {
+            const ms = (1.1 + Math.random() * 2.4).toFixed(1);
+            srv.lastContact = 'Adesso';
+            addNodeLog(srv, 'success', 'PING ' + srv.ip + ' (64 bytes): time=' + ms + ' ms — TTL=64');
+            showToast('Ping su ' + srv.name + ': ' + ms + ' ms', 'success');
+          } else {
+            addNodeLog(srv, 'error', 'PING ' + srv.ip + ': Destination Host Unreachable');
+            showToast(srv.name + ' non risponde al ping (Offline)', 'error');
+          }
+          renderServerModal();
+          renderServers();
+        });
+
+        document.getElementById('btnActionSsh').addEventListener('click', function () {
+          if (srv.status !== 'online') return;
+          addNodeLog(srv, 'mesh', 'Sessione SSH avviata: ssh giacomo@' + srv.ip + ' (chiave Ed25519)');
+          showToast('Terminale SSH pronto su ' + srv.name + ' (' + srv.ip + ')', 'info');
+          renderServerModal();
+        });
+
+        document.getElementById('btnActionReboot').addEventListener('click', function () {
+          if (srv.status !== 'online') return;
+          addNodeLog(srv, 'warn', 'Comando riavvio graceful inviato a ' + srv.name + '...');
+          showToast('Riavvio di ' + srv.name + ' in corso...', 'warn');
+          srv.status = 'offline';
+          srv.uptime = 'Riavvio...';
+          renderAll();
+          renderServerModal();
+
+          setTimeout(function () {
+            srv.status = 'online';
+            srv.uptime = '0g 00h 01m';
+            srv.lastContact = 'Adesso';
+            addNodeLog(srv, 'success', 'Nodo ' + srv.name + ' riavviato e riconnesso alla mesh Regulus');
+            showToast(srv.name + ' tornato online', 'success');
+            renderAll();
+            if (state.selectedServerId === srv.id) renderServerModal();
+          }, 2600);
+        });
+
+        const btnAll = document.getElementById('btnUpdateAll');
+        if (btnAll) {
+          btnAll.addEventListener('click', function () {
+            if (srv.updates.apt.available) simulateUpdate(srv.id, 'apt');
+            if (srv.updates.ubuntu.available) simulateUpdate(srv.id, 'ubuntu');
+            if (srv.updates.regulus.available) simulateUpdate(srv.id, 'regulus');
+          });
+        }
+
+        win.querySelectorAll('[data-update-cat]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            simulateUpdate(srv.id, btn.dataset.updateCat);
+          });
+        });
+      }
+
+      /* ------------------------------------------------------------------------
+         11. SIMULAZIONE AGGIORNAMENTI LIVE
+         ------------------------------------------------------------------------ */
+      function simulateUpdate(serverId, category) {
+        const srv = serversData.find(function (s) { return s.id === serverId; });
+        if (!srv || srv.status !== 'online') return;
+
+        const key = serverId + ':' + category;
+        if (state.activeUpdates[key]) return;
+
+        const stepsMap = {
+          apt: [
+            { p: 25, text: 'Connessione apt-get tramite tunnel Regulus...' },
+            { p: 60, text: 'Download pacchetti dai mirror Ubuntu...' },
+            { p: 90, text: 'Installazione pacchetti e verifica servizi...' },
+            { p: 100, text: 'Pacchetti APT aggiornati' }
+          ],
+          ubuntu: [
+            { p: 22, text: 'Verifica immagini kernel e patch Ubuntu...' },
+            { p: 58, text: 'Applicazione aggiornamenti di sistema LTS...' },
+            { p: 88, text: 'Rigenerazione initramfs e bootloader...' },
+            { p: 100, text: 'Sistema Ubuntu aggiornato' }
+          ],
+          regulus: [
+            { p: 26, text: 'Download binario Regulus Mesh v2.4.1...' },
+            { p: 64, text: 'Verifica firma crittografica Ed25519...' },
+            { p: 92, text: 'Riavvio graceful daemon regulus-mesh...' },
+            { p: 100, text: 'Regulus Mesh aggiornato a v2.4.1' }
+          ]
+        };
+
+        const names = { apt: 'Pacchetti APT', ubuntu: 'Sistema Ubuntu', regulus: 'Regulus Mesh' };
+        const steps = stepsMap[category];
+        let idx = 0;
+
+        addNodeLog(srv, 'info', 'Avvio aggiornamento ' + names[category] + '...');
+        state.activeUpdates[key] = { progress: 10, step: 'Inizializzazione sessione sicura...' };
+        if (state.selectedServerId === serverId) renderServerModal();
+
+        const timer = setInterval(function () {
+          const cur = steps[idx];
+          state.activeUpdates[key] = { progress: cur.p, step: cur.text };
+          if (state.selectedServerId === serverId) renderServerModal();
+          idx++;
+
+          if (idx >= steps.length) {
+            clearInterval(timer);
+            setTimeout(function () {
+              delete state.activeUpdates[key];
+
+              if (category === 'apt') {
+                srv.updates.apt.available = false;
+                srv.updates.apt.count = 0;
+                srv.updates.apt.packages = [];
+              } else if (category === 'ubuntu') {
+                srv.updates.ubuntu.available = false;
+                srv.updates.ubuntu.summary = '24.04.2 LTS';
+                srv.updates.ubuntu.detail = 'Sistema Ubuntu aggiornato alle ultime patch di sicurezza.';
+                srv.os = 'Ubuntu 24.04.2 LTS';
+                srv.kernel = '6.8.0-51-generic';
+              } else if (category === 'regulus') {
+                const target = srv.updates.regulus.to;
+                srv.updates.regulus.available = false;
+                srv.updates.regulus.from = target;
+                srv.updates.regulus.changelog = 'Agente Regulus Mesh già all’ultima versione stabile.';
+                srv.regulusVersion = target;
+              }
+
+              srv.lastContact = 'Adesso';
+              addNodeLog(srv, 'success', names[category] + ' aggiornato con successo.');
+              renderAll();
+              if (state.selectedServerId === serverId) renderServerModal();
+              showToast(names[category] + ' aggiornato su ' + srv.name, 'success');
+            }, 340);
+          }
+        }, 560);
+      }
+
+      /* ------------------------------------------------------------------------
+         12. MODALE LIBRERIA LOGHI RUOLI
+         ------------------------------------------------------------------------ */
+      function openLogoModal() {
+        toggleAccountDropdown(false);
+        toggleFilterPopover(false);
+        const grid = document.getElementById('logoLibraryGrid');
+        grid.innerHTML = Object.keys(ROLES).map(function (k) {
+          const role = ROLES[k];
+          return (
+            '<div class="logo-card">' +
+              '<div class="logo-card-head">' +
+                '<div class="logo-card-icon role-icon-box ' + role.cssClass + '">' + role.svg(32) + '</div>' +
+                '<div>' +
+                  '<span class="role-pill ' + role.cssClass + '" style="margin-bottom:5px;">' + role.shortLabel + '</span>' +
+                  '<div style="font-size:14px;font-weight:600;color:var(--text-primary);">' + role.label + '</div>' +
+                '</div>' +
+              '</div>' +
+              '<p class="logo-card-desc">' + role.concept + '</p>' +
+            '</div>'
+          );
+        }).join('');
+
+        const backdrop = document.getElementById('logoModalBackdrop');
+        backdrop.classList.add('open');
+        backdrop.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeLogoModal() {
+        const backdrop = document.getElementById('logoModalBackdrop');
+        backdrop.classList.remove('open');
+        backdrop.setAttribute('aria-hidden', 'true');
+        if (!state.selectedServerId) document.body.style.overflow = '';
+      }
+
+      /* ------------------------------------------------------------------------
+         13. RESET & INIZIALIZZAZIONE
+         ------------------------------------------------------------------------ */
+      function resetFilters() {
+        state.search = '';
+        state.statusFilter = 'all';
+        state.roleFilter = 'all';
+        document.getElementById('searchInput').value = '';
+        document.getElementById('btnClearSearch').classList.add('hidden');
+        document.getElementById('searchShortcutHint').classList.remove('hidden');
+        renderAll();
+      }
+
+      function renderAll() {
+        updateNotchStatus();
+        renderDock();
+        renderViewToggle();
+        renderFilterPopover();
+        renderServers();
+      }
+
+      function init() {
+        const searchInput = document.getElementById('searchInput');
+        const btnClear = document.getElementById('btnClearSearch');
+        const kbdHint = document.getElementById('searchShortcutHint');
+
+        searchInput.addEventListener('input', function (e) {
+          state.search = e.target.value;
+          const hasText = Boolean(state.search);
+          btnClear.classList.toggle('hidden', !hasText);
+          kbdHint.classList.toggle('hidden', hasText);
+          renderServers();
+        });
+
+        btnClear.addEventListener('click', function () {
+          state.search = '';
+          searchInput.value = '';
+          btnClear.classList.add('hidden');
+          kbdHint.classList.remove('hidden');
+          renderServers();
+        });
+
+        // Account Dropdown
+        document.getElementById('btnToggleAccount').addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleAccountDropdown();
+        });
+        document.getElementById('accountDropdown').addEventListener('click', function (e) {
+          e.stopPropagation();
+        });
+        document.getElementById('btnOpenLogoLibrary').addEventListener('click', openLogoModal);
+        document.getElementById('btnAccountPrefs').addEventListener('click', function () {
+          toggleAccountDropdown(false);
+          showToast('Preferenze account: tema Dark Regulus attivo', 'info');
+        });
+        document.getElementById('btnAccountLogout').addEventListener('click', function () {
+          toggleAccountDropdown(false);
+          showToast('Sessione protetta — disconnessione simulata', 'info');
+        });
+
+        // Popover Filtro
+        document.getElementById('btnToggleFilter').addEventListener('click', function (e) {
+          e.stopPropagation();
+          toggleFilterPopover();
+        });
+        document.getElementById('filterPopover').addEventListener('click', function (e) {
+          e.stopPropagation();
+        });
+        document.getElementById('btnPopoverReset').addEventListener('click', function () {
+          state.statusFilter = 'all';
+          state.roleFilter = 'all';
+          renderAll();
+        });
+        document.getElementById('btnEmptyReset').addEventListener('click', resetFilters);
+
+        // Chiusura menu cliccando fuori
+        document.addEventListener('click', function () {
+          if (state.filterOpen) toggleFilterPopover(false);
+          if (state.accountOpen) toggleAccountDropdown(false);
+        });
+
+        // Selettore 3 Viste
+        document.getElementById('btnViewGrid').addEventListener('click', function () {
+          state.viewMode = 'grid';
+          renderAll();
+        });
+        document.getElementById('btnViewCompact').addEventListener('click', function () {
+          state.viewMode = 'compact';
+          renderAll();
+        });
+        document.getElementById('btnViewTopology').addEventListener('click', function () {
+          state.viewMode = 'topology';
+          renderAll();
+        });
+
+        // Dock Inferiore
+        document.querySelectorAll('#bottomDock .dock-item').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            const sec = btn.dataset.section;
+            state.activeSection = sec;
+            renderDock();
+            if (sec !== 'nodi') {
+              showToast('Sezione "' + SECTION_LABELS[sec] + '" in preparazione — vista Nodi attiva', 'info');
+            }
+          });
+        });
+
+        // Chiusura Modali
+        document.getElementById('serverModalBackdrop').addEventListener('click', function (e) {
+          if (e.target === e.currentTarget) closeServerModal();
+        });
+        document.getElementById('btnCloseLogoModal').addEventListener('click', closeLogoModal);
+        document.getElementById('logoModalBackdrop').addEventListener('click', function (e) {
+          if (e.target === e.currentTarget) closeLogoModal();
+        });
+
+        // Scorciatoie tastiera
+        document.addEventListener('keydown', function (e) {
+          if (e.key === '/' && document.activeElement !== searchInput && !state.selectedServerId) {
+            e.preventDefault();
+            searchInput.focus();
+          } else if (e.key === 'Escape') {
+            if (state.filterOpen) toggleFilterPopover(false);
+            else if (state.accountOpen) toggleAccountDropdown(false);
+            else if (document.getElementById('logoModalBackdrop').classList.contains('open')) closeLogoModal();
+            else if (state.selectedServerId) closeServerModal();
+          }
+        });
+
+        renderAll();
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+</html>

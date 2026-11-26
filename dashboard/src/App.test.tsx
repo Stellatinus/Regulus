@@ -111,10 +111,11 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Password"), "correct horse battery");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(await screen.findByRole("link", { name: "srv1" })).toHaveAttribute("href", "#/servers/local");
-    expect(screen.getByText("Ubuntu 24.04 amd64")).toBeInTheDocument();
-    expect(screen.getByText("online")).toBeInTheDocument();
-    expect(screen.getByText("1h 1m")).toBeInTheDocument();
+    const card = await screen.findByRole("link", { name: "Open the node srv1" });
+    expect(card).toHaveAttribute("href", "#/servers/local");
+    expect(within(card).getByText("online")).toBeInTheDocument();
+    // The notch counts the servers that are connected.
+    expect(await screen.findByText("1/1 Online")).toBeInTheDocument();
     expect(hub.calls.find((c) => c.path === "/api/auth/login")?.body).toEqual({
       username: "admin",
       password: "correct horse battery",
@@ -124,14 +125,15 @@ describe("App", () => {
   it("shows the Users page only to those who may manage users", async () => {
     mockHub({ me: { setup_required: false, user: admin }, agents: [] });
     const first = render(<App />);
-    expect(await screen.findByRole("link", { name: "Users" })).toBeInTheDocument();
+    // Users and Updates are in the Admin section of the dock.
+    expect(await screen.findByRole("link", { name: "Admin" })).toHaveAttribute("href", "#/users");
     first.unmount();
 
     const viewer: User = { ...admin, username: "eve", role: "viewer", permissions: VIEWER_PERMISSIONS };
     mockHub({ me: { setup_required: false, user: viewer }, agents: [] });
     render(<App />);
-    expect(await screen.findByRole("link", { name: /eve/ })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Users" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /eve/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });
 
   it("shows the error of a failed login", async () => {
@@ -178,8 +180,8 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("No servers yet.")).toBeInTheDocument();
-    expect(screen.getByText("admin")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(screen.getByRole("button", { name: /Account: admin/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
 
@@ -192,10 +194,10 @@ describe("App", () => {
     expect(await screen.findByRole("article", { name: "Servers" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
 
-    await user.click(screen.getByRole("link", { name: "Servers" }));
-    expect(await screen.findByRole("heading", { name: "Servers", level: 2 })).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: "Nodes" }));
+    expect(await screen.findByRole("heading", { name: "Nodes", level: 2 })).toBeInTheDocument();
     expect(screen.queryByRole("article", { name: "Servers" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Servers" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Nodes" })).toHaveAttribute("aria-current", "page");
   });
 
   it("fills the default dashboard with live data of the hub's server", async () => {

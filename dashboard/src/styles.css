@@ -1,84 +1,107 @@
-/* Regulus dashboard, "machine room" visual direction (design-drafts/machine-room-v2.html, #91).
-   Industrial palette: concrete surfaces, graphite ink, one safety-yellow signal for the hub's
-   brand and for primary actions. Colours are tokens on :root, redefined for dark mode both
-   for the system preference and for an explicit choice (data-theme on <html>). Status never
-   relies on colour alone: every badge carries a word. */
+/* Regulus dashboard, design system v3 (docs/design-system.md, reference: docs/design-system/regulus-console-v3.html).
+   Dark graphite surfaces, white as the primary action, violet for the mesh, Inter and JetBrains Mono (bundled: the hub's
+   CSP allows no outside fonts). Colours are tokens on :root: dark is the design and the default; the light set is
+   derived from it (for the system preference and for an explicit choice, data-theme on <html>). Status never relies on
+   colour alone: every badge carries a word. */
 :root {
-  color-scheme: light;
-  --bg: #e6e8e3;
-  --surface: #f5f6f2;
-  --surface-2: #eceee9;
-  --ink: #14171a;
-  --muted: #5a615c;
-  --faint: #7b827c;
-  --line: #d0d4cc;
-  --line-2: #b0b6ac;
-  --signal: #ffcc12;
-  --signal-ink: #1c1600;
-  --ok: #137a40;
-  --warn: #a56700;
-  --crit: #c02840;
-  --info: #2f56e8;
-  --off: #6f7671;
-  --series-1: #2f56e8;
-  --series-2: #c0611a;
-  --side-bg: #14171a;
-  --side-ink: #f5f6f2;
-  --scrim: rgba(20, 23, 26, 0.35);
-  --f-disp: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --f-body: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+  --bg: #0e1014;
+  --surface: #161920;
+  --surface-2: #1d212b;
+  --surface-deep: #11141b;
+  --ink: #eef0f5;
+  --muted: #9aa3b5;
+  --faint: #70798d;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.16);
+  --line-3: rgba(255, 255, 255, 0.26);
+  --signal: #eef0f5;
+  --signal-ink: #0e1014;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --crit: #f87171;
+  --info: #a5b4fc;
+  --off: #70798d;
+  --accent-apt: #06b6d4;
+  --accent-ubuntu: #f59e0b;
+  --accent-mesh: #8b5cf6;
+  --series-1: #a5b4fc;
+  --series-2: #f0a04a;
+  --notch-bg: #151821;
+  --notch-bg-2: #13161e;
+  --glass: rgba(22, 25, 32, 0.92);
+  --hover: rgba(255, 255, 255, 0.07);
+  --scrim: rgba(6, 8, 12, 0.72);
+  --shadow-card: 0 10px 28px -14px rgba(0, 0, 0, 0.78), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-pop: 0 22px 48px -12px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --f-disp: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --f-body: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-family: var(--f-body);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #0f1112;
-    --surface: #171a1c;
-    --surface-2: #1d2123;
-    --ink: #eef0ec;
-    --muted: #a0a8a2;
-    --faint: #7d847f;
-    --line: #2a2f31;
-    --line-2: #3d4447;
-    --signal: #ffd23a;
-    --ok: #3fd47f;
-    --warn: #ffb020;
-    --crit: #ff6b7d;
-    --info: #8aa2ff;
-    --off: #8c938e;
-    --series-1: #8aa2ff;
-    --series-2: #f0a04a;
-    --side-bg: #171a1c;
-    --side-ink: #eef0ec;
-    --scrim: rgba(0, 0, 0, 0.55);
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #eef0f4;
+    --surface: #ffffff;
+    --surface-2: #f3f4f8;
+    --surface-deep: #e8eaf0;
+    --ink: #14171f;
+    --muted: #4f586b;
+    --faint: #6b7487;
+    --line: rgba(20, 23, 31, 0.1);
+    --line-2: rgba(20, 23, 31, 0.2);
+    --line-3: rgba(20, 23, 31, 0.34);
+    --signal: #14171f;
+    --signal-ink: #ffffff;
+    --ok: #0f7a4f;
+    --warn: #a56700;
+    --crit: #c02840;
+    --info: #4a45c8;
+    --off: #6b7487;
+    --series-1: #4a45c8;
+    --series-2: #c0611a;
+    --notch-bg: #ffffff;
+    --notch-bg-2: #ffffff;
+    --glass: rgba(255, 255, 255, 0.92);
+    --hover: rgba(20, 23, 31, 0.06);
+    --scrim: rgba(20, 23, 31, 0.4);
+    --shadow-card: 0 6px 18px -10px rgba(20, 23, 31, 0.25);
+    --shadow-pop: 0 18px 40px -12px rgba(20, 23, 31, 0.35);
   }
 }
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #0f1112;
-  --surface: #171a1c;
-  --surface-2: #1d2123;
-  --ink: #eef0ec;
-  --muted: #a0a8a2;
-  --faint: #7d847f;
-  --line: #2a2f31;
-  --line-2: #3d4447;
-  --signal: #ffd23a;
-  --ok: #3fd47f;
-  --warn: #ffb020;
-  --crit: #ff6b7d;
-  --info: #8aa2ff;
-  --off: #8c938e;
-  --series-1: #8aa2ff;
-  --series-2: #f0a04a;
-  --side-bg: #171a1c;
-  --side-ink: #eef0ec;
-  --scrim: rgba(0, 0, 0, 0.55);
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --surface-2: #f3f4f8;
+  --surface-deep: #e8eaf0;
+  --ink: #14171f;
+  --muted: #4f586b;
+  --faint: #6b7487;
+  --line: rgba(20, 23, 31, 0.1);
+  --line-2: rgba(20, 23, 31, 0.2);
+  --line-3: rgba(20, 23, 31, 0.34);
+  --signal: #14171f;
+  --signal-ink: #ffffff;
+  --ok: #0f7a4f;
+  --warn: #a56700;
+  --crit: #c02840;
+  --info: #4a45c8;
+  --off: #6b7487;
+  --series-1: #4a45c8;
+  --series-2: #c0611a;
+  --notch-bg: #ffffff;
+  --notch-bg-2: #ffffff;
+  --glass: rgba(255, 255, 255, 0.92);
+  --hover: rgba(20, 23, 31, 0.06);
+  --scrim: rgba(20, 23, 31, 0.4);
+  --shadow-card: 0 6px 18px -10px rgba(20, 23, 31, 0.25);
+  --shadow-pop: 0 18px 40px -12px rgba(20, 23, 31, 0.35);
 }
 
 * {
@@ -315,285 +338,15 @@ label > select {
   }
 }
 
-/* ---------- signed-in shell: sidebar, top bar, page ---------- */
-.shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  gap: 12px;
-  padding: 12px max(12px, env(safe-area-inset-right, 0px)) 12px max(12px, env(safe-area-inset-left, 0px));
-}
-
-.shell.collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
-}
-
-.side {
-  position: sticky;
-  top: 12px;
-  height: calc(100vh - 24px);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: var(--side-bg);
-  color: var(--side-ink);
-  border-radius: 12px;
-  padding: 12px 10px;
-  overflow: auto;
-  scrollbar-width: none;
-}
-
-:root[data-theme="dark"] .side {
-  border: 1px solid var(--line);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .side {
-    border: 1px solid var(--line);
-  }
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 6px 14px;
-  font-family: var(--f-disp);
-  font-stretch: 125%;
-  font-weight: 850;
-  font-size: 16px;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  color: inherit;
-  text-decoration: none;
-}
-
-.brand i {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  background: var(--signal);
-  display: grid;
-  place-items: center;
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
-}
-
-.brand i::before {
-  content: "";
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  background: var(--signal-ink);
-}
-
-.navsec {
-  font-family: var(--f-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.6;
-  padding: 10px 10px 5px;
-  white-space: nowrap;
-}
-
-.nv {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-height: 38px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  font-size: 13.5px;
-  font-weight: 550;
-  color: inherit;
-  text-decoration: none;
-  opacity: 0.78;
-  white-space: nowrap;
-  position: relative;
-}
-
-.nv svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-}
-
-.nv:hover {
-  opacity: 1;
-  background: color-mix(in srgb, currentColor 8%, transparent);
-}
-
-.nv[aria-current="page"] {
-  opacity: 1;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-}
-
-.nv[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--signal);
-}
-
-.side .sp {
-  flex: 1;
-  min-height: 12px;
-}
-
-.side :focus-visible {
-  outline-color: var(--signal);
-}
-
-.me {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 8px;
-  border-radius: 10px;
-  color: inherit;
-  text-decoration: none;
-  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-}
-
-.me:hover,
-.me[aria-current="page"] {
-  background: color-mix(in srgb, currentColor 10%, transparent);
-}
-
-.me .av {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--signal);
-  color: var(--signal-ink);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.me b {
-  display: block;
-  font-size: 13px;
-  font-weight: 650;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.me small {
-  display: block;
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.me > span:last-child {
-  margin-left: auto;
-  opacity: 0.6;
-}
-
-.side-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.side button {
-  min-height: 34px;
-  background: transparent;
-  color: inherit;
-  border-color: color-mix(in srgb, currentColor 22%, transparent);
-}
-
-.side button:hover:not(:disabled) {
-  border-color: currentColor;
-}
-
-.side .signout {
-  flex: 1;
-}
-
-.side .collapse {
-  flex: none;
-  width: 36px;
-  padding: 0;
-}
-
-.shell.collapsed .txt,
-.shell.collapsed .navsec,
-.shell.collapsed .me > div,
-.shell.collapsed .me > span:last-child,
-.shell.collapsed .signout {
-  display: none;
-}
-
-.shell.collapsed .brand,
-.shell.collapsed .nv,
-.shell.collapsed .me {
-  justify-content: center;
-  padding-inline: 0;
-}
-
-.shell.collapsed .side-actions {
-  flex-direction: column;
-  align-items: center;
-}
-
-.shell.collapsed .collapse svg {
-  transform: scaleX(-1);
-}
-
-.page {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.topbar {
+/* ---------- signed-in shell: see shell.css (notch, dock, nodes) ---------- */
+.page-title {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  min-height: 46px;
-}
-
-.crumb {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-
-.crumb span {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.crumb strong {
-  font-family: var(--f-disp);
-  font-stretch: 125%;
-  font-weight: 850;
-  font-size: 20px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.menu-btn {
-  display: none;
-  width: 40px;
-  padding: 0;
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .seg {
@@ -623,73 +376,11 @@ label > select {
   color: var(--surface);
 }
 
-.topbar select {
-  width: auto;
-  min-height: 36px;
-  font-size: 12.5px;
-}
-
-.shell main {
-  min-width: 0;
-}
-
-.shell main > h2:first-child,
-.page-title {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 800;
-}
-
 .scrim {
   position: fixed;
   inset: 0;
   background: var(--scrim);
   z-index: 40;
-}
-
-@media (max-width: 52rem) {
-  .shell,
-  .shell.collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 10px max(10px, env(safe-area-inset-right, 0px)) 10px max(10px, env(safe-area-inset-left, 0px));
-  }
-
-  .menu-btn {
-    display: inline-grid;
-    place-items: center;
-  }
-
-  .side {
-    position: fixed;
-    z-index: 41;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    height: auto;
-    width: min(280px, 86vw);
-    border-radius: 0 12px 12px 0;
-    transform: translateX(-105%);
-    transition: transform 0.2s ease-out;
-  }
-
-  .shell.open .side {
-    transform: none;
-  }
-
-  .shell .collapse {
-    display: none;
-  }
-
-  .shell.collapsed .txt,
-  .shell.collapsed .navsec,
-  .shell.collapsed .me > div,
-  .shell.collapsed .signout {
-    display: initial;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1531,21 +1222,6 @@ p.command input {
 .root-error pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-/* the top bar on a phone: the title takes its own row */
-@media (max-width: 40rem) {
-  .crumb {
-    flex-basis: calc(100% - 52px);
-  }
-
-  .crumb span {
-    display: none;
-  }
-
-  .topbar .live-state {
-    margin-right: auto;
-  }
 }
 
 /* ---------- step-up dialog (StepUp.tsx) ---------- */

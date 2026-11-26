@@ -1,14 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-// The colour theme of the dashboard: light, dark, or the system's choice (the
-// default). The choice is saved in this browser; "system" removes it. The
-// stylesheet reads data-theme on <html>: without it, prefers-color-scheme
-// decides.
+// The colour theme of the dashboard: dark (the design, and the default), light,
+// or the system's choice. The choice is saved in this browser. The stylesheet
+// reads data-theme on <html>: without it the design's dark theme shows unless
+// the system prefers light.
 export type Theme = "light" | "dark" | "system";
 
 export const THEMES: Theme[] = ["system", "light", "dark"];
 
 const STORAGE_KEY = "regulus.theme";
+
+// The design of the dashboard is dark.
+export const DEFAULT_THEME: Theme = "dark";
 
 const isTheme = (v: unknown): v is Theme => v === "light" || v === "dark" || v === "system";
 
@@ -19,7 +22,7 @@ export function savedTheme(): Theme {
   } catch {
     // no storage
   }
-  return "system";
+  return DEFAULT_THEME;
 }
 
 // applyTheme sets the attribute the stylesheet reads.
@@ -41,8 +44,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
     try {
-      if (next === "system") window.localStorage.removeItem(STORAGE_KEY);
-      else window.localStorage.setItem(STORAGE_KEY, next);
+      window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // not saved; the choice still applies to this page
     }

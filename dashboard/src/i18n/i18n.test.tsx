@@ -36,8 +36,8 @@ describe("the catalogs", () => {
 
 describe("translate", () => {
   it("returns the text of the language", () => {
-    expect(translate("en", "nav.servers")).toBe("Servers");
-    expect(translate("it", "nav.servers")).toBe("Server");
+    expect(translate("en", "nav.nodes")).toBe("Nodes");
+    expect(translate("it", "nav.nodes")).toBe("Nodi");
     expect(translate("it", "nav.signOut")).toBe("Esci");
   });
 
