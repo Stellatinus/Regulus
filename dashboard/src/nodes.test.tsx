@@ -270,7 +270,7 @@ describe("the shell", () => {
   it("shows Automations in the dock only after the setting is switched on", async () => {
     mockHub([hub]);
     const user = userEvent.setup();
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/features";
     renderShell();
     const dock = await screen.findByRole("navigation", { name: "Main" });
     expect(within(dock).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
@@ -282,28 +282,34 @@ describe("the shell", () => {
     await user.click(within(dock).getByRole("link", { name: "Automations" }));
     expect(await screen.findByRole("heading", { name: "Automations" })).toBeInTheDocument();
 
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/features";
     await user.click(await screen.findByRole("switch", { name: "Automations" }));
     expect(within(dock).queryByRole("link", { name: "Automations" })).not.toBeInTheDocument();
   });
 
-  it("offers the pages of Admin as tabs", async () => {
-    mockHub([hub], { "GET /api/users": () => ({ data: [] }), "GET /api/roles": () => ({ data: { roles: [], permissions: [] } }) });
-    window.location.hash = "#/updates";
+  it("offers the pages of Admin as tabs, one for each permission", async () => {
+    mockHub([hub], {
+      "GET /api/users": () => ({ data: [] }),
+      "GET /api/roles": () => ({ data: { roles: [], permissions: [] } }),
+      "GET /api/audit?limit=100": () => ({ data: [] }),
+    });
+    window.location.hash = "#/users/roles";
     renderShell();
     const tabs = await screen.findByRole("navigation", { name: "Admin", hidden: false });
-    expect(within(tabs).getByRole("link", { name: "Updates" })).toHaveAttribute("aria-current", "page");
-    expect(within(tabs).getByRole("link", { name: "Users" })).toHaveAttribute("href", "#/users");
-    // The Admin item of the dock stays lit on both pages.
+    expect(within(tabs).getByRole("link", { name: "Roles and permissions" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "#/users");
+    expect(within(tabs).getByRole("link", { name: "Recent activity" })).toHaveAttribute("href", "#/users/activity");
+    // The Admin item of the dock stays lit on every tab, and Updates is not a tab any more.
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("link", { name: "Admin" })).toHaveAttribute("aria-current", "page");
+    expect(within(tabs).queryByRole("link", { name: "Updates" })).not.toBeInTheDocument();
   });
 
-  it("opens the account menu with the account page, Settings and sign out", async () => {
+  it("opens the account menu with Settings and sign out", async () => {
     mockHub([hub]);
     const user = userEvent.setup();
     renderShell();
     await user.click(await screen.findByRole("button", { name: /Account: ana/ }));
-    expect(screen.getByRole("menuitem", { name: "Account" })).toHaveAttribute("href", "#/account");
+    expect(screen.queryByRole("menuitem", { name: "Account" })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveAttribute("href", "#/settings");
     expect(screen.getByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });

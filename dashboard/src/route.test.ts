@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resetTokenFromHash, routeFromHash, serverHref, serverIdFromHash } from "./route";
+import { resetTokenFromHash, routeFromHash, serverHref, serverIdFromHash, tabFromHash } from "./route";
 
 describe("routeFromHash", () => {
   it.each([
@@ -15,6 +15,10 @@ describe("routeFromHash", () => {
     ["#/reset/abc_DEF-1", "/reset"],
     ["#/reset/", "/"],
     ["#/reset", "/"],
+    ["#/settings", "/settings"],
+    ["#/settings/updates", "/settings"],
+    ["#/users/roles", "/users"],
+    ["#/plugins/store", "/plugins"],
     ["#/nowhere", "/"],
   ])("%j is %s", (hash, want) => {
     expect(routeFromHash(hash)).toBe(want);
@@ -45,5 +49,18 @@ describe("server pages", () => {
 
   it("builds an address that reads back", () => {
     expect(serverIdFromHash(serverHref("we/ird id"))).toBe("we/ird id");
+  });
+});
+
+describe("tabFromHash", () => {
+  it.each([
+    ["#/settings/updates", "updates"],
+    ["#/users/roles", "roles"],
+    ["#/users/a%20b", "a b"],
+    ["#/settings", ""],
+    ["#/servers/x", ""],
+    ["", ""],
+  ])("%j is %j", (hash, want) => {
+    expect(tabFromHash(hash)).toBe(want);
   });
 });

@@ -64,6 +64,7 @@ async function signIn(page, code) {
 async function openSettings(page) {
   await page.getByRole("button", { name: /^Account: admin/ }).click();
   await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("link", { name: "Appearance and language" }).click();
 }
 
 const luminance = (rgb) => {
@@ -141,7 +142,7 @@ describe("the dashboard in a real browser", { concurrency: false }, () => {
       "phone layout",
       async (page) => {
         await signIn(page);
-        const routes = ["/", "/servers", "/plugins", "/users", "/updates", "/account", "/settings"];
+        const routes = ["/", "/servers", "/plugins", "/plugins/store", "/users", "/users/roles", "/users/activity", "/updates", "/automations", "/settings", "/settings/appearance", "/settings/features", "/settings/updates"];
         for (const r of routes) {
           await page.goto(`/#${r}`);
           await page.waitForLoadState("networkidle");

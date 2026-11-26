@@ -467,6 +467,15 @@ The maintainer drew a new console and handed it over as `docs/design-system/regu
 - **Dark is the default theme**, as designed. Light and system remain, with a light set of the same tokens that the maintainer has not seen; it is a convenience, not part of the design.
 - **Not checked:** the dashboard was run in a browser (Chromium, desktop and 390 px wide) against a mocked hub API, not against a real hub; the touch behaviour of the map and the screen reader use of the window and the filter popover were not tested with real devices. A `[Test]` issue asks for that.
 
+## Web UI: the second version of the console design (2026-11-26)
+
+The maintainer sent a second version of the design, `docs/design-system/regulus-console-v3.1.html`. Changes against the first: **Settings moved into the account menu** (the cog is gone), the **live-state text is gone and the *n/m Online* pill is the connection indicator** (orange *Reconnecting…* when the stream is down, red after 60 seconds, as #435), and new screens: Services with a store, Automations with a designer, Admin with Users / Roles / Activity, and Settings with categories.
+
+- **Built where the hub has the data:** the notch, Settings (account and security, appearance and language, the three feature switches, the Updates page as *Mesh updates*), Services (installed plugins), Admin (the three tabs on the existing pages), the automation designer as drafts.
+- **Not faked:** the store catalogue (nothing would install it), the Network, Database and Metrics fields (the hub reads them from its file; the categories say which key holds what, #483), the user profile fields of the reference (name and e-mail: accounts have a username and a role only), per-user 2FA toggles in the user list. Each has an issue: #474 (switches on the hub), #475 (apps and automations repositories), #476 (designer), #482 (languages), #483 (settings editing).
+- **The Admin / Updates change:** Updates left the Admin tabs and is the *Mesh updates* category of Settings, as in the reference. The `#/updates` address still works.
+- **Not checked:** against a real hub only through `make browser-test` (every new page loads without a CSP violation or a horizontal scroll on a phone); the screens were looked at with a mocked API.
+
 ## Verification status
 
 The first signed releases exist (`v0.3.0-alpha.1` is the newest), but several parts have only been tested by unit and integration tests: the `.deb` on a clean Ubuntu system through systemd, the agent installer on a second server, and installing and rolling back an update with real systemd. They are checked together on a VM (#81). A first run on two real VMs was done on 2026-11-24 and covers part of this (the last item of this section says which part). Until the rest is run, try a release on a test server.

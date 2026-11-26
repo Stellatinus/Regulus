@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { AccountPage } from "./AccountPage";
 import { AutomationsPage } from "./AutomationsPage";
 import { Dashboard } from "./Dashboard";
 import { ServersPage } from "./ServersPage";
 import { SettingsPage } from "./SettingsPage";
-import { useRoute, type Route } from "./route";
+import { useRoute, useTab, type Route } from "./route";
 import { can } from "./api";
 import { AgentsProvider, useSharedAgents } from "./agents";
 import { CertificateBanner } from "./CertificateBanner";
@@ -14,24 +13,26 @@ import { useT, type MessageKey } from "./i18n";
 import type { Session } from "./session";
 import { UpdatesPage } from "./UpdatesPage";
 import { UsersPage } from "./UsersPage";
-import { PluginsPage } from "./PluginsPage";
+import { ServicesPage } from "./ServicesPage";
 import { icons } from "./icons";
 
 function Page({ route }: { route: Route }) {
+  const tab = useTab();
   switch (route) {
     case "/servers":
     case "/server":
       return <ServersPage />;
     case "/plugins":
-      return <PluginsPage />;
+      return <ServicesPage />;
     case "/automations":
       return <AutomationsPage />;
     case "/users":
-      return <UsersPage />;
+      return <UsersPage part={tab === "roles" ? "roles" : tab === "activity" ? "activity" : "accounts"} />;
     case "/updates":
       return <UpdatesPage />;
     case "/account":
-      return <AccountPage />;
+      // The account page moved into Settings.
+      return <SettingsPage category="account" />;
     case "/settings":
       return <SettingsPage />;
     default:
@@ -148,10 +149,6 @@ function AccountMenu({ user, signOut }: Pick<Session, "user" | "signOut">) {
             <span className="badge-role">{user.role}</span>
           </div>
         </div>
-        <a className="menu-item" role="menuitem" href="#/account" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>
-          {icons.user}
-          <span>{t("nav.account")}</span>
-        </a>
         <a className="menu-item" role="menuitem" href="#/settings" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>
           {icons.settings}
           <span>{t("nav.settings")}</span>
@@ -211,15 +208,16 @@ interface DockItem {
 function Dock({ user, route }: { user: Session["user"]; route: Route }) {
   const t = useT();
   const [automations] = useFeature("automations");
-  const canUsers = ["users.manage", "roles.manage", "audit.read"].some((p) => can(user, p));
-  const canUpdates = can(user, "core.update");
-  const adminHref = canUsers ? "#/users" : canUpdates ? "#/updates" : null;
+  const [plugins] = useFeature("plugins");
+  const [apps] = useFeature("apps");
+  const adminTabs = adminTabsOf(user);
+  const adminHref = adminTabs[0]?.href ?? null;
 
   const items: DockItem[] = [
     { id: "dashboard", href: "#/", label: "nav.dashboard", icon: icons.dashboard, routes: ["/"] },
     { id: "nodes", href: "#/servers", label: "nav.nodes", icon: icons.nodes, routes: ["/servers", "/server"] },
   ];
-  if (can(user, "servers.read")) items.push({ id: "services", href: "#/plugins", label: "nav.services", icon: icons.services, routes: ["/plugins"] });
+  if ((plugins || apps) && can(user, "servers.read")) items.push({ id: "services", href: "#/plugins", label: "nav.services", icon: icons.services, routes: ["/plugins"] });
   if (automations) items.push({ id: "automations", href: "#/automations", label: "nav.automations", icon: icons.automations, routes: ["/automations"] });
 
   return (
@@ -234,7 +232,7 @@ function Dock({ user, route }: { user: Session["user"]; route: Route }) {
         {adminHref && (
           <>
             <span className="dock-divider" aria-hidden="true" />
-            <a className="dock-item" href={adminHref} aria-current={route === "/users" || route === "/updates" ? "page" : undefined} title={t("nav.admin")}>
+            <a className="dock-item" href={adminHref} aria-current={route === "/users" ? "page" : undefined} title={t("nav.admin")}>
               {icons.admin}
               <span className="dock-label">{t("nav.admin")}</span>
             </a>
@@ -245,20 +243,28 @@ function Dock({ user, route }: { user: Session["user"]; route: Route }) {
   );
 }
 
+// The pages of the Admin section, for those who may use them: accounts, roles
+// and the activity log.
+function adminTabsOf(user: Session["user"]) {
+  const tabs: { id: string; href: string; label: MessageKey; allowed: boolean }[] = [
+    { id: "", href: "#/users", label: "users.tab.accounts", allowed: can(user, "users.manage") },
+    { id: "roles", href: "#/users/roles", label: "users.tab.roles", allowed: can(user, "roles.manage") },
+    { id: "activity", href: "#/users/activity", label: "users.tab.activity", allowed: can(user, "audit.read") },
+  ];
+  return tabs.filter((x) => x.allowed);
+}
+
 // AdminTabs switches between the pages of the Admin section. It shows above
 // them, only with more than one page to choose from.
-function AdminTabs({ user, route }: { user: Session["user"]; route: Route }) {
+function AdminTabs({ user }: { user: Session["user"] }) {
   const t = useT();
-  const tabs: { route: Route; href: string; label: MessageKey; allowed: boolean }[] = [
-    { route: "/users", href: "#/users", label: "nav.users", allowed: ["users.manage", "roles.manage", "audit.read"].some((p) => can(user, p)) },
-    { route: "/updates", href: "#/updates", label: "nav.updates", allowed: can(user, "core.update") },
-  ];
-  const shown = tabs.filter((x) => x.allowed);
+  const tab = useTab();
+  const shown = adminTabsOf(user);
   if (shown.length < 2) return null;
   return (
     <nav className="admin-tabs" aria-label={t("nav.admin")}>
       {shown.map((x) => (
-        <a key={x.route} href={x.href} aria-current={route === x.route ? "page" : undefined}>
+        <a key={x.id} href={x.href} aria-current={tab === x.id ? "page" : undefined}>
           {t(x.label)}
         </a>
       ))}
@@ -271,13 +277,13 @@ function AdminTabs({ user, route }: { user: Session["user"]; route: Route }) {
 // at the bottom with the sections.
 export function Shell({ user, signOut }: Session) {
   const route = useRoute();
-  const admin = route === "/users" || route === "/updates";
+  const admin = route === "/users";
   return (
     <AgentsProvider>
       <Notch user={user} signOut={signOut} />
       <main className="main-container">
         <CertificateBanner />
-        {admin && <AdminTabs user={user} route={route} />}
+        {admin && <AdminTabs user={user} />}
         <Page route={route} />
       </main>
       <Dock user={user} route={route} />

@@ -1,6 +1,9 @@
 // Texts of the Users page: accounts, roles, security policy and the audit log (UsersPage, RolesPanel).
 // Keys start with "users.". Add the Italian text in users.it.ts.
 export const users = {
+  "users.tab.accounts": "Accounts",
+  "users.tab.roles": "Roles and permissions",
+  "users.tab.activity": "Recent activity",
   "users.title": "Users",
   "users.notAllowed": "You are not allowed to manage users.",
   "users.rolesLoadFailed": "Could not load the roles: {message}",
