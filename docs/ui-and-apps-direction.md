@@ -26,7 +26,8 @@ Already open before this page and related: #470 (what the node window needs from
 - The node window's parts become **General | the plugins' parts (Disks first) | SSH terminal | File manager**, in that order. In Italian the Disks tab is "Dischi". The current names are in [Design system](design-system.md) and [Dashboard](dashboard.md) and change when #492 is built.
 - The **Dashboard** is a single icon in the bottom dock with no visible label: everyone sees it first and does not need the word. Customizing opens a **popup**; what is chosen shows on the page when applied. The old on-page "Customize" mode goes.
 - **Charts** are redrawn once and used by both the dashboard and the node page.
-- **Node type** is today a look kept in the browser, and the hub reports only the role `hub` or `agent` ([Dashboard](dashboard.md), #164, [Node types](node-types.md)). So a node set to "compute node" still shows role `agent` in the places that show the role. #494 says what to do until the hub stores types.
+- **Node type** is today a look kept in the browser, and the hub reports only the role `hub` or `agent` ([Dashboard](dashboard.md), #164, [Node types](node-types.md)). The place where the maintainer saw `agent` after changing a node's type is the **"Server" widget of the Dashboard** (`widgets/AgentsWidget.tsx`, which renders `AgentList.tsx`): its Role column prints the hub's role and **never reads the node type** that the Nodes page and the node window do read, so one node shows two different things on two pages. #494 says what to do now and when the hub stores types.
+- **The screenshot the maintainer sent** (Dashboard in Italian: the Network widget, the Disk use widget, the Server widget, the top bar and the dock) is a reference of what is poor today, not a mock-up; #493 describes what it shows and is where the new charts start from.
 
 ## Plugins: hubs only, and the first plugin is Disks
 
