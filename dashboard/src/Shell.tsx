@@ -44,39 +44,6 @@ function Page({ route }: { route: Route }) {
 // reconnects by itself, so a shorter outage is only a warning.
 export const LONG_OUTAGE_MS = 60_000;
 
-// LiveState shows whether the live updates (/api/stream) are flowing:
-// colour and a word, announced politely when it changes. Connected is green
-// ("Online"); connecting or reconnecting is the warning colour; the error
-// colour and its own text come only when the stream stayed down for
-// LONG_OUTAGE_MS.
-export function LiveState() {
-  const t = useT();
-  const connection = useConnection();
-  const [longOutage, setLongOutage] = useState(false);
-  const live = connection === "live";
-  useEffect(() => {
-    if (live) return;
-    const timer = setTimeout(() => setLongOutage(true), LONG_OUTAGE_MS);
-    return () => {
-      clearTimeout(timer);
-      setLongOutage(false);
-    };
-  }, [live]);
-  const look = live
-    ? { sev: "var(--ok)", text: t("live.connected") }
-    : longOutage
-      ? { sev: "var(--crit)", text: t("live.failed") }
-      : connection === "connecting"
-        ? { sev: "var(--warn)", text: t("live.connecting") }
-        : { sev: "var(--warn)", text: t("live.lost") };
-  return (
-    <span className="live-state" role="status" style={{ "--sev": look.sev } as CSSProperties} title={t("live.title")}>
-      <i aria-hidden="true" />
-      {look.text}
-    </span>
-  );
-}
-
 // The raccord of the notch: a concave curve that joins the island to the top
 // edge of the page.
 function Fillet({ side }: { side: "left" | "right" }) {
@@ -97,16 +64,39 @@ function Fillet({ side }: { side: "left" | "right" }) {
   );
 }
 
-// The "6/8 Online" pill of the notch: how many enrolled servers are connected.
-function MeshPill() {
+// The pill of the notch is the connection indicator too: "6/8 Online" while the
+// live stream to the hub flows (so the hub is online and the servers are online
+// in part), and the warning colour with "Reconnecting…" while it does not. The
+// error colour and its own text come only when the stream stayed down for
+// LONG_OUTAGE_MS.
+export function MeshPill() {
   const t = useT();
   const shared = useSharedAgents();
+  const connection = useConnection();
+  const [longOutage, setLongOutage] = useState(false);
+  const live = connection === "live";
+  useEffect(() => {
+    if (live) return;
+    const timer = setTimeout(() => setLongOutage(true), LONG_OUTAGE_MS);
+    return () => {
+      clearTimeout(timer);
+      setLongOutage(false);
+    };
+  }, [live]);
   const agents = shared?.state.kind === "ready" ? shared.state.agents : null;
-  const online = agents ? agents.filter((a) => a.status === "connected").length : null;
+  const online = agents ? agents.filter((a) => a.status === "connected").length : 0;
+  let sev = "var(--ok)";
+  let text = agents ? t("shell.online", { online, total: agents.length }) : t("live.connected");
+  let title = t("shell.meshTitle");
+  if (!live) {
+    sev = longOutage ? "var(--crit)" : "var(--warn)";
+    text = longOutage ? t("live.failed") : connection === "connecting" ? t("live.connecting") : t("live.lost");
+    title = t("live.title");
+  }
   return (
-    <a className="mesh-pill" href="#/servers" title={t("shell.meshTitle")}>
+    <a className="mesh-pill" href="#/servers" title={title} role="status" style={{ "--sev": sev } as CSSProperties}>
       <span className="pulse-dot" aria-hidden="true" />
-      <span>{agents ? t("shell.online", { online: online ?? 0, total: agents.length }) : t("servers.loading")}</span>
+      <span>{text}</span>
     </a>
   );
 }
@@ -162,6 +152,10 @@ function AccountMenu({ user, signOut }: Pick<Session, "user" | "signOut">) {
           {icons.user}
           <span>{t("nav.account")}</span>
         </a>
+        <a className="menu-item" role="menuitem" href="#/settings" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>
+          {icons.settings}
+          <span>{t("nav.settings")}</span>
+        </a>
         <div className="menu-divider" />
         <button type="button" className="menu-item danger" role="menuitem" tabIndex={open ? 0 : -1} onClick={() => void signOut()}>
           {icons.logout}
@@ -172,9 +166,9 @@ function AccountMenu({ user, signOut }: Pick<Session, "user" | "signOut">) {
   );
 }
 
-// Notch is the top island: the brand, how many servers are online, the live
-// state, the settings cog and the account.
-function Notch({ user, signOut, route }: Pick<Session, "user" | "signOut"> & { route: Route }) {
+// Notch is the top island: the brand, the connection and online-count pill, and
+// the account menu (account page, Settings, sign out).
+function Notch({ user, signOut }: Pick<Session, "user" | "signOut">) {
   const t = useT();
   return (
     <header className="top-header">
@@ -194,10 +188,6 @@ function Notch({ user, signOut, route }: Pick<Session, "user" | "signOut"> & { r
               <span className="brand-name">{t("app.brand").toUpperCase()}</span>
             </a>
             <MeshPill />
-            <LiveState />
-            <a className="notch-icon-btn" href="#/settings" aria-label={t("nav.settings")} title={t("nav.settings")} aria-current={route === "/settings" ? "page" : undefined}>
-              {icons.settings}
-            </a>
             <AccountMenu user={user} signOut={signOut} />
           </div>
           <Fillet side="right" />
@@ -284,7 +274,7 @@ export function Shell({ user, signOut }: Session) {
   const admin = route === "/users" || route === "/updates";
   return (
     <AgentsProvider>
-      <Notch user={user} signOut={signOut} route={route} />
+      <Notch user={user} signOut={signOut} />
       <main className="main-container">
         <CertificateBanner />
         {admin && <AdminTabs user={user} route={route} />}

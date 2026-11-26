@@ -2,7 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSocket } from "./fake-socket";
 import { LiveProvider } from "./LiveProvider";
-import { LiveState, LONG_OUTAGE_MS } from "./Shell";
+import { LONG_OUTAGE_MS, MeshPill } from "./Shell";
 
 const answer = (data: unknown) =>
   Promise.resolve({ ok: true, status: 200, headers: new Headers({ "Content-Type": "application/json" }), json: () => Promise.resolve(data) });
@@ -10,7 +10,7 @@ const answer = (data: unknown) =>
 function show() {
   return render(
     <LiveProvider createSocket={(url) => new FakeSocket(url)}>
-      <LiveState />
+      <MeshPill />
     </LiveProvider>,
   );
 }
@@ -29,10 +29,10 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// The indicator after a hub restart (#435): green and "Online" while the
-// stream flows, the warning colour while it reconnects, the error colour only
+// The indicator after a hub restart (#435), now the pill of the notch: green
+// ("6/8 Online", or "Online" before the servers are read) while the stream flows, the warning colour while it reconnects, the error colour only
 // after a long outage.
-describe("LiveState", () => {
+describe("the notch pill as the connection indicator", () => {
   it.each([
     ["en", "Online", "Reconnecting…", "Hub unreachable, retrying…"],
     ["it", "Online", "Riconnessione…", "Hub non raggiungibile, nuovo tentativo…"],

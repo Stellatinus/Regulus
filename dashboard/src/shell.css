@@ -101,9 +101,10 @@ body {
   gap: 8px;
   padding: 6px 13px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ok) 11%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ok) 28%, transparent);
-  color: var(--ok);
+  --sev: var(--ok);
+  background: color-mix(in srgb, var(--sev) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sev) 28%, transparent);
+  color: var(--sev);
   font-family: var(--f-mono);
   font-size: 11.5px;
   font-weight: 500;
