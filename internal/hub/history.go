@@ -221,7 +221,7 @@ func (m *metricsHistory) flush(ctx context.Context) error {
 }
 
 func (m *metricsHistory) write(ctx context.Context, batch []*metricsBucket, nowMin int64) error {
-	if len(batch) == 0 && m.nextWindow != 0 && nowMin < m.nextWindow+15*60 {
+	if len(batch) == 0 && m.window() != 0 && nowMin < m.window()+15*60 {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, historyFlushTimeout)
@@ -258,8 +258,19 @@ func (m *metricsHistory) write(ctx context.Context, batch []*metricsBucket, nowM
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	m.mu.Lock()
 	m.nextWindow = next
+	m.mu.Unlock()
 	return nil
+}
+
+// window is nextWindow, read under the lock: a hub that starts its timers again
+// after a demotion (#356) may still have the last flush of the old ones running
+// beside the first flush of the new ones (#473).
+func (m *metricsHistory) window() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.nextWindow
 }
 
 // mean is nil (a database NULL) when there were no values.
@@ -275,11 +286,11 @@ func mean(sum float64, n int) any {
 // the first window not made. The mean is weighted by the reports each minute
 // holds, and over the minutes that have the value at all.
 func (m *metricsHistory) deriveQuarters(ctx context.Context, tx *sql.Tx, nowMin int64) (int64, error) {
+	next := m.window()
 	if m.retention15m <= 0 {
-		return m.nextWindow, nil
+		return next, nil
 	}
 	const win = 15 * 60
-	next := m.nextWindow
 	if next == 0 {
 		// After a start: continue after the last window made, or start with
 		// the oldest minute there is.
