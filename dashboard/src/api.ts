@@ -1098,3 +1098,58 @@ export const fetchDiskMoves = (limit = 200, signal?: AbortSignal) =>
 
 export const fetchPlugins = (signal?: AbortSignal) =>
   request<PluginsStatus>("GET", "/api/plugins", undefined, signal);
+
+// The plugin store (GET /api/store, docs/plugins/store.md in Regulus). The hub
+// reads the signed indexes of its sources; the dashboard only shows them.
+export interface StoreSource {
+  name: string;
+  trust: string;
+  state: "ok" | "error" | "expired";
+  error?: string;
+  issued_at?: string;
+  expires?: string;
+}
+
+export interface StorePermission {
+  id: string;
+  description: string;
+}
+
+export interface StoreVersion {
+  version: string;
+  channel: "stable" | "beta" | "alpha";
+  released_at?: string;
+  compatible: boolean;
+  incompatible_reason?: string;
+  permissions?: StorePermission[];
+  provides?: string[];
+  needs?: Array<string | { capability: string; optional?: boolean }>;
+  yanked: boolean;
+}
+
+export interface StorePlugin {
+  id: string;
+  name: string;
+  description?: string;
+  source: string;
+  homepage?: string;
+  kind?: string;
+  audience?: string;
+  installed: { version: string } | null;
+  latest: string | null;
+  versions: StoreVersion[];
+}
+
+export interface StoreCatalog {
+  sources: StoreSource[];
+  plugins: StorePlugin[];
+}
+
+export const fetchStore = (signal?: AbortSignal) =>
+  request<StoreCatalog>("GET", "/api/store", undefined, signal);
+
+// installStorePlugin asks the hub to install a plugin. Today the hub answers 501
+// (installation needs the root helper, not built): the caller shows the hub's
+// message as it is.
+export const installStorePlugin = (id: string, version?: string) =>
+  request<unknown>("POST", `/api/store/plugins/${encodeURIComponent(id)}/install`, version ? { version } : undefined);
