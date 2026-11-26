@@ -46,3 +46,41 @@ The page of each server (**Servers**, then the server) has a **Physical disks** 
 - There is no inventory page yet (#62): the identity is shown on the page of each server (below).
 - The move is recorded in its own table; the event log of the disk (#150) is not built.
 - Serials of cloud volumes (for example an EBS volume reports `vol…` as its serial) are stable but are treated as virtual only when the vendor or model says so.
+
+## Becoming a plugin (design, **not agreed**: nothing here is built)
+
+Direction of 2026-11-26 ([Direction](ui-and-apps-direction.md), #497, Stellatinus/Regulus-Plugins#10): the **Physical disks** panel and the moves become the first real plugin, the **Disks** tab (**Dischi**) of the node window. This section is the proposed cut. It must be agreed before any code is written ([AGENTS.md](../AGENTS.md)).
+
+### The cut
+
+| Stays in the core | Moves to the plugin |
+|---|---|
+| The agent's collection of identities (`internal/agent/physdisks.go`) and the report field | The **screens**: the disks of a node and the moves, as a tab of the node window (a UI module) |
+| The identity key and its rules (`internal/diskid`) | The tab's texts, English and Italian |
+| The tables `disks` and `disk_moves`, written by the hub's `seen.go` | The plugin's own permission `disks.read` (below) |
+| The routes `GET /api/agents/{id}/disks` and `GET /api/disks/moves`, and `inventory.read` | |
+
+**Why this is the smallest cut that really tests the plugin system.** It exercises everything a first plugin needs (installation from the store, a tab added to the node window, a permission, a read of core data, two languages) without making a plugin own a database: a plugin has no migration mechanism, only a data directory ([Runtime](plugins/runtime.md)), and the identity history is exactly the kind of data that must survive a plugin being removed or updated. The collection stays in the core because it must run on every agent, and under the rule that plugins are installed on the hubs only (#496) a plugin cannot run there.
+
+**Consequence: the plugin is a UI-only plugin** (`components.ui`, no `hub` program), so its manifest in regulus-plugins is `components: {ui: {module: ...}}` and the `hub` component of the draft goes away unless a need for hub logic appears. The draft in regulus-plugins has a `hub` component only because the host side is not designed; this proposal removes it.
+
+### What the core must offer first (all open)
+
+1. The SDK importable from another repository (#463). A UI-only plugin needs no Go SDK, so **this does not block a UI-only Disks**, but it blocks every other plugin.
+2. A **tab extension point** in the node window, and a **widget loader** that runs the module in the sandboxed iframe of [Plugins](plugins/README.md#how-widget-code-is-isolated-from-the-session-315) (#21, #315).
+3. The **read door** (#261): the module asks the dashboard, over `postMessage`, for the disks of node X; the dashboard makes the call to the **existing routes** and the hub checks both the plugin's approved permission and the viewer's own (the narrower wins). Nothing writes.
+4. **The permission**: `disks.read` in the manifest, **mapped to `inventory.read`** in the core: the plugin's request is granted only to a viewer who holds `inventory.read`, so `viewer` still never sees a serial number. Until a plugin's permissions are enforced (#61) the hub's check of `inventory.read` on the routes is what protects the data, as today.
+
+### Existing installations and older dashboards
+
+- **No data moves**, so nothing is lost: `disks` and `disk_moves` stay where they are, with their history, whether or not the plugin is installed.
+- **The routes stay** (`docs/versioning.md`): an older dashboard keeps working, and the plugin reads the same routes.
+- **The panel goes from the core page of the node** only when the plugin exists *and* the store can install it (#497). Until then it stays: removing it earlier would leave the data with no screen. An installation that does not install the plugin has no Disks tab; that is the point of a plugin, and the release notes of that version must say it.
+
+### What is open (the maintainer decides)
+
+1. Is the **UI-only cut** right, or must the plugin own the identity history (then it needs a storage and migration mechanism first, which is a large design of its own)? **Proposed: UI-only.**
+2. Should Disks be **installed by default** on a fresh hub, so that the node window does not lose a screen it has today? Proposed: preinstalled by the installer once the store can do it, never silently re-added after an administrator removes it.
+3. Does the **move of disks** (a hub-wide list, not per node) get its own entry point, or only a section of the tab? Proposed: a section of the tab, as the issue says ("not a separate page").
+
+Not verified: all of the above is a proposal; the plugin has a draft manifest in regulus-plugins (`plugins/disks`) and no program.
