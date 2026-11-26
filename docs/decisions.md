@@ -66,6 +66,16 @@ Releases are published from the Actions tab (**Publish release**), not by typing
 
 **Branches, and what happens to old pre-releases (decided 2026-11-25 by the maintainer; #442).** Branches are for development, one per issue, merged into `main` by pull request, and for stable versions: when a stable version such as `1.0.0` is released, a branch for it is kept (`release/1.0.0`, the name is mine, not the maintainer's: change it here if they prefer another) and development goes on in `main`. No stable release exists yet, so no release branch exists. The alphas and betas published so far are deleted once a stable version exists, and the stable ones are kept; the maintainer decides from the download counts shown by GitHub and believes they are the only person who installed the alphas (not checked here). **Not decided:** whether an older stable version gets fixes at all, and how a fix would be tagged: the release workflow accepts only a commit on `main` (#207), so a tag on a release branch is refused today (#438). **Not done, and not to be done before it is checked:** deleting releases. Hubs read the list of releases and the signed `latest.json`, `install.sh --version` and the update helper download a release by its tag, and a rollback or a late agent needs its target to exist (#439).
 
+## CI: documents-only changes and a shorter critical path (#488)
+
+A pull request that changed only a document waited 5 to 7 minutes and used 25 runner-minutes. Choices:
+
+- **Skip by what changed, not by a `paths-ignore` of the workflow.** A workflow skipped by `paths-ignore` leaves its required checks "expected" and the pull request cannot be merged. Jobs are skipped inside a workflow that always runs, from a `changes` job; skipped jobs count as passed for required checks. A documents-only change is decided by a tested script (`scripts/ci-changes.sh`) that fails safe: when it cannot decide, everything runs. A push to `main` and a manual run always run everything.
+- **Matrix jobs skip steps, not the job**, because a matrix job skipped before expansion is reported under its unexpanded name and a required check on the real name would never be satisfied.
+- **The old job name stays.** The Go job was split into three parallel jobs and `Go (lint, vet, test)` remains as the job that passes when they do, so no required check on a name breaks. `All checks` is the single check to require in the future. Neither was verified against the repository's real branch protection (a setting, not a file).
+- **No cancel on `main`.** A cancelled run on `main` is not a pass, and the release workflow needs a pass on the tagged commit (#207).
+- **Not done:** dashboard-only gating, and speeding up the slowest tests (the larger gain): both need a decision and a list nobody has made.
+
 ## Updates
 
 **Goal: install once.** After the first installation, an administrator should never have to install anything by hand from a terminal: hub, agents and (later) plugins are updated from the dashboard. Today this holds for hub and agents. Still missing: plugin updates (#19, regulus-plugins#1) and two exceptions [updates](updates.md) lists (an agent installed before the update feature, and a release that changes the systemd units or the configuration file, #254).

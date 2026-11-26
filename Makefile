@@ -16,6 +16,7 @@ test:
 	sh scripts/test-next-version.sh
 	sh scripts/test-update-recover.sh
 	sh scripts/test-package-plugin.sh
+	sh scripts/test-ci-changes.sh
 	go vet ./...
 	go test -race ./...
 	cd dashboard && npm ci && npm run typecheck && npm test
