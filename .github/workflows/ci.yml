@@ -12,12 +12,57 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded pull request run is cancelled. A run on main never is: the
+  # release workflow requires CI to have passed on the tagged commit (#207), and
+  # a cancelled run is not a pass, so two merges close together could leave the
+  # first commit impossible to release (#488).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  go:
-    name: Go (lint, vet, test)
+  # Decides in seconds whether a pull request changes only documents, so the
+  # jobs below skip what a document cannot break (#488). A push to main and a
+  # manual run always run everything.
+  changes:
+    name: What changed
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2 # the merge commit of a pull request and its two parents
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            sh scripts/ci-changes.sh | tee -a "$GITHUB_OUTPUT"
+          else
+            echo docs_only=false | tee -a "$GITHUB_OUTPUT"
+          fi
+
+  # The one test that reads documents (a stale repository name in any text
+  # file, #231): it runs for a documents-only change, where the Go jobs do not.
+  docs:
+    name: Documents (the tests that read them)
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 -run 'TestNoStaleRepositoryName|TestInstallerUsesTheReleaseRepository' ./internal/update
+
+  go-lint:
+    name: Go lint and vet
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
@@ -29,19 +74,64 @@ jobs:
       - name: Every action is pinned to a commit
         run: sh scripts/pin-actions.sh --check
       - run: go vet ./...
+
+  go-test:
+    name: Go tests (race)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
       - name: go test -race ./...
         run: |
           set -o pipefail
           go test -race ./... 2>&1 | tee go-test.log
-      - name: Hub tests with one SQLite connection (catches nested database use, #219)
-        run: make test-one-connection
       - name: Report failing tests
         if: failure()
         run: grep -E '^(--- FAIL|FAIL|panic:)|_test\.go:[0-9]+:' go-test.log | head -40 | sed 's/^/::error::/' || true
 
+  # It used to be the last step of the Go job and took 1m16 of its 4m52 in
+  # series; it does not depend on the other steps (#488).
+  go-one-connection:
+    name: Hub tests with one SQLite connection
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Hub tests with one SQLite connection (catches nested database use, #219)
+        run: make test-one-connection
+
+  # Keeps the name of the job that used to do all of this, so a required check
+  # on "Go (lint, vet, test)" still works: it succeeds when the jobs above
+  # succeeded or were skipped (a documents-only change), and fails otherwise.
+  go:
+    name: Go (lint, vet, test)
+    needs: [changes, docs, go-lint, go-test, go-one-connection]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every Go job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in *" failure "* | *" cancelled "*) exit 1 ;; esac
+
   postgres:
     name: Go tests on PostgreSQL (${{ matrix.pg }})
+    needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -64,16 +154,28 @@ jobs:
     env:
       # The same tests as the Go job, with each test in a schema of its own.
       REGULUS_TEST_DATABASE_URL: postgres://regulus:regulus-ci@localhost:5432/regulus_test?sslmode=disable
+    # A matrix job is not skipped at job level: a matrix job skipped before it is
+    # expanded is reported with an unexpanded name, which a required check on its
+    # name would wait for forever. A documents-only change skips its steps (#488).
     steps:
+      - name: Nothing to test (documents only)
+        if: needs.changes.outputs.docs_only == 'true'
+        run: echo "only documents changed"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.docs_only != 'true'
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        if: needs.changes.outputs.docs_only != 'true'
         with:
           go-version-file: go.mod
-      - run: go test -race ./internal/storage/... ./internal/auth/... ./internal/fleet/... ./internal/hub/... ./internal/update/... ./cmd/...
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: go test -race ./internal/storage/... ./internal/auth/... ./internal/fleet/... ./internal/hub/... ./internal/update/... ./cmd/...
 
   postgres-tls:
     name: Go tests on PostgreSQL with TLS (verify-full)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       PGTLS_DIR: ${{ github.workspace }}/.pgtls
       # The certificate names localhost and nothing else (no IP address), so a
@@ -127,7 +229,10 @@ jobs:
 
   release-config:
     name: Release configuration (goreleaser check)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
@@ -137,7 +242,10 @@ jobs:
 
   reproducible:
     name: Reproducible build (two builds, same hashes)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -159,32 +267,44 @@ jobs:
 
   package:
     name: Package lifecycle (${{ matrix.image }})
+    needs: changes
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Steps are skipped, not the job: see the PostgreSQL matrix above (#488).
     strategy:
       fail-fast: false
       matrix:
         image: ["ubuntu:22.04", "ubuntu:24.04", "ubuntu:26.04"]
     steps:
+      - name: Nothing to test (documents only)
+        if: needs.changes.outputs.docs_only == 'true'
+        run: echo "only documents changed"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.changes.outputs.docs_only != 'true'
         with:
           fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        if: needs.changes.outputs.docs_only != 'true'
         with:
           go-version-file: go.mod
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: needs.changes.outputs.docs_only != 'true'
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
       - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+        if: needs.changes.outputs.docs_only != 'true'
         with:
           version: v2.12.0 # the version release.yml builds with
           install-only: true
       - name: Build the packages (snapshot, nothing signed or published)
+        if: needs.changes.outputs.docs_only != 'true'
         run: goreleaser release --snapshot --clean --skip=publish,sign,sbom,announce
       # Install, reinstall, upgrade, remove and purge the real .deb in a plain
       # container, and look at the user, the modes and the files (#400).
       - name: Install, upgrade, remove and purge the .deb
+        if: needs.changes.outputs.docs_only != 'true'
         run: |
           deb=$(ls dist/regulus_*_linux_amd64.deb)
           docker run --rm -v "$PWD":/src:ro "${{ matrix.image }}" \
@@ -192,16 +312,24 @@ jobs:
 
   scripts:
     name: Scripts (install and release)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: sh scripts/test-install.sh
       - run: sh scripts/test-next-version.sh
       - run: sh scripts/test-update-recover.sh
+      - run: sh scripts/test-package-plugin.sh
+      - run: sh scripts/test-ci-changes.sh
 
   dashboard:
     name: Dashboard (lint, typecheck, test, build)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: dashboard
@@ -220,7 +348,10 @@ jobs:
 
   build:
     name: Build binary
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
@@ -237,6 +368,8 @@ jobs:
 
   e2e:
     name: End-to-end (hub and remote agent binaries over mTLS)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # For TestPreviousReleaseServesOnTheCurrentSchema on PostgreSQL (#383).
@@ -282,6 +415,8 @@ jobs:
 
   browser:
     name: Browser tests (dashboard in Chromium against the real hub)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -311,7 +446,10 @@ jobs:
 
   proto:
     name: Protobuf (generated code up to date)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Only runs once the repository has a proto/ directory.
@@ -328,3 +466,20 @@ jobs:
       - name: Protobuf compatibility with main (buf breaking)
         if: hashFiles('proto/buf.yaml') != ''
         run: make proto-breaking PROTO_AGAINST='https://github.com/${{ github.repository }}.git#branch=main,subdir=proto'
+
+  # One check for the whole workflow: it fails if any job failed or was
+  # cancelled, and passes when jobs were skipped on purpose (a documents-only
+  # change). The maintainer can make this the single required check (#488).
+  all-checks:
+    name: All checks
+    needs: [changes, docs, go-lint, go-test, go-one-connection, go, postgres, postgres-tls, release-config, reproducible, package, scripts, dashboard, build, e2e, browser, proto]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          case " $RESULTS " in *" failure "* | *" cancelled "*) exit 1 ;; esac
