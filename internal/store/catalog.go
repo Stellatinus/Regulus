@@ -20,6 +20,9 @@ type Env struct {
 	Machine  Machine
 	// Installed maps a plugin id to its installed version.
 	Installed map[string]string
+	// InstalledFrom maps a plugin id to the source it was installed from; an
+	// id with none (or ""), was put there by hand.
+	InstalledFrom map[string]string
 }
 
 // VersionJSON, PluginJSON and the types around them are the contract of
@@ -123,7 +126,7 @@ func Catalogue(ix Index, source string, channel update.Channel, env Env) []Plugi
 				pj.Latest = &l
 			}
 		}
-		if v, ok := env.Installed[p.ID]; ok {
+		if v, ok := env.Installed[p.ID]; ok && (env.InstalledFrom[p.ID] == "" || env.InstalledFrom[p.ID] == source) {
 			pj.Installed = &InstalledJSON{Version: v}
 		}
 		out = append(out, pj)

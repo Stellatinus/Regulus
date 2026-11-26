@@ -17,7 +17,7 @@ Terms are used as the code uses them. They are provisional; see the glossary whe
 | **Console** | The full-screen terminal interface (`regulus` or `regulus console`) and its scriptable twins `regulus status` and `regulus config`. | `internal/console`, `cmd/regulus/console.go` |
 | **Dashboard** | The React + TypeScript web interface, built by Vite and embedded in the binary. | `dashboard/`, `internal/webui` |
 
-There is **one executable**, `regulus`. The role is chosen by the subcommand: `hub`, `agent`, `console` (the default), `status`, `config`, `update-apply`, `version` (`cmd/regulus/main.go`). The binary does not read a "role" setting.
+There is **one executable**, `regulus`. The role is chosen by the subcommand: `hub`, `agent`, `console` (the default), `status`, `config`, `update-apply`, `plugin-apply`, `version` (`cmd/regulus/main.go`). The binary does not read a "role" setting.
 
 The file `/etc/regulus/role` exists, but only for packaging: `install.sh --role agent` writes the word `agent` there and the package scripts read it to decide which directories and systemd units to set up (`packaging/install.sh` `set_role`, `packaging/scripts/postinstall.sh`). A hub install has no such file.
 
@@ -180,6 +180,7 @@ flowchart LR
 | `updates/` | downloaded, verified releases | |
 | `tuf/` | cache of the Sigstore trusted root | |
 | `update-apply/` | request/result files exchanged with the root update helper | |
+| `plugin-apply/`, `plugin-store/` | request/result files exchanged with the root plugin helper (`regulus plugin-apply`), and the package, signed index and signature the hub staged for it (removed when the request ends) | |
 | `running.json` | version and start time of the hub, written each time it starts serving; the update helper reads it when `regulus.sock` cannot be reached (#312) | |
 
 ### Persistent metrics history (#387, #405: storage, flush and pruning; the API and the longer chart ranges are not implemented yet)

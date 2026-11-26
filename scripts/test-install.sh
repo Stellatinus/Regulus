@@ -237,9 +237,14 @@ self_update=1
 write_settings
 equal "switches the update helper on and keeps the rest" "$(cat "$CONFIG_DIR/regulus.env")" "REGULUS_LOG_LEVEL=debug
 REGULUS_BUILTIN_AGENT=false
-REGULUS_UPDATES_APPLY=true"
+REGULUS_UPDATES_APPLY=true
+REGULUS_PLUGINS_DIR=/usr/local/lib/regulus/plugins"
 write_settings
 equal "does not repeat a key" "$(grep -c UPDATES_APPLY "$CONFIG_DIR/regulus.env")" 1
+equal "does not repeat the plugins directory" "$(grep -c PLUGINS_DIR "$CONFIG_DIR/regulus.env")" 1
+rm -f "$CONFIG_DIR/regulus.env"
+role=agent write_settings
+check_not "an agent is given no plugins directory (plugins are installed on hubs only)" grep -q PLUGINS_DIR "$CONFIG_DIR/regulus.env"
 SUDO=
 (systemctl() { echo called; }; self_update=0; enable_self_update; ) >/dev/null
 rm -f "$CONFIG_DIR/regulus.env"

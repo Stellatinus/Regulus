@@ -195,7 +195,7 @@ func newService(t *testing.T, files map[string][]byte, v Verifier, c *clock, sou
 			return nil, errors.New("404 " + url)
 		},
 		Env:       func() Env { return hub(t, "0.4.1") },
-		Installed: func() map[string]string { return map[string]string{} },
+		Installed: func() map[string]InstalledInfo { return map[string]InstalledInfo{} },
 	})
 }
 
@@ -283,7 +283,7 @@ func TestSamePluginInTwoSourcesIsInstalledFromOneOnly(t *testing.T) {
 		custom.URL: indexJSON(t, nil), custom.URL + bundleSuffix: []byte("b"),
 	}
 	s := newService(t, files, &fakeVerifier{}, &clock{t0}, off, custom)
-	s.o.Installed = func() map[string]string { return map[string]string{"disks": "0.1.0"} }
+	s.o.Installed = func() map[string]InstalledInfo { return map[string]InstalledInfo{"disks": {Version: "0.1.0"}} }
 	var installedIn []string
 	for _, p := range s.Catalogue(context.Background()).Plugins {
 		if p.ID == "disks" && p.Installed != nil {

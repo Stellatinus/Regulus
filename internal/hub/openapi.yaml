@@ -899,8 +899,10 @@ paths:
         one offers nothing. A version a source's channel does not offer is left
         out; a version this hub cannot run is listed with `compatible: false` and
         the reason. `latest` is the newest compatible, not yanked version, or null.
-        `installed` is the version the hub runs, or null. Nothing here installs
-        anything. See docs/plugins/store.md.
+        `installed` is the version on disk (not what the supervisor runs: a plugin
+        with only a ui component never runs) and only for the source it was
+        installed from, or null. Nothing here installs anything; see
+        `/api/store/plugins/{id}/install`. See docs/plugins/store.md.
       responses:
         "200":
           description: The store.
@@ -912,21 +914,94 @@ paths:
   /api/store/plugins/{id}/install:
     post:
       tags: [plugins]
-      summary: Install a plugin (needs plugins.manage) - not implemented
+      summary: Install a plugin from a source (needs plugins.manage and a recent proof of the password)
       description: |
-        Always answers 501: installing writes the plugins directory, which is
-        owned by root, so it needs the root helper, which is not built. Nothing is
-        installed and nothing is faked.
+        Installs a plugin that is not installed. The hub picks the version (the
+        newest one that is offered on the channel, compatible and not yanked,
+        unless `version` is given) and the source (the only one that offers the
+        plugin, unless `source` is given), downloads the package, checks its size
+        and SHA-256 against the signed index, stages it and asks the root helper
+        (`regulus plugin-apply`, started by systemd), which verifies the
+        signature of the index and the package again, unpacks it under
+        `plugins_dir/<id>/<version>/` and switches `plugins_dir/<id>/current`.
+        The request waits for the helper (up to two minutes) and answers when it
+        is done. A refusal has a stable `code`, see `StoreError`. Plugins must be
+        on (`plugins_dir`) and the helper unit enabled. Recorded in the audit log.
+        See docs/plugins/store.md.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreInstallRequest" }
+      responses:
+        "200":
+          description: Installed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
+        "400": { $ref: "#/components/responses/StoreRefused" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "422": { $ref: "#/components/responses/StoreRefused" }
+        "502": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
+  /api/store/plugins/{id}/update:
+    post:
+      tags: [plugins]
+      summary: Update an installed plugin (needs plugins.manage and a recent proof of the password)
+      description: |
+        Installs a newer version of an installed plugin, from the source it was
+        installed from and no other (`409` `no_source` for a plugin put in the
+        plugins directory by hand). The newest offered version is used unless
+        `version` is given; `409` `up_to_date` when there is nothing newer. The
+        previous version stays on disk. Same steps and answers as install.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
+        "400": { $ref: "#/components/responses/StoreRefused" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "422": { $ref: "#/components/responses/StoreRefused" }
+        "502": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
+  /api/store/plugins/{id}:
+    delete:
+      tags: [plugins]
+      summary: Remove an installed plugin (needs plugins.manage and a recent proof of the password)
+      description: |
+        Removes the plugin's directory with every version kept (through the root
+        helper). Its data directory is left, so installing it again finds its
+        state. `404` `not_installed` when it is not. Nothing checks yet whether
+        another plugin needs it (requirements are not built).
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
-        "501":
-          description: Not implemented.
+        "200":
+          description: Removed.
           content:
             application/json:
-              schema: { type: object, required: [error], properties: { error: { type: string } } }
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
   /api/stream:
     get:
       tags: [agents]
@@ -1708,6 +1783,11 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    StoreRefused:
+      description: The store refused; see the code.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/StoreError" }
     Unauthorized:
       description: No valid session.
       content:
@@ -1901,6 +1981,42 @@ components:
         message: { type: string }
         requested_by: { type: string }
         at: { type: string, format: date-time }
+    StoreInstallRequest:
+      type: object
+      description: Both fields are optional; an empty body is the same as {}.
+      properties:
+        version: { type: string, description: "A version offered by the source; default the newest compatible one." }
+        source: { type: string, description: "The source to install from; default the only one that offers the plugin." }
+    StoreUpdateRequest:
+      type: object
+      properties:
+        version: { type: string }
+    StoreOutcome:
+      type: object
+      required: [plugin, action]
+      properties:
+        plugin: { type: string }
+        action: { type: string, enum: [install, remove] }
+        version: { type: string, description: The version now current (not for a removal). }
+        from: { type: string, description: The version that was current before, if any. }
+        source: { type: string }
+    StoreError:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string, description: English text. }
+        code:
+          type: string
+          description: |
+            Stable code: `plugin_not_found`, `source_ambiguous`, `source_unknown`,
+            `source_unavailable`, `version_not_offered`, `no_compatible_version`,
+            `already_installed`, `not_installed`, `no_source`, `up_to_date`,
+            `plugins_off`, `busy`, `download_failed`, `helper_timeout`,
+            `helper_failed`.
+        args:
+          type: object
+          description: For `helper_failed`, `helper_code` is the root helper's own code (`not_verified`, `incompatible`, `yanked`, `checksum`, `unsafe_package`, `bad_manifest`, `already_installed`, `not_installed`, `source_mismatch`, `hand_installed`, `plugins_dir`, `bad_request`, `unknown_source`, `internal`).
+          additionalProperties: true
     Error:
       type: object
       required: [error]

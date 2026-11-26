@@ -1,16 +1,25 @@
-// Package store is the read side of the plugin store (docs/plugins/store.md):
-// it reads the signed index of each source, checks it, and says for every
-// plugin version whether this hub can run it.
+// Package store is the plugin store's client (docs/plugins/store.md): it reads
+// the signed index of each source, checks it, says for every plugin version
+// whether this hub can run it, and installs, updates and removes plugins.
 //
-// It does: parse and validate an index of format 1 (a format it does not speak,
-// an index that has expired and one older than the last verified are refused),
-// verify its Sigstore signature through a Verifier, filter versions by the
-// channel a source is followed on, check each version against this Regulus (its
-// release, the plugin API range) and this machine (an artifact for its os and
-// arch), and build the catalogue that GET /api/store serves.
+// It does, on the hub: parse and validate an index of format 1 (a format it
+// does not speak, an index that has expired and one older than the last
+// verified are refused), verify its Sigstore signature through a Verifier,
+// filter versions by the channel a source is followed on, check each version
+// against this Regulus (its release, the plugin API range) and this machine
+// (an artifact for its os and arch), build the catalogue that GET /api/store
+// serves, and, for install, update and remove (Installer), pick the version,
+// download the package, check its size and SHA-256 against the signed index,
+// stage it and ask the root helper.
 //
-// It does not: download or install a plugin, write the plugins directory, run
-// anything, or decide who may ask (the hub does that with a permission).
-// Installing needs the root helper, which is not built; the install route
-// answers 501.
+// It does, as the root helper (Applier, run by `regulus plugin-apply`): verify
+// the signed index and the package again, refuse an unsafe package, unpack it
+// into <plugins dir>/<id>/<version>/, switch the link current, record the
+// source in source.json, or remove a plugin.
+//
+// It does not: run a plugin (internal/plugin), decide who may ask (the hub does
+// that with a permission and a recent proof of the password), roll back, pin a
+// version, check the requirements between plugins, update by itself (the
+// automatic mode), or add a source from the dashboard. The helper does not
+// check that an index is not older than the last one the hub verified.
 package store

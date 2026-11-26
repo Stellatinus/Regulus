@@ -55,6 +55,10 @@ nfpms:
         dst: /usr/lib/systemd/system/regulus-update.path
       - src: packaging/regulus-update.service
         dst: /usr/lib/systemd/system/regulus-update.service
+      - src: packaging/regulus-plugin-apply.path
+        dst: /usr/lib/systemd/system/regulus-plugin-apply.path
+      - src: packaging/regulus-plugin-apply.service
+        dst: /usr/lib/systemd/system/regulus-plugin-apply.service
       - src: packaging/regulus-agent-update.path
         dst: /usr/lib/systemd/system/regulus-agent-update.path
       - src: packaging/regulus-agent-update.service

@@ -96,6 +96,13 @@ type Hub struct {
 	// pluginTune, if set, changes the plugin supervisor before it starts
 	// (tests).
 	pluginTune func(*plugin.Supervisor)
+	// pluginMu guards pluginCtx and pluginStop, which ReloadPlugins replaces
+	// when the store changes the plugins directory.
+	pluginMu   sync.Mutex
+	pluginCtx  context.Context
+	pluginStop func()
+	// pluginInstaller installs, updates and removes plugins (internal/store).
+	pluginInstaller *pluginstore.Installer
 
 	// listenerCertEnd is when the current certificate of the agent listener
 	// ends (time.Time), zero while the listener is off.
@@ -300,14 +307,25 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 			v, ok := update.ParseBuildVersion(h.version)
 			return pluginstore.Env{Hub: v, HubKnown: ok, Machine: pluginstore.Machine{OS: runtime.GOOS, Arch: runtime.GOARCH}}
 		},
-		Installed: func() map[string]string {
-			m := map[string]string{}
-			for _, p := range h.HubPlugins().Plugins {
-				m[p.ID] = p.Version
+		// What is on disk, not what the supervisor runs: a plugin with only a
+		// ui component never runs, and is installed all the same.
+		Installed: func() map[string]pluginstore.InstalledInfo {
+			m := map[string]pluginstore.InstalledInfo{}
+			for _, p := range plugin.ListInstalled(cfg.PluginsDir) {
+				m[p.ID] = pluginstore.InstalledInfo{Version: p.Version, Source: p.Source}
 			}
 			return m
 		},
 	})
+	h.pluginInstaller = &pluginstore.Installer{
+		Service:    h.pluginStore,
+		DataDir:    cfg.DataDir,
+		PluginsDir: cfg.PluginsDir,
+		Reload:     h.ReloadPlugins,
+		Audit: func(ctx context.Context, actor, event, target, detail string) {
+			authn.Record(ctx, actor, event, target, detail)
+		},
+	}
 	if err := h.loadRollout(ctx); err != nil {
 		h.log.Warn("reading the state of the last update of the servers", "err", err)
 	}
@@ -376,7 +394,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Store: h.pluginStore, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Store: h.pluginStore, StoreInstaller: h.pluginInstaller, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -574,6 +592,9 @@ type Deps struct {
 	// Store reads the plugin store's sources (GET /api/store). May be nil: the
 	// page then shows no source and no plugin.
 	Store StoreSource
+	// StoreInstaller installs, updates and removes plugins from the store.
+	// May be nil: those routes then answer that plugins are off.
+	StoreInstaller StoreInstaller
 	// Version is the version the hub was built with. The enrollment answer
 	// carries it when it is a release, so a new agent installs the same one.
 	Version string
@@ -635,7 +656,9 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/store", handler: need(auth.PermPluginsManage, storeHandler(d.Store))},
-		{pattern: "POST /api/store/plugins/{id}/install", handler: need(auth.PermPluginsManage, storeInstallHandler())},
+		{pattern: "POST /api/store/plugins/{id}/install", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeInstallHandler(d.StoreInstaller))))},
+		{pattern: "POST /api/store/plugins/{id}/update", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeUpdateHandler(d.StoreInstaller))))},
+		{pattern: "DELETE /api/store/plugins/{id}", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeRemoveHandler(d.StoreInstaller))))},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, auth.RefuseTokens(streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},

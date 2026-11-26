@@ -160,14 +160,23 @@ type Options struct {
 	HubChannel func(context.Context) update.Channel
 	// Env returns what versions are checked against; Installed is filled per call.
 	Env func() Env
-	// Installed returns the installed plugins (id to version).
-	Installed func() map[string]string
+	// Installed returns the installed plugins by id: their version and the
+	// source they came from ("" for one put there by hand).
+	Installed func() map[string]InstalledInfo
 	// TTL is how long a read index is reused; default 15 minutes.
 	TTL time.Duration
 }
 
+// InstalledInfo is an installed plugin as the catalogue needs it.
+type InstalledInfo struct {
+	Version string
+	Source  string
+}
+
 type sourceState struct {
 	index     Index
+	raw       []byte // the signed bytes of index, and its signature bundle,
+	bundle    []byte // kept for the helper, which verifies them again
 	have      bool
 	lastIssue time.Time // issued_at of the last verified index: never go back
 	err       string
@@ -232,7 +241,7 @@ func (s *Service) refresh(ctx context.Context, src Source, st *sourceState) {
 		fail(err)
 		return
 	}
-	st.index, st.have, st.lastIssue, st.err = ix, true, ix.IssuedAt, ""
+	st.index, st.raw, st.bundle, st.have, st.lastIssue, st.err = ix, data, bundle, true, ix.IssuedAt, ""
 }
 
 // Catalogue returns the plugins of every source, reading a source again when
@@ -245,8 +254,11 @@ func (s *Service) Catalogue(ctx context.Context) CatalogueJSON {
 	hub := s.o.HubChannel(ctx)
 	out := CatalogueJSON{Sources: []SourceJSON{}, Plugins: []PluginJSON{}}
 	installed := map[string]string{}
+	from := map[string]string{}
 	if s.o.Installed != nil {
-		installed = s.o.Installed()
+		for id, in := range s.o.Installed() {
+			installed[id], from[id] = in.Version, in.Source
+		}
 	}
 	taken := map[string]bool{}
 	for _, src := range s.o.Sources {
@@ -280,11 +292,12 @@ func (s *Service) Catalogue(ctx context.Context) CatalogueJSON {
 			ch = update.Channel(src.Channel)
 		}
 		env := s.o.Env()
-		env.Installed = installed
+		env.Installed, env.InstalledFrom = installed, from
 		for _, p := range Catalogue(st.index, src.Name, ch, env) {
-			// An installed plugin remembers one source; until the install path
-			// records it, the first source in the list that offers the id owns it.
-			if taken[p.ID] {
+			// An installed plugin remembers the source it came from and is
+			// shown as installed only there. One put there by hand has no
+			// source: the first source in the list that offers the id owns it.
+			if taken[p.ID] && from[p.ID] == "" {
 				p.Installed = nil
 			}
 			taken[p.ID] = true

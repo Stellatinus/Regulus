@@ -11,8 +11,12 @@ import (
 // Found is a plugin found in the plugins directory with a valid manifest.
 type Found struct {
 	Manifest Manifest
-	// Dir is the plugin's directory, <plugins dir>/<id>.
+	// Dir is where the plugin's files are: <plugins dir>/<id> in the flat
+	// layout, or the version <plugins dir>/<id>/current points at (see
+	// installed.go).
 	Dir string
+	// Versioned is true for the layout the store creates.
+	Versioned bool
 }
 
 // Problem is a directory in the plugins directory that is not a usable
@@ -25,7 +29,8 @@ type Problem struct {
 func (p Problem) Error() string { return fmt.Sprintf("%s: %v", p.Dir, p.Err) }
 
 // Discover reads the plugins directory: one directory per plugin, named after
-// its id, with plugin.yaml at its top. Anything else in the directory
+// its id, with plugin.yaml at its top, or (the layout of the store) with a
+// link current to the version directory that holds it. Anything else in the directory
 // (files, hidden entries) is ignored; a directory without a valid manifest is
 // a Problem. A missing plugins directory is no plugins.
 func Discover(dir string) ([]Found, []Problem, error) {
@@ -52,7 +57,12 @@ func Discover(dir string) ([]Found, []Problem, error) {
 			}
 			continue
 		}
-		m, err := readManifest(filepath.Join(pdir, ManifestName))
+		vdir, versioned, err := resolveVersionDir(pdir)
+		if err != nil {
+			problems = append(problems, Problem{pdir, err})
+			continue
+		}
+		m, err := readManifest(filepath.Join(vdir, ManifestName))
 		if err != nil {
 			problems = append(problems, Problem{pdir, err})
 			continue
@@ -61,7 +71,7 @@ func Discover(dir string) ([]Found, []Problem, error) {
 			problems = append(problems, Problem{pdir, fmt.Errorf("the directory must be named after the plugin id %q", m.ID)})
 			continue
 		}
-		found = append(found, Found{Manifest: m, Dir: pdir})
+		found = append(found, Found{Manifest: m, Dir: vdir, Versioned: versioned})
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].Manifest.ID < found[j].Manifest.ID })
 	return found, problems, nil

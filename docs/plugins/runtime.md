@@ -27,6 +27,19 @@ The hub runs its plugins beside its servers (`Hub.Serve`, `internal/hub/plugins.
     bin/docker-agent
 ```
 
+The store (docs/plugins/store.md) installs plugins in a second layout, which discovery follows as well:
+
+```
+<plugins_dir>/
+  disks/
+    0.1.0/                the unpacked package: plugin.yaml, programs, ui module
+    0.2.0/
+    current -> 0.2.0      a relative link naming the version that runs
+    source.json           which source it came from, and the previous version
+```
+
+`current` must be a link to one directory next to it (no absolute path, no `/`, no `..`, no leading dot); anything else makes the plugin `invalid`. A plugin with no `current` is the flat layout above. The supervisor reads the directory **once, when it starts**: after the store installs, updates or removes a plugin the hub starts it again (`Hub.ReloadPlugins`), which restarts every plugin of the hub. A plugin with only a `ui` component has no program and is never started, so it is not in the supervisor's status; the store lists what is on disk.
+
 - A directory whose `plugin.yaml` is missing or invalid, or whose name is not the plugin's `id`, is logged as a problem, never started, and listed with the state **`invalid`**: its directory name as id, no version, and the reason as its last error. Its manifest cannot say which role it is for, so every host reading the directory lists it.
 - Hidden entries (starting with `.`) and plain files are ignored.
 - A **symbolic link** in place of a plugin directory is refused (and listed as `invalid`): a plugin must be a real directory.

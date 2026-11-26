@@ -365,3 +365,42 @@ func TestAgentPluginChangesArePushed(t *testing.T) {
 		}
 	}
 }
+
+// What the store installs or removes is seen after ReloadPlugins, without
+// restarting the hub: the supervisor reads the plugins directory when it starts.
+func TestReloadPluginsSeesWhatTheStoreChanged(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Default()
+	cfg.BuiltinAgent = false
+	cfg.PluginsDir = root
+	h := startHubWithConfig(t, cfg, fastPlugins(t))
+	handler := NewHandler(Deps{UI: fstest.MapFS{}, Agents: h, Plugins: h, Log: quiet()})
+	if n := len(getPlugins(t, handler).Hub.Plugins); n != 0 {
+		t.Fatalf("plugins before = %d", n)
+	}
+	// A plugin in the layout of the store: <id>/<version>/ and <id>/current.
+	long := filepath.Join(root, "crasher")
+	crashingPlugin(t, root)
+	if err := os.MkdirAll(filepath.Join(long, "0.0.1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"bin", plugin.ManifestName} {
+		if err := os.Rename(filepath.Join(long, n), filepath.Join(long, "0.0.1", n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("0.0.1", filepath.Join(long, plugin.CurrentName)); err != nil {
+		t.Fatal(err)
+	}
+	h.ReloadPlugins()
+	waitFor(t, "the new plugin to be seen", func() bool {
+		return getPlugins(t, handler).hubPlugin("crasher").Version == "0.0.1"
+	})
+	// Removed: gone after the next reload, and a reload with nothing changed is harmless.
+	if err := os.RemoveAll(long); err != nil {
+		t.Fatal(err)
+	}
+	h.ReloadPlugins()
+	waitFor(t, "the removed plugin to go", func() bool { return len(getPlugins(t, handler).Hub.Plugins) == 0 })
+	h.ReloadPlugins()
+}
