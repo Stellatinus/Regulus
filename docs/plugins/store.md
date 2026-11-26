@@ -2,6 +2,8 @@
 
 **Status: design. Nothing here is implemented**, and the code does not accept the new manifest keys yet (the manifest is read strictly, see [Manifest](manifest.md)). It is the design that `regulus-plugins#1` (lifecycle, index, installation) and `regulus-plugins#3` (other sources) were waiting for. It follows the maintainer's decision of 2026-11-25 (see [Decisions](../decisions.md), "The plugin store: the client here, the catalog there"). Nothing should be coded from it until the maintainer has agreed with it, as for any new area ([AGENTS.md](../../AGENTS.md)).
 
+> **Under review (2026-11-26).** The maintainer decided that plugins are installed on the **hubs only**, and that the redundant hub has the same plugins ([#496](https://github.com/Stellatinus/Regulus/issues/496), [Direction of 2026-11-26](../ui-and-apps-direction.md)). This page still describes a plugin that can run on an agent, and the store sending plugins to agents; that part is not settled and is not to be built before #496 decides what becomes of the agent component.
+
 ## The split
 
 "The store" is two different things, and they live in two places:
