@@ -11,6 +11,7 @@ import {
   can,
   fetchAgent,
   fetchPluginUIs,
+  PLUGINS_CHANGED_EVENT,
   renameAgent,
   revokeAgent,
   type Agent,
@@ -153,6 +154,14 @@ type Part = "general" | "terminal" | "files" | `plugin:${string}`;
 // plugin: the window must work without them.
 function usePluginTabs(): PluginUI[] {
   const [plugins, setPlugins] = useState<PluginUI[]>([]);
+  // The store sends PLUGINS_CHANGED_EVENT after an install, update or removal:
+  // the tabs follow without a reload.
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    const again = () => setVersion((n) => n + 1);
+    window.addEventListener(PLUGINS_CHANGED_EVENT, again);
+    return () => window.removeEventListener(PLUGINS_CHANGED_EVENT, again);
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     fetchPluginUIs(controller.signal).then(
@@ -160,7 +169,7 @@ function usePluginTabs(): PluginUI[] {
       () => undefined,
     );
     return () => controller.abort();
-  }, []);
+  }, [version]);
   return plugins;
 }
 

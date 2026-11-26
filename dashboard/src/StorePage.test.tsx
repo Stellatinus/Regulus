@@ -1,11 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StoreCatalog, User } from "./api";
+import { ApiError, PLUGINS_CHANGED_EVENT, setReauthHandler, type StoreCatalog, type User } from "./api";
 import { LanguageProvider } from "./i18n";
 import { SessionContext } from "./session";
 import { ADMIN_PERMISSIONS, VIEWER_PERMISSIONS } from "./test-users";
-import { hasUpdate, offered, StorePage, STORE_INSTALL_PERMISSION } from "./StorePage";
+import { hasUpdate, offered, StorePage, STORE_INSTALL_PERMISSION, storeErrorText } from "./StorePage";
 
 const user = (permissions: string[]): User => ({ username: "eve", role: "admin", permissions, created_at: "", disabled: false, two_factor: false });
 const manager = user([...ADMIN_PERMISSIONS, STORE_INSTALL_PERMISSION]);
@@ -111,17 +111,121 @@ describe("StorePage", () => {
     expect(bad).toHaveTextContent("Cannot run here: needs Regulus >=0.5.0");
   });
 
-  it("shows the hub's refusal to install, never a success", async () => {
+  const detailOf = async (u: ReturnType<typeof userEvent.setup>, name: string) => {
+    await u.click(await screen.findByRole("button", { name: `Details: ${name}` }));
+    return screen.findByRole("dialog", { hidden: true });
+  };
+
+  it("installs, reads the catalog and the plugin tabs again, and says so", async () => {
+    const u = userEvent.setup();
+    const changed = vi.fn();
+    window.addEventListener(PLUGINS_CHANGED_EVENT, changed);
+    const fn = mock({
+      "GET /api/store": { body: catalog },
+      "POST /api/store/plugins/disks/install": { body: { plugin: "disks", action: "install", version: "0.1.0", source: "regulus-plugins" } },
+    });
+    renderPage();
+    await detailOf(u, "Disks");
+    await u.click(await screen.findByRole("button", { name: "Install 0.1.0", hidden: true }));
+    expect(await screen.findByText("Disks 0.1.0 was installed.", undefined, { timeout: 2000 })).toBeInTheDocument();
+    const call = fn.mock.calls.find(([url]) => url === "/api/store/plugins/disks/install");
+    expect(call?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ version: "0.1.0", source: "regulus-plugins" }) });
+    expect(changed).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(fn.mock.calls.filter(([url, init]) => url === "/api/store" && (init?.method ?? "GET") === "GET")).toHaveLength(2));
+    window.removeEventListener(PLUGINS_CHANGED_EVENT, changed);
+  });
+
+  it("updates an installed plugin to the offered version", async () => {
     const u = userEvent.setup();
     const fn = mock({
       "GET /api/store": { body: catalog },
-      "POST /api/store/plugins/disks/install": { status: 501, body: { error: "installation needs the root helper, not built yet" } },
+      "POST /api/store/plugins/hello-world/update": { body: { plugin: "hello-world", action: "update", version: "0.2.0", from: "0.1.0" } },
     });
     renderPage();
-    await u.click(await screen.findByRole("button", { name: "Details: Disks" }));
+    await detailOf(u, "Hello world");
+    expect(screen.queryByRole("button", { name: /^Install \d/, hidden: true })).not.toBeInTheDocument();
+    await u.click(await screen.findByRole("button", { name: "Update to 0.2.0", hidden: true }));
+    expect(await screen.findByText("Hello world was updated to 0.2.0.")).toBeInTheDocument();
+    expect(fn.mock.calls.find(([url]) => url === "/api/store/plugins/hello-world/update")?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ version: "0.2.0" }) });
+  });
+
+  it("asks before removing, names the plugin, and removes", async () => {
+    const u = userEvent.setup();
+    const changed = vi.fn();
+    window.addEventListener(PLUGINS_CHANGED_EVENT, changed);
+    const fn = mock({
+      "GET /api/store": { body: catalog },
+      "DELETE /api/store/plugins/hello-world": { body: { plugin: "hello-world", action: "remove", from: "0.1.0" } },
+    });
+    renderPage();
+    await detailOf(u, "Hello world");
+    await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
+    const confirm = await screen.findByRole("alertdialog", { hidden: true });
+    expect(confirm).toHaveTextContent("Remove Hello world?");
+    expect(confirm).toHaveTextContent("The tabs and screens it adds to the dashboard disappear.");
+    expect(fn.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    await u.click(within(confirm).getByRole("button", { name: "Cancel", hidden: true }));
+    expect(screen.queryByRole("alertdialog", { hidden: true })).not.toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
+    await u.click(await screen.findByRole("button", { name: "Remove Hello world", hidden: true }));
+    expect(await screen.findByText("Hello world was removed.")).toBeInTheDocument();
+    expect(changed).toHaveBeenCalledTimes(1);
+    window.removeEventListener(PLUGINS_CHANGED_EVENT, changed);
+  });
+
+  it("keeps the busy state, with every action off, until the hub answers", async () => {
+    const u = userEvent.setup();
+    let finish: (v: unknown) => void = () => undefined;
+    const fn = vi.fn((url: string, init?: RequestInit) => {
+      if (url === "/api/store/plugins/disks/install")
+        return new Promise((resolve) => {
+          finish = () => resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve({ plugin: "disks", action: "install", version: "0.1.0" }) });
+        });
+      return Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve(catalog), method: init?.method });
+    });
+    vi.stubGlobal("fetch", fn);
+    renderPage();
+    await detailOf(u, "Disks");
     await u.click(await screen.findByRole("button", { name: "Install 0.1.0", hidden: true }));
-    expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent("Not installed: installation needs the root helper, not built yet");
-    expect(fn).toHaveBeenCalledWith("/api/store/plugins/disks/install", expect.objectContaining({ method: "POST" }));
+    const busy = await screen.findByRole("status", { hidden: true });
+    expect(busy).toHaveTextContent("Installing Disks… The hub downloads and checks the package");
+    expect(busy).toHaveTextContent("up to two minutes");
+    expect(screen.getByRole("button", { name: "Installing…", hidden: true })).toBeDisabled();
+    // Closing the dialog does not forget it.
+    await u.click(screen.getByRole("button", { name: "Close", hidden: true }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Installing Disks…");
+    finish(undefined);
+    expect(await screen.findByText("Disks 0.1.0 was installed.")).toBeInTheDocument();
+  });
+
+  it("turns the store's refusals into texts of the page, never a success", async () => {
+    const u = userEvent.setup();
+    mock({
+      "GET /api/store": { body: catalog },
+      "POST /api/store/plugins/disks/install": { status: 409, body: { error: "english", code: "busy" } },
+    });
+    renderPage();
+    await detailOf(u, "Disks");
+    await u.click(await screen.findByRole("button", { name: "Install 0.1.0", hidden: true }));
+    expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent(
+      "Not installed: Another plugin change is already in progress. Try again when it ends.",
+    );
+    expect(screen.queryByText(/was installed/)).not.toBeInTheDocument();
+  });
+
+  it("shows the helper's own reason, in Italian too", async () => {
+    window.localStorage.setItem("regulus.language", "it");
+    const u = userEvent.setup();
+    mock({
+      "GET /api/store": { body: catalog },
+      "POST /api/store/plugins/disks/install": { status: 422, body: { error: "english", code: "helper_failed", args: { helper_code: "checksum" } } },
+    });
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: /^Dettagli: Disks/ }));
+    await u.click(await screen.findByRole("button", { name: "Installa 0.1.0", hidden: true }));
+    expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent(
+      "Non installato: Il pacchetto non corrisponde al checksum dell'indice firmato.",
+    );
   });
 
   it("does not let a role without the permission install", async () => {
@@ -159,6 +263,72 @@ describe("StorePage", () => {
     mock({ "GET /api/store": { status: 500, body: { error: "boom" } } });
     renderPage();
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("The store could not be read: boom"));
+  });
+});
+
+describe("step-up", () => {
+  it("asks for the password again when the hub wants a recent proof, then repeats the action", async () => {
+    const u = userEvent.setup();
+    const reauth = vi.fn(() => Promise.resolve(true));
+    const remove = setReauthHandler(reauth);
+    let calls = 0;
+    const fn = vi.fn((_url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "DELETE") {
+        calls++;
+        const ok = calls > 1;
+        return Promise.resolve({
+          ok,
+          status: ok ? 200 : 403,
+          headers: new Headers(),
+          json: () => Promise.resolve(ok ? { plugin: "hello-world", action: "remove" } : { error: "needs password", code: "reauth_required" }),
+        });
+      }
+      return Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve(catalog) });
+    });
+    vi.stubGlobal("fetch", fn);
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Details: Hello world" }));
+    await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
+    await u.click(await screen.findByRole("button", { name: "Remove Hello world", hidden: true }));
+    expect(await screen.findByText("Hello world was removed.")).toBeInTheDocument();
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(2);
+    remove();
+  });
+
+  it("shows the hub's refusal when the password is not given", async () => {
+    const u = userEvent.setup();
+    const remove = setReauthHandler(() => Promise.resolve(false));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) =>
+        Promise.resolve({
+          ok: (init?.method ?? "GET") === "GET",
+          status: (init?.method ?? "GET") === "GET" ? 200 : 403,
+          headers: new Headers(),
+          json: () => Promise.resolve((init?.method ?? "GET") === "GET" ? catalog : { error: "needs password", code: "reauth_required" }),
+        }),
+      ),
+    );
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Details: Hello world" }));
+    await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
+    await u.click(await screen.findByRole("button", { name: "Remove Hello world", hidden: true }));
+    expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent(/Not removed:/);
+    remove();
+  });
+});
+
+describe("storeErrorText", () => {
+  const t = (key: string, params?: Record<string, string | number>) => `${key}${params ? JSON.stringify(params) : ""}`;
+  it("maps every code and helper code to a text of the catalog", () => {
+    const codes = ["plugin_not_found", "not_installed", "source_unknown", "already_installed", "up_to_date", "source_ambiguous", "no_source", "plugins_off", "busy", "no_compatible_version", "version_not_offered", "source_unavailable", "download_failed", "helper_timeout"];
+    for (const c of codes) expect(storeErrorText(t as never, new ApiError(409, "x", c))).toBe(`store.error.${c}`);
+    const helper = ["not_verified", "checksum", "incompatible", "yanked", "unsafe_package", "bad_manifest", "already_installed", "not_installed", "source_mismatch", "hand_installed", "plugins_dir", "internal"];
+    for (const h of helper) expect(storeErrorText(t as never, new ApiError(422, "x", "helper_failed", undefined, undefined, { helper_code: h }))).toBe(`store.error.helper.${h}`);
+    expect(storeErrorText(t as never, new ApiError(422, "x", "helper_failed", undefined, undefined, { helper_code: "new" }))).toContain("store.error.helper_failed");
+    expect(storeErrorText(t as never, new ApiError(500, "the hub's text", "other"))).toBe("the hub's text");
   });
 });
 

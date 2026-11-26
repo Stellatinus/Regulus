@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
+  apiErrorText,
   can,
   fetchStore,
   installStorePlugin,
+  notifyPluginsChanged,
+  removeStorePlugin,
+  updateStorePlugin,
   type StoreCatalog,
   type StorePlugin,
   type StoreSource,
@@ -42,12 +46,65 @@ export const hasUpdate = (p: StorePlugin) => {
   return !!p.installed && !!v && v.version !== p.installed.version;
 };
 
+type Action = "install" | "update" | "remove";
+type Working = { id: string; name: string; action: Action };
+type Notice = { kind: "done" | "error"; text: string };
+
+const STORE_CODES = new Set([
+  "plugin_not_found",
+  "not_installed",
+  "source_unknown",
+  "already_installed",
+  "up_to_date",
+  "source_ambiguous",
+  "no_source",
+  "plugins_off",
+  "busy",
+  "no_compatible_version",
+  "version_not_offered",
+  "source_unavailable",
+  "download_failed",
+  "helper_timeout",
+]);
+const HELPER_CODES = new Set([
+  "not_verified",
+  "checksum",
+  "incompatible",
+  "yanked",
+  "unsafe_package",
+  "bad_manifest",
+  "already_installed",
+  "not_installed",
+  "source_mismatch",
+  "hand_installed",
+  "plugins_dir",
+  "internal",
+]);
+
+// storeErrorText is the text of a refused install, update or removal in the
+// language of the page. The store's codes have texts of their own ("busy" and
+// "plugin_not_found" mean other things elsewhere), so they are not in the hub's
+// general list; anything else (a lost session, no permission, the network)
+// falls back to the usual text of the error.
+export function storeErrorText(t: ReturnType<typeof useT>, err: unknown): string {
+  if (err instanceof ApiError && err.code) {
+    if (err.code === "helper_failed") {
+      const h = String(err.args?.helper_code ?? "");
+      return HELPER_CODES.has(h)
+        ? t(`store.error.helper.${h}` as MessageKey)
+        : t("store.error.helper_failed", { code: h || "?" });
+    }
+    if (STORE_CODES.has(err.code)) return t(`store.error.${err.code}` as MessageKey);
+  }
+  return apiErrorText(t, err);
+}
+
 const sourceClass = { ok: "connected", error: "offline", expired: "stale" } as const;
 
 // StorePage is the Regulus Store: the plugins the hub's sources offer, read
-// from GET /api/store. It shows only what the hub returns. Installing asks the
-// hub, which says today that installation is not built; that answer is shown as
-// it is, never as a success.
+// from GET /api/store. It shows only what the hub returns. Install, update and
+// remove ask the hub, which runs them through its root helper; what it answers
+// is shown as it is, a refusal never as a success.
 export function StorePage() {
   const t = useT();
   const session = useSession();
@@ -58,6 +115,37 @@ export function StorePage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [kind, setKind] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
+  // An install, update or removal blocks for up to two minutes. While one runs,
+  // every action is off; the state lives here, not in the detail dialog, so
+  // closing the dialog does not forget it.
+  const [working, setWorking] = useState<Working | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [reload, setReload] = useState(0);
+
+  const run = useCallback(
+    async (p: StorePlugin, action: Action, version?: string) => {
+      setWorking({ id: p.id, name: p.name, action });
+      setNotice(null);
+      try {
+        const r =
+          action === "install"
+            ? await installStorePlugin(p.id, { version, source: p.source })
+            : action === "update"
+              ? await updateStorePlugin(p.id, version)
+              : await removeStorePlugin(p.id);
+        setNotice({ kind: "done", text: t(`store.done.${action}` as MessageKey, { name: p.name, version: r.version ?? version ?? "" }) });
+        // What shows plugins (the node window's tabs) reads them again, and so does the catalog.
+        notifyPluginsChanged();
+        setReload((n) => n + 1);
+      } catch (err) {
+        const failed: Record<Action, MessageKey> = { install: "store.installFailed", update: "store.updateFailed", remove: "store.removeFailed" };
+        setNotice({ kind: "error", text: t(failed[action], { message: storeErrorText(t, err) }) });
+      } finally {
+        setWorking(null);
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -70,7 +158,7 @@ export function StorePage() {
       },
     );
     return () => controller.abort();
-  }, [expired]);
+  }, [expired, reload]);
 
   const plugins = useMemo(() => (state.kind === "ready" ? state.data.plugins : []), [state]);
   const shown = useMemo(() => {
@@ -101,6 +189,7 @@ export function StorePage() {
 
   return (
     <div className="store">
+      {!detail && <ActionStatus working={working} notice={notice} />}
       <SourceList sources={sources} />
       {!canInstall && <p className="store-note">{t("store.noPermission", { permission: STORE_INSTALL_PERMISSION })}</p>}
       {sources.length === 0 ? (
@@ -145,7 +234,9 @@ export function StorePage() {
           )}
         </>
       )}
-      {detail && <Detail plugin={detail} canInstall={canInstall} onClose={() => setOpen(null)} />}
+      {detail && (
+        <Detail plugin={detail} canInstall={canInstall} working={working} notice={notice} onRun={run} onClose={() => setOpen(null)} />
+      )}
     </div>
   );
 }
@@ -185,6 +276,27 @@ function SourceList({ sources }: { sources: StoreSource[] }) {
   );
 }
 
+// ActionStatus says what the running action is, or how the last one ended.
+function ActionStatus({ working, notice }: { working: Working | null; notice: Notice | null }) {
+  const t = useT();
+  if (working)
+    return (
+      <p role="status" aria-busy="true" className="store-note">
+        {t(`store.working.${working.action}` as MessageKey, { name: working.name })}
+      </p>
+    );
+  if (!notice) return null;
+  return notice.kind === "error" ? (
+    <p role="alert" className="error">
+      {notice.text}
+    </p>
+  ) : (
+    <p role="status" className="store-note">
+      {notice.text}
+    </p>
+  );
+}
+
 function Channel({ channel }: { channel: string }) {
   const t = useT();
   const known = channel === "stable" || channel === "beta" || channel === "alpha";
@@ -218,30 +330,31 @@ function PluginCard({ plugin: p, onOpen }: { plugin: StorePlugin; onOpen: () => 
   );
 }
 
-function Detail({ plugin: p, canInstall, onClose }: { plugin: StorePlugin; canInstall: boolean; onClose: () => void }) {
+function Detail({
+  plugin: p,
+  canInstall,
+  working,
+  notice,
+  onRun,
+  onClose,
+}: {
+  plugin: StorePlugin;
+  canInstall: boolean;
+  working: Working | null;
+  notice: Notice | null;
+  onRun: (p: StorePlugin, action: Action, version?: string) => Promise<void>;
+  onClose: () => void;
+}) {
   const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const v = offered(p);
+  const busy = working !== null;
   useEffect(() => {
     const d = ref.current;
     if (d && typeof d.showModal === "function" && !d.open) d.showModal();
     else if (d && !d.open) d.setAttribute("open", "");
   }, []);
-
-  const install = useCallback(async () => {
-    if (!v) return;
-    setBusy(true);
-    setFailure(null);
-    try {
-      await installStorePlugin(p.id, v.version);
-    } catch (err) {
-      setFailure(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [p.id, v]);
 
   const needs = (v?.needs ?? []).map((n) => (typeof n === "string" ? { capability: n, optional: false } : { capability: n.capability, optional: !!n.optional }));
   return (
@@ -299,18 +412,49 @@ function Detail({ plugin: p, canInstall, onClose }: { plugin: StorePlugin; canIn
         ))}
       </ul>
 
-      {failure && (
-        <p role="alert" className="error">
-          {t("store.installFailed", { message: failure })}
-        </p>
+      <ActionStatus working={working} notice={notice} />
+      {confirmRemove && p.installed && (
+        <div role="alertdialog" aria-labelledby="store-remove-title" className="store-confirm">
+          <h4 id="store-remove-title">{t("store.confirmRemove.title", { name: p.name })}</h4>
+          <p>{t("store.confirmRemove.body", { name: p.name })}</p>
+          <div className="store-actions">
+            <button type="button" onClick={() => setConfirmRemove(false)} disabled={busy}>
+              {t("store.confirmRemove.no")}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={busy}
+              onClick={() => {
+                setConfirmRemove(false);
+                void onRun(p, "remove");
+              }}
+            >
+              {t("store.confirmRemove.yes", { name: p.name })}
+            </button>
+          </div>
+        </div>
       )}
       <div className="store-actions">
         <button type="button" onClick={onClose}>
           {t("store.detail.close")}
         </button>
-        <button type="button" className="primary" disabled={!canInstall || !v || busy} aria-busy={busy} onClick={() => void install()}>
-          {busy ? t("store.installing") : v ? t("store.installVersion", { version: v.version }) : t("store.install")}
-        </button>
+        {p.installed && (
+          <button type="button" disabled={!canInstall || busy} onClick={() => setConfirmRemove(true)}>
+            {working?.action === "remove" && working.id === p.id ? t("store.removing") : t("store.remove")}
+          </button>
+        )}
+        {p.installed ? (
+          hasUpdate(p) && v ? (
+            <button type="button" className="primary" disabled={!canInstall || busy} aria-busy={busy} onClick={() => void onRun(p, "update", v.version)}>
+              {working?.action === "update" && working.id === p.id ? t("store.updating") : t("store.updateTo", { version: v.version })}
+            </button>
+          ) : null
+        ) : (
+          <button type="button" className="primary" disabled={!canInstall || !v || busy} aria-busy={busy} onClick={() => v && void onRun(p, "install", v.version)}>
+            {working?.action === "install" && working.id === p.id ? t("store.installing") : v ? t("store.installVersion", { version: v.version }) : t("store.install")}
+          </button>
+        )}
       </div>
     </dialog>
   );
