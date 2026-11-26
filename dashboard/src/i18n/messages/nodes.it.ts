@@ -62,4 +62,9 @@ export const nodesIt: Record<keyof typeof nodes, string> = {
   "nodes.edit.typeFixed": "L'hub mantiene il suo tipo.",
   "nodes.edit.typeLocal": "Il tipo è un aspetto salvato in questo browser finché l'hub non conosce i tipi di nodo (#164).",
   "nodes.edit.save": "Salva",
+  "nodes.plugin.loading": "Caricamento del plugin…",
+  "nodes.plugin.unavailable": "La pagina del plugin non si è potuta caricare.",
+  "nodes.plugin.timeout": "La pagina del plugin non si è avviata in tempo.",
+  "nodes.plugin.failed": "{name} non può essere mostrato",
+  "nodes.plugin.retry": "Riprova",
 };

@@ -14,9 +14,16 @@
 //     health, restarts it when it stops, and gives up on one that keeps
 //     failing. A plugin never runs inside the host's process, so its crash
 //     cannot take the host down.
+//   - ui.go: the plugins that have a dashboard page: finds one through
+//     <id>/current or <id>, reads its module without leaving the plugin
+//     directory, and builds the HTML page and the Content-Security-Policy for the
+//     sandboxed frame it runs in (#21).
+//   - bridge.go: the fixed list of read-only operations a plugin's page may ask
+//     the hub for, with the permissions each needs (#261, minimal).
 //   - sdk/: what a plugin written in Go uses to serve the contract.
 //
 // It does not install, update or remove plugins, check their signatures, or
-// give them any permission (regulus-plugins#1); it does not load dashboard widgets (#21).
+// give them any permission (regulus-plugins#1); it does not run the operations
+// of the bridge (package hub does) or draw the dashboard's side of the frame.
 // The design is in docs/plugins/.
 package plugin

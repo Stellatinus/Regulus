@@ -123,3 +123,31 @@ The restart rules bound how often a broken plugin costs a start: at most 6 start
 ## Not verified
 
 The runtime has run in tests with real processes, sockets and signals, on Linux. It has **not** run on an installed agent or hub under its systemd unit. The unit's hardening (`MemoryDenyWriteExecute`, `SystemCallFilter`, `ProtectSystem`) applies to plugins as well, and some plugins may need it relaxed. A `[Test]` issue should cover this before the first real plugin (regulus-plugins#2).
+
+## The page of a plugin in the dashboard (#21, #261)
+
+A plugin with `components.ui` has a page in the dashboard. Today the only place for it is a **tab of the node window** (`components.ui.node_tab`, [Manifest](manifest.md)); the tab is placed after General and the node window shows it for the node it was opened on. It needs `plugins_dir` on the hub; the files are read from `<plugins dir>/<id>/current/` when that exists (versions side by side) and from `<plugins dir>/<id>/` otherwise.
+
+| Route | Who | What |
+|---|---|---|
+| `GET /api/plugins/ui` | any logged-in user | the plugins with a page and their tabs |
+| `GET /api/plugins/{id}/ui` | any logged-in user | the page for the frame: the module inlined, with its own policy |
+| `GET /api/plugins/{id}/module` | any logged-in user | the module file, as it is |
+| `POST /api/plugins/{id}/call` | a person with the core permission behind the operation | the bridge, below |
+
+**The frame.** `<iframe sandbox="allow-scripts">` **without** `allow-same-origin`: an opaque origin, so no cookie, no `localStorage`, no access to the dashboard, no way to call the hub. The page's policy is `sandbox allow-scripts; default-src 'none'; script-src 'sha256-…' 'sha256-…'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`: the two scripts of the page (a short one of the hub's that applies the theme, and the module) by hash, nothing else. The hub refuses to serve a module that contains `</script` or `<!--`. The module is **one file** with no imports.
+
+**The messages (protocol 1, `dashboard/src/pluginFrame.ts`).** The dashboard accepts a message only when `event.source` is that frame's window, and replies with `postMessage(…, "*")` (an opaque origin cannot be named) to that window only.
+
+| Direction | Message |
+|---|---|
+| page → dashboard | `{regulus:1, type:"ready"}` once its listener is on; `{regulus:1, type:"request", id, op, params}`; `{regulus:1, type:"resize", height}` (kept between 120 and 4000 px) |
+| dashboard → page | `{regulus:1, type:"init", locale:"en"|"it", theme:{"--var":"value"}, context:{node}}` after `ready`; `{regulus:1, type:"response", id, ok:true, data}` or `{…, ok:false, error:{code, message}}`; `{regulus:1, type:"theme", theme}` when the theme changes |
+
+The theme is the dashboard's CSS variables (`--bg`, `--surface`, `--ink`, `--muted`, `--line`, `--ok`, `--warn`, `--crit`, `--f-body`, `--f-mono` and a few more); the page applies only names that start with `--`. A page that does not say `ready` in 10 seconds is shown as failed, with a button to try again.
+
+**The bridge.** `POST /api/plugins/{id}/call` `{op, params}`. The operations are a **fixed list in the core** (`internal/plugin/bridge.go`); a plugin cannot add one, and every one is read-only. Today: `inventory.disks` `{node}` and `inventory.disk_moves` `{limit?}`, which answer exactly like `GET /api/agents/{id}/disks` and `GET /api/disks/moves`. An operation is run only when **all** hold (the narrower wins): the plugin is installed and has a page; the plugin's manifest **requests** the permission the operation needs (`<id>.read`); the logged-in person has the **core** permission behind it (`inventory.read`). Errors carry a stable `code` (`plugin_not_found`, `plugin_op_unknown`, `plugin_permission_not_requested`, `plugin_forbidden`, `plugin_bad_params`, `plugin_op_unavailable`) that the frame gets in `error.code`.
+
+**What this does not do.** A plugin's permissions are what it asks for: an administrator does not approve them when installing yet (#61), so "the plugin requests it" is the only plugin-side check. There is no way for a plugin program (agent or hub component) to call the hub; this is the door of the page only. The frame can still draw anything and can ask the dashboard for the allowed operations as often as it likes (no rate limit). The core's own panel of the same data is hidden when the Disks plugin's tab is installed.
+
+**Checked and not checked.** The Go routes and the dashboard code are tested. The frame, the policy by hash, the message round trip, and what the page cannot do (read a cookie, use storage, touch the dashboard's DOM, call `fetch`) were run in headless Chromium against a stand-in server that sends the real page, with the dashboard's own headers on the parent (2026-11-26). They have **not** been run in a browser against a real hub with a real installed plugin.

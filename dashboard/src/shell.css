@@ -2047,3 +2047,18 @@ input.switch[type="checkbox"]:checked::after {
 .store-toolbar select {
   width: auto;
 }
+
+/* The page of a plugin in the node window (#21): a sandboxed frame that
+   takes the width of the window and the height the page asks for. */
+.plugin-pane {
+  display: block;
+  overflow: auto;
+}
+.plugin-frame {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  border: 0;
+  background: transparent;
+  color-scheme: normal;
+}

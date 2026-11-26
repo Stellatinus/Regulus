@@ -376,7 +376,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Store: h.pluginStore, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, PluginsDir: h.cfg.PluginsDir, Store: h.pluginStore, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -571,6 +571,9 @@ type Deps struct {
 	// Plugins reports the hub's own plugins. May be nil: GET /api/plugins then
 	// shows the hub's plugins as off.
 	Plugins PluginSource
+	// PluginsDir is the plugins directory the dashboard's plugin pages are read
+	// from (GET /api/plugins/ui, the pages and the bridge). Empty: none.
+	PluginsDir string
 	// Store reads the plugin store's sources (GET /api/store). May be nil: the
 	// page then shows no source and no plugin.
 	Store StoreSource
@@ -608,6 +611,7 @@ func apiRoutes(d Deps) []route {
 	l := listenerHandlers{fleet: d.Fleet}
 	u := updateHandlers{updates: d.Updates}
 	r := rolloutHandlers{rollout: d.Rollout}
+	pui := pluginUI{dir: d.PluginsDir, disks: d.Disks, auth: d.Auth}
 	// Without authentication (tests that exercise the handlers alone) there is
 	// no user to check.
 	need := func(permission string, next http.Handler) http.Handler {
@@ -637,6 +641,10 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/store", handler: need(auth.PermPluginsManage, storeHandler(d.Store))},
 		{pattern: "POST /api/store/plugins/{id}/install", handler: need(auth.PermPluginsManage, storeInstallHandler())},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
+		{pattern: "GET /api/plugins/ui", handler: http.HandlerFunc(pui.list)},
+		{pattern: "GET /api/plugins/{id}/ui", handler: http.HandlerFunc(pui.page)},
+		{pattern: "GET /api/plugins/{id}/module", handler: http.HandlerFunc(pui.module)},
+		{pattern: "POST /api/plugins/{id}/call", handler: auth.RequireJSON(http.HandlerFunc(pui.call))},
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, auth.RefuseTokens(streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},
 		{pattern: "PUT /api/agents/listener", handler: need(auth.PermServersManage, stepUp(auth.RequireJSON(http.HandlerFunc(l.put)))), needsAuth: true},
