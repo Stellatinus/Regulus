@@ -113,6 +113,14 @@ func runUpdateApply(args []string) int {
 		}
 	}
 	if *recoverOnly {
+		// systemd runs this after the helper stops, with the executable that is
+		// on disk now: after an update, the new one. It is the one place where
+		// the new version's code runs as root right after an update, so it is
+		// where the machine is brought up to date (internal/hostsync). An update
+		// has succeeded whatever happens here.
+		if !*beforeStart {
+			_ = syncHost(ctx)
+		}
 		return 0
 	}
 	res, err := in.Apply(ctx)

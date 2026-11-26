@@ -54,6 +54,9 @@ func TestNoStaleRepositoryName(t *testing.T) {
 			if strings.Contains(line, goModule+"/internal") { // an import or the generated Go package option
 				continue
 			}
+			if strings.Contains(line, goModule+"/packaging") { // the embedded unit files (packaging/embed.go)
+				continue
+			}
 			t.Errorf("%s:%d names the old repository: %s", rel, i+1, strings.TrimSpace(line))
 		}
 		return nil

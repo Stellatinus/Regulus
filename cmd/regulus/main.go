@@ -1,8 +1,10 @@
 // Command regulus is the single Regulus executable. The role it plays is
-// chosen with a subcommand; without one it opens the console. Two
-// subcommands are the root helpers that systemd starts for the hub:
-// update-apply (core updates) and plugin-apply (install, update and remove a
-// plugin of the Store); neither runs unless the hub left a request.
+// chosen with a subcommand; without one it opens the console. Three
+// subcommands are root helpers: update-apply (core updates) and plugin-apply
+// (install, update and remove a plugin of the Store), which systemd starts for
+// the hub and which do nothing unless it left a request, and host-sync, which
+// puts on the machine what this version needs outside the executable and runs
+// after every update.
 package main
 
 import (
@@ -61,6 +63,8 @@ func main() {
 		os.Exit(runUpdateApply(os.Args[2:]))
 	case "plugin-apply":
 		os.Exit(runPluginApply(os.Args[2:]))
+	case "host-sync":
+		os.Exit(runHostSync(os.Args[2:]))
 	case "verify-release":
 		os.Exit(runVerifyRelease(os.Args[2:]))
 	case "help", "-h", "--help":
@@ -110,6 +114,10 @@ Commands:
   plugin-apply
            install, update or remove the plugin the hub asked for; systemd runs it
            as root (regulus-plugin-apply.service), you do not need to
+  host-sync
+           put on this machine what this version needs outside the executable
+           (units, directories, settings); runs as root after every update, you
+           do not need to
   verify-release
            check the signature of a release's checksums.txt (install.sh runs it)
   version  print the version (also --version and -v)
