@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -244,4 +245,23 @@ func TestHubKeepsTheHistoryAcrossARestart(t *testing.T) {
 	if got := count(h2); got != before {
 		t.Errorf("buckets after a restart = %d, want %d", got, before)
 	}
+}
+
+// #473: two flushes can overlap when a hub starts its timers again beside the
+// last flush of the old ones. They must not read and write the window of the
+// next 15-minute bucket at the same time (the race detector is the check).
+func TestHistoryWindowIsSafeWhenTwoWritesOverlap(t *testing.T) {
+	m, _ := testHistory(t, 48*time.Hour, 48*time.Hour)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range 100 {
+				// Errors are not the point (a busy database is fine).
+				_ = m.write(t.Context(), nil, historyT0.Unix()+int64(i)*15*60)
+			}
+		}()
+	}
+	wg.Wait()
 }
