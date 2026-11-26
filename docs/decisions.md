@@ -635,9 +635,9 @@ Not verified, and not decided: where the index is hosted, whether the plugin pol
 - **Expired and older indexes are refused**; the last good index is kept and offered while it has not expired (with the source shown as `error`), so a source that is down for a day does not empty the store. A source whose index expired offers nothing.
 - **Channel**: a source follows its own channel or the hub's update channel; versions the channel does not offer are left out, so a plugin with only alphas shows only on `alpha`. **Yanked** versions are listed (`yanked: true`, never `latest`, never compatible) so the page can say why.
 - **The same plugin id in two sources**: both are listed, with their `source`; the installed version is shown on the first source in the list that offers the id (the official one) until the installer records which source a plugin came from.
-- **The official index address is an assumption**: `https://stellatinus.github.io/Regulus-Plugins/index.json` (GitHub Pages). It has not been published, so on a real hub the official source shows `error` today.
+- **The official index address** is `https://stellatinus.github.io/Regulus-Plugins/index.json` (GitHub Pages). It was published on 2026-11-26 (an empty index, signed by `publish-index.yml` at `refs/heads/main`) and a real hub (v0.4.1-alpha.1) fetched it, verified the signature and showed the official source as verified with no plugin. Just after the first deploy GitHub's CDN kept answering 404 for a few minutes, so a hub that asked then showed `error`; a restart some minutes later was enough. An index that lists a plugin has not been read yet.
 
-Not verified: the signature check against a real signed index (none exists; the tests use a fake verifier, and `update.SigstoreVerifier` is tested on its own), the fetch against GitHub Pages, and the whole route on an installed hub.
+Verified since (2026-11-26): the signature check and the fetch against GitHub Pages, with a real signed index that lists no plugin. Not verified: an index that lists a plugin, and the whole route on an installed hub.
 
 ## The store backend, install, update and remove (2026-11-26)
 
