@@ -23,6 +23,7 @@ function mockHub(extra: Record<string, Handler> = {}) {
         "GET /api/account/two-factor": () => ({ data: { enabled: false, mandatory: false, policy: "off", recovery_codes_left: 0 } }),
         "GET /api/account/sessions": () => ({ data: [] }),
         "GET /api/plugins": () => ({ data: { hub: { enabled: false, plugins: [] }, agents: [] } }),
+        "GET /api/store": () => ({ data: { sources: [], plugins: [] } }),
         ...extra,
       };
       const { status = 200, data } = handlers[`${init?.method ?? "GET"} ${path}`]?.() ?? { status: 404, data: { error: "not found" } };
@@ -98,14 +99,14 @@ describe("Settings", () => {
 });
 
 describe("Services", () => {
-  it("shows the installed plugins and a store tab that says it is not built", async () => {
+  it("shows the installed plugins and a store tab that reads the catalog", async () => {
     window.location.hash = "#/plugins";
     const user = userEvent.setup();
     renderAs(<ServicesPage />);
     expect(await screen.findByRole("heading", { name: "Plugins" })).toBeInTheDocument();
     window.location.hash = "#/plugins/store";
     await user.click(screen.getByRole("link", { name: "Regulus Store" }));
-    expect(await screen.findByText("The store is not available yet")).toBeInTheDocument();
+    expect(await screen.findByText("No source is configured")).toBeInTheDocument();
   });
 
   it("says when plugins are switched off", () => {

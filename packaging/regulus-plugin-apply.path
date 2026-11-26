@@ -1,0 +1,14 @@
+[Unit]
+Description=Install, update or remove the plugin the hub asked for
+Documentation=https://github.com/Stellatinus/Regulus
+
+[Path]
+# The hub (an unprivileged user) leaves this file when an administrator installs,
+# updates or removes a plugin from the Store. It names a plugin, a version and
+# a source and nothing else: regulus-plugin-apply.service checks everything
+# itself (the signed index, the package, every file in it).
+PathExists=/var/lib/regulus/plugin-apply/request.json
+Unit=regulus-plugin-apply.service
+
+[Install]
+WantedBy=multi-user.target

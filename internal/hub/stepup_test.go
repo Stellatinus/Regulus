@@ -30,6 +30,9 @@ func TestFleetAndUpdateActionsNeedARecentProof(t *testing.T) {
 		{"PUT", "/api/updates/settings", map[string]string{"mode": "notify"}},
 		{"POST", "/api/updates/rollout", map[string]any{}},
 		{"POST", "/api/updates/apply", map[string]any{}},
+		{"POST", "/api/store/plugins/disks/install", map[string]any{}},
+		{"POST", "/api/store/plugins/disks/update", map[string]any{}},
+		{"DELETE", "/api/store/plugins/disks", struct{}{}},
 	}
 	for _, r := range routes {
 		rec := admin.do(r.method, r.path, r.body)

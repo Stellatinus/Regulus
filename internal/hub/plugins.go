@@ -56,6 +56,40 @@ func (h *Hub) startPlugins(ctx context.Context) (stop func()) {
 	if h.cfg.PluginsDir == "" {
 		return func() {}
 	}
+	h.pluginMu.Lock()
+	h.pluginCtx = ctx
+	h.pluginStop = h.launchPlugins(ctx)
+	h.pluginMu.Unlock()
+	return func() {
+		h.pluginMu.Lock()
+		stop := h.pluginStop
+		h.pluginStop = func() {}
+		h.pluginMu.Unlock()
+		stop()
+	}
+}
+
+// ReloadPlugins stops the hub's plugins and starts them again from the plugins
+// directory, so that what the store installed, updated or removed is seen: the
+// supervisor reads the directory once, when it starts. It does nothing while
+// plugins are off or the hub is not running.
+func (h *Hub) ReloadPlugins() {
+	if h.cfg.PluginsDir == "" {
+		return
+	}
+	h.pluginMu.Lock()
+	defer h.pluginMu.Unlock()
+	if h.pluginCtx == nil || h.pluginCtx.Err() != nil {
+		return
+	}
+	h.pluginStop()
+	h.pluginStop = h.launchPlugins(h.pluginCtx)
+	h.agents.events.publish(hubPluginsChanged)
+}
+
+// launchPlugins starts a supervisor on the plugins directory and returns the
+// function that stops it and waits until its plugins are gone.
+func (h *Hub) launchPlugins(ctx context.Context) (stop func()) {
 	sup := &plugin.Supervisor{
 		Dir:         h.cfg.PluginsDir,
 		RunDir:      filepath.Join(h.cfg.DataDir, "plugins-run"),

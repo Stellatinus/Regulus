@@ -54,7 +54,22 @@ Versions are compared as SemVer, with **one exception**: `<X.Y.Z` also leaves ou
 |---|---|---|
 | `agent` | `command`, `args` | A program started on every server whose agent runs plugins. |
 | `hub` | `command`, `args` | A program started on the hub. *The hub does not start plugins yet.* |
-| `ui` | `module` | A JavaScript module for the dashboard (#21). It is checked, never run. Must end in `.js`. |
+| `ui` | `module`, `node_tab` | A JavaScript module for the dashboard (#21). It is served to the dashboard and run in a sandboxed frame ([Runtime](runtime.md#the-page-of-a-plugin-in-the-dashboard-21-261)). Must end in `.js`, be **one self-contained file** (no `import` of other files: the frame has no session to fetch them with) and not contain `</script` or `<!--`. At most 2 MiB. |
+
+`node_tab` (optional) adds a tab to the node window that shows the module for the node:
+
+```yaml
+components:
+  ui:
+    module: ui/disks.js
+    node_tab:
+      id: disks          # lower-case letters, digits, single hyphens, 2 to 40
+      title:
+        en: Disks        # required, at most 24 characters
+        it: Dischi       # optional; English is shown when it is missing
+```
+
+A plugin has at most one tab. The tab is placed after **General**. Other keys under `node_tab` or `title` are refused. Adding it is compatible (an optional key), so `api` stays 1.
 
 `command` and `module` are paths **relative to the plugin directory and inside it**: no leading `/`, no `..`, no `\`, already clean (`bin/x`, not `./bin/x` or `bin//x`). When the plugin starts, symbolic links are followed and the result must still be inside the plugin directory and be an executable regular file. `args` are passed as they are; no shell is involved.
 

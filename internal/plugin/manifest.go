@@ -8,6 +8,8 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 
@@ -82,9 +84,31 @@ type Program struct {
 
 // UIModule is a dashboard component.
 type UIModule struct {
-	// Module is a JavaScript module, relative to the plugin directory.
+	// Module is a JavaScript module, relative to the plugin directory. It must
+	// be one self-contained file (no imports): see UIShell.
 	Module string `yaml:"module"`
+	// NodeTab, when set, adds a tab to the node window (#21) that shows this
+	// module for the node. A plugin has at most one.
+	NodeTab *NodeTab `yaml:"node_tab"`
 }
+
+// NodeTab declares a tab of the node window.
+type NodeTab struct {
+	// ID names the tab: lower-case letters, digits and single hyphens.
+	ID string `yaml:"id"`
+	// Title is the tab's label, English required and Italian optional (it
+	// falls back to English).
+	Title TabTitle `yaml:"title"`
+}
+
+// TabTitle is the label of a tab in each language the dashboard speaks.
+type TabTitle struct {
+	EN string `yaml:"en"`
+	IT string `yaml:"it"`
+}
+
+// maxTabTitle bounds a tab label, in characters: it sits in a row of tabs.
+const maxTabTitle = 24
 
 // Permission is one permission a plugin asks for.
 type Permission struct {
@@ -158,6 +182,11 @@ func (m Manifest) Validate() error {
 		if !strings.HasSuffix(c.UI.Module, ".js") {
 			return errors.New("components.ui.module must be a .js module")
 		}
+		if tab := c.UI.NodeTab; tab != nil {
+			if err := tab.validate(); err != nil {
+				return fmt.Errorf("components.ui.node_tab: %w", err)
+			}
+		}
 	}
 	seen := map[string]bool{}
 	for _, p := range m.Permissions {
@@ -173,6 +202,34 @@ func (m Manifest) Validate() error {
 		}
 	}
 	return nil
+}
+
+func (t NodeTab) validate() error {
+	if len(t.ID) < 2 || len(t.ID) > 40 || !idRE.MatchString(t.ID) {
+		return fmt.Errorf("id %q must be 2 to 40 lower-case letters, digits and single hyphens, starting with a letter", t.ID)
+	}
+	if strings.TrimSpace(t.Title.EN) == "" {
+		return errors.New("title.en must not be empty")
+	}
+	for lang, title := range map[string]string{"en": t.Title.EN, "it": t.Title.IT} {
+		if utf8.RuneCountInString(title) > maxTabTitle {
+			return fmt.Errorf("title.%s is longer than %d characters", lang, maxTabTitle)
+		}
+		for _, r := range title {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("title.%s must not contain control characters", lang)
+			}
+		}
+	}
+	return nil
+}
+
+// TitleFor returns the label in a language, falling back to English.
+func (t TabTitle) TitleFor(lang string) string {
+	if lang == "it" && strings.TrimSpace(t.IT) != "" {
+		return t.IT
+	}
+	return t.EN
 }
 
 // checkRelative accepts a path inside the plugin directory: relative, clean,

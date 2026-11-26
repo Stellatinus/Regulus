@@ -15,9 +15,10 @@ import { nodes } from "./messages/nodes.en";
 import { settings } from "./messages/settings.en";
 import { services } from "./messages/services.en";
 import { automations } from "./messages/automations.en";
+import { store } from "./messages/store.en";
 
-export const areas = { core, auth, servers, updates, users, account, plugins, nodes, settings, services, automations } as const;
+export const areas = { core, auth, servers, updates, users, account, plugins, nodes, settings, services, automations, store } as const;
 
-export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account, ...plugins, ...nodes, ...settings, ...services, ...automations } as const;
+export const en = { ...core, ...auth, ...servers, ...updates, ...users, ...account, ...plugins, ...nodes, ...settings, ...services, ...automations, ...store } as const;
 
 export type MessageKey = keyof typeof en;

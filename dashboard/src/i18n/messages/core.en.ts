@@ -145,4 +145,12 @@ export const core = {
   "hub.error.name_too_long": "The name can have at most {max} characters.",
   "hub.error.name_control_chars": "The name cannot contain control characters.",
   "hub.error.token_ttl_range": "The lifetime of a token must be between {min} and {max}.",
+  "hub.error.plugin_not_found": "That plugin is not installed.",
+  "hub.error.plugin_no_ui": "That plugin has no page for the dashboard.",
+  "hub.error.plugin_unsafe_module": "The plugin's page cannot be shown: its code could break out of its frame.",
+  "hub.error.plugin_op_unknown": "The plugin asked for something Regulus does not offer to plugins.",
+  "hub.error.plugin_permission_not_requested": "The plugin did not ask for the permission this needs.",
+  "hub.error.plugin_forbidden": "You do not have the permission this needs.",
+  "hub.error.plugin_bad_params": "The plugin sent parameters that are not valid.",
+  "hub.error.plugin_op_unavailable": "This data is not available on this hub.",
 } as const;

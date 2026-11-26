@@ -94,6 +94,9 @@ export class ApiError extends Error {
   // The catalog text of message, when the dashboard wrote it (not the hub).
   readonly messageKey?: MessageKey;
   readonly messageParams?: Record<string, string | number>;
+  // The `args` of the hub's answer, such as the helper's own code of a store
+  // action that failed (args.helper_code).
+  readonly args?: Record<string, string | number>;
 
   constructor(
     status: number,
@@ -101,6 +104,7 @@ export class ApiError extends Error {
     code?: string,
     retryAfter?: number,
     text?: { key: MessageKey; params?: Record<string, string | number> },
+    args?: Record<string, string | number>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -109,6 +113,7 @@ export class ApiError extends Error {
     this.retryAfter = retryAfter;
     this.messageKey = text?.key;
     this.messageParams = text?.params;
+    this.args = args;
   }
 }
 
@@ -120,6 +125,7 @@ function genericError(
   params: Record<string, string | number>,
   code?: string,
   retryAfter?: number,
+  args?: Record<string, string | number>,
 ): ApiError {
   return new ApiError(
     status,
@@ -127,6 +133,7 @@ function genericError(
     code,
     retryAfter,
     { key, params },
+    args,
   );
 }
 
@@ -146,6 +153,14 @@ export function apiErrorText(
 // errorCodes) that have a text of their own in the catalogs, "hub.error.<code>"
 // (#330). Any other answer shows the hub's English text.
 const HUB_ERROR_CODES = new Set([
+  "plugin_not_found",
+  "plugin_no_ui",
+  "plugin_unsafe_module",
+  "plugin_op_unknown",
+  "plugin_permission_not_requested",
+  "plugin_forbidden",
+  "plugin_bad_params",
+  "plugin_op_unavailable",
   "step_up_not_available_to_tokens",
   "not_available_to_tokens",
   "invalid_token",
@@ -347,9 +362,9 @@ async function request<T>(
     }
     const key = hubErrorKey(code);
     if (key !== undefined)
-      throw genericError(res.status, key, args ?? {}, code, retryAfter);
+      throw genericError(res.status, key, args ?? {}, code, retryAfter, args);
     if (hubMessage !== undefined)
-      throw new ApiError(res.status, hubMessage, code, retryAfter);
+      throw new ApiError(res.status, hubMessage, code, retryAfter, undefined, args);
     throw genericError(
       res.status,
       "request.failed",
@@ -1098,3 +1113,100 @@ export const fetchDiskMoves = (limit = 200, signal?: AbortSignal) =>
 
 export const fetchPlugins = (signal?: AbortSignal) =>
   request<PluginsStatus>("GET", "/api/plugins", undefined, signal);
+
+// The plugin store (GET /api/store, docs/plugins/store.md in Regulus). The hub
+// reads the signed indexes of its sources; the dashboard only shows them.
+export interface StoreSource {
+  name: string;
+  trust: string;
+  state: "ok" | "error" | "expired";
+  error?: string;
+  issued_at?: string;
+  expires?: string;
+}
+
+export interface StorePermission {
+  id: string;
+  description: string;
+}
+
+export interface StoreVersion {
+  version: string;
+  channel: "stable" | "beta" | "alpha";
+  released_at?: string;
+  compatible: boolean;
+  incompatible_reason?: string;
+  permissions?: StorePermission[];
+  provides?: string[];
+  needs?: Array<string | { capability: string; optional?: boolean }>;
+  yanked: boolean;
+}
+
+export interface StorePlugin {
+  id: string;
+  name: string;
+  description?: string;
+  source: string;
+  homepage?: string;
+  kind?: string;
+  audience?: string;
+  installed: { version: string } | null;
+  latest: string | null;
+  versions: StoreVersion[];
+}
+
+export interface StoreCatalog {
+  sources: StoreSource[];
+  plugins: StorePlugin[];
+}
+
+export const fetchStore = (signal?: AbortSignal) =>
+  request<StoreCatalog>("GET", "/api/store", undefined, signal);
+
+// What the hub answers when a store action worked (install, update, remove).
+export interface StoreActionResult {
+  plugin: string;
+  action: "install" | "update" | "remove";
+  version?: string;
+  from?: string;
+  source?: string;
+}
+
+// The lifecycle of a plugin (internal/store, run by the root helper). Each call
+// waits for the helper, up to two minutes. They need plugins.manage and a recent
+// proof of the password (the API client asks for it, see StepUp.tsx). The hub
+// requires a JSON body on POST, so an empty one is sent as {}.
+export const installStorePlugin = (id: string, opts: { version?: string; source?: string } = {}) =>
+  request<StoreActionResult>("POST", `/api/store/plugins/${encodeURIComponent(id)}/install`, opts);
+
+export const updateStorePlugin = (id: string, version?: string) =>
+  request<StoreActionResult>("POST", `/api/store/plugins/${encodeURIComponent(id)}/update`, version ? { version } : {});
+
+export const removeStorePlugin = (id: string) =>
+  request<StoreActionResult>("DELETE", `/api/store/plugins/${encodeURIComponent(id)}`);
+
+// PLUGINS_CHANGED_EVENT is sent on the window when an install, update or removal
+// worked, so what draws plugins (the tabs of the node window) reads them again
+// without a page reload.
+export const PLUGINS_CHANGED_EVENT = "regulus:plugins-changed";
+export const notifyPluginsChanged = () => window.dispatchEvent(new Event(PLUGINS_CHANGED_EVENT));
+
+// A plugin that has a page in the dashboard (GET /api/plugins/ui, #21). node_tab
+// is set when the plugin adds a tab to the node window.
+export interface PluginUI {
+  id: string;
+  version: string;
+  module: string;
+  node_tab?: { id: string; title: { en: string; it: string } };
+  permissions: string[];
+}
+
+export const fetchPluginUIs = (signal?: AbortSignal) =>
+  request<{ plugins: PluginUI[] }>("GET", "/api/plugins/ui", undefined, signal).then((r) => r.plugins);
+
+// callPluginOp is the read door of a plugin's page (POST /api/plugins/{id}/call,
+// #261): the dashboard makes the call on behalf of the plugin's frame. The hub
+// answers with the same JSON as the route behind the operation, or an error
+// with a code (ApiError.code).
+export const callPluginOp = (id: string, op: string, params?: unknown) =>
+  request<unknown>("POST", `/api/plugins/${encodeURIComponent(id)}/call`, { op, params });

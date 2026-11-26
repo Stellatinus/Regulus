@@ -1,0 +1,37 @@
+[Unit]
+Description=Install, update or remove a Regulus plugin (checks the signed index and the package again)
+Documentation=https://github.com/Stellatinus/Regulus
+# Started by regulus-plugin-apply.path; not meant to be enabled.
+
+[Service]
+Type=oneshot
+# Root: the plugins directory must belong to root, because whatever is in it
+# runs as the hub's user. It trusts nothing in /var/lib/regulus, which the hub's
+# user can write: the Sigstore signature of the index and the checksum of the
+# package are verified again here.
+ExecStart=/usr/bin/regulus plugin-apply --data-dir /var/lib/regulus --state-dir /var/lib/regulus-update --plugins-dir /usr/local/lib/regulus/plugins --config /etc/regulus/config.yaml
+TimeoutStartSec=10min
+# Shared with the update helper: the lock, and the cache of the signature trust.
+StateDirectory=regulus-update
+StateDirectoryMode=0700
+# No UMask=0077 here: what is installed must be readable by the hub's user.
+
+NoNewPrivileges=true
+ProtectSystem=strict
+# plugins_dir when it is not the default: add a drop-in with another
+# ReadWritePaths= (docs/plugins/store.md).
+ReadWritePaths=/usr/local/lib/regulus /var/lib/regulus
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native

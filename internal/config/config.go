@@ -22,6 +22,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/CodexCircle/Regulus/internal/storage"
+	"github.com/CodexCircle/Regulus/internal/store"
 )
 
 // Config is the complete hub configuration.
@@ -73,12 +74,16 @@ type Config struct {
 	// PluginsDir, when set, is the directory of the plugins the hub runs, each
 	// as its own process with the role hub (docs/plugins/runtime.md). Empty:
 	// no plugin is run.
-	PluginsDir string     `yaml:"plugins_dir"`
-	Database   Database   `yaml:"database"`
-	Log        Log        `yaml:"log"`
-	Console    Console    `yaml:"console"`
-	Updates    Updates    `yaml:"updates"`
-	Prometheus Prometheus `yaml:"prometheus"`
+	PluginsDir string `yaml:"plugins_dir"`
+	// PluginSources are the plugin sources besides the official one, which is
+	// built in (docs/plugins/store.md, "Other sources and trust"). Each must
+	// pin the identity that signs its index.
+	PluginSources []store.Source `yaml:"plugin_sources"`
+	Database      Database       `yaml:"database"`
+	Log           Log            `yaml:"log"`
+	Console       Console        `yaml:"console"`
+	Updates       Updates        `yaml:"updates"`
+	Prometheus    Prometheus     `yaml:"prometheus"`
 }
 
 // MinMetricsTokenLength is the shortest accepted prometheus.token: the token is
@@ -231,6 +236,9 @@ func (c Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		return errors.New("data_dir must not be empty")
+	}
+	if err := store.ValidateSources(c.PluginSources); err != nil {
+		return err
 	}
 	if _, err := ParseTrustedProxies(c.TrustedProxies); err != nil {
 		return err

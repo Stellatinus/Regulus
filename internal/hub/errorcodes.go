@@ -110,6 +110,7 @@ func allErrorCodes() []string {
 		codeLayoutsUnavailable, codeLayoutTooLarge, codeLayoutRequired, codeStreamUnavailable, codeTooManyStreams,
 		codeUpstream, "rollout_wave_size", "name_too_long", "name_control_chars", "token_ttl_range",
 	}
+	codes = append(codes, pluginUICodes()...)
 	codes = append(codes, update.SettingsErrorCodes...)
 	for _, c := range errorCodes {
 		codes = append(codes, c.code)

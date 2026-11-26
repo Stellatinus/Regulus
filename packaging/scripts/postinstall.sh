@@ -82,6 +82,13 @@ systemctl daemon-reload || true
 if systemctl is-enabled --quiet regulus-update.path 2>/dev/null || systemctl is-enabled --quiet regulus-agent-update.path 2>/dev/null; then
 	systemctl enable regulus-update-recover.service regulus-update-confirm.service || true
 fi
+# The plugin store's helper, on a hub that installs its updates from the
+# dashboard (plugins are installed on hubs only). The plugins directory belongs
+# to root: whatever is in it runs as the hub's user.
+if systemctl is-enabled --quiet regulus-update.path 2>/dev/null; then
+	install -d -m 0755 -o root -g root /usr/local/lib/regulus /usr/local/lib/regulus/plugins || true
+	systemctl enable --now regulus-plugin-apply.path || true
+fi
 if [ "$fresh" = true ] && [ "$role" = agent ]; then
 	echo "Regulus agent is installed; the installer enrolls it and starts the service."
 elif [ "$fresh" = true ]; then

@@ -19,6 +19,7 @@ fi
 if [ -d /run/systemd/system ]; then
 	systemctl disable --now regulus-update.path || true
 	systemctl disable --now regulus-agent-update.path || true
+	systemctl disable --now regulus-plugin-apply.path || true
 	systemctl disable regulus-update-recover.service regulus-update-confirm.service || true
 	systemctl disable --now regulus.service || true
 	systemctl disable --now regulus-agent.service || true

@@ -102,7 +102,7 @@ if [ "$real" = true ]; then
 	contents=$(dpkg-deb -c "$pkg")
 	for f in usr/bin/regulus usr/lib/systemd/system/regulus.service usr/lib/systemd/system/regulus-agent.service \
 		usr/lib/systemd/system/regulus-update.path usr/lib/systemd/system/regulus-update.service \
-		usr/lib/systemd/system/regulus-update-recover.service usr/lib/regulus/update-recover etc/regulus/config.yaml; do
+		usr/lib/systemd/system/regulus-update-recover.service usr/lib/systemd/system/regulus-plugin-apply.path usr/lib/systemd/system/regulus-plugin-apply.service usr/lib/regulus/update-recover etc/regulus/config.yaml; do
 		case "$contents" in *" ./$f"*) ok "the package carries $f" ;; *) fail "the package carries $f" ;; esac
 	done
 	case "$(printf '%s\n' "$contents" | grep ' ./etc/regulus/config.yaml$')" in
@@ -118,6 +118,7 @@ check "the group regulus exists" getent group regulus
 equal "config.yaml mode and owner" "$(mode_of $cfg/config.yaml)" "640 root:regulus"
 check "the executable is installed" test -x /usr/bin/regulus
 check "the update units are installed" test -f /usr/lib/systemd/system/regulus-update.path
+check "the plugin store's helper units are installed" test -f /usr/lib/systemd/system/regulus-plugin-apply.path
 
 # --- reinstall keeps an edited configuration, and keeps the loopback default
 echo '# edited by the administrator' >>$cfg/config.yaml

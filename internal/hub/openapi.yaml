@@ -886,6 +886,254 @@ paths:
               schema: { $ref: "#/components/schemas/Plugins" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/plugins/ui:
+    get:
+      tags: [plugins]
+      summary: The installed plugins that have a page in the dashboard (any logged-in user)
+      description: |
+        The plugins of `plugins_dir` that have a `components.ui` module, by id,
+        with the tab they add to the node window (`node_tab`, in English and
+        Italian: a missing Italian title is the English one), the version that is
+        installed (`<id>/current` when it exists) and the permissions their
+        manifest requests. A directory that is not a usable plugin is left out.
+        The list is empty, never null, without a plugins directory. See
+        docs/plugins/runtime.md.
+      responses:
+        "200":
+          description: The plugins with a page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [plugins]
+                properties:
+                  plugins:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, version, module, permissions]
+                      properties:
+                        id: { type: string }
+                        version: { type: string }
+                        module: { type: string }
+                        permissions: { type: array, items: { type: string } }
+                        node_tab:
+                          type: object
+                          required: [id, title]
+                          properties:
+                            id: { type: string }
+                            title:
+                              type: object
+                              required: [en, it]
+                              properties: { en: { type: string }, it: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/plugins/{id}/ui:
+    get:
+      tags: [plugins]
+      summary: The page of a plugin, for a sandboxed frame (any logged-in user)
+      description: |
+        One HTML page with the plugin's module inlined, sent with its own
+        `Content-Security-Policy` (`sandbox allow-scripts`, `default-src 'none'`,
+        the two inline scripts allowed by hash, `connect-src 'none'`,
+        `frame-ancestors 'self'`) and `X-Frame-Options: SAMEORIGIN`. The dashboard
+        puts it in an `<iframe sandbox="allow-scripts">` without
+        `allow-same-origin`. A module that contains `</script` or `<!--` is
+        refused with 422 `plugin_unsafe_module`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The page.
+          content:
+            text/html: { schema: { type: string } }
+        "404":
+          description: Not installed, or no ui module (`plugin_not_found`, `plugin_no_ui`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: The module cannot be shown (`plugin_unsafe_module`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/plugins/{id}/module:
+    get:
+      tags: [plugins]
+      summary: The module file of a plugin (any logged-in user)
+      description: |
+        The file named by `components.ui.module`, as `text/javascript`, with the
+        policy of an empty origin and no network. Nothing else of the plugin is
+        served.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The module.
+          content:
+            text/javascript: { schema: { type: string } }
+        "404":
+          description: Not installed, or no ui module.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/plugins/{id}/call:
+    post:
+      tags: [plugins]
+      summary: The read door of a plugin's page (the plugin must request the permission and the person must hold the core one)
+      description: |
+        Runs one operation of a fixed list in the core, read-only: `inventory.disks`
+        (`{"node": "<agent id>"}`, answers like `GET /api/agents/{id}/disks`) and
+        `inventory.disk_moves` (`{"limit": 1..1000}`, optional, answers like
+        `GET /api/disks/moves`). The checks, in order: the plugin is installed
+        and has a ui (404 `plugin_not_found`); the operation is in the list (404
+        `plugin_op_unknown`); the plugin's manifest requests `<id>.read` (403
+        `plugin_permission_not_requested`); the logged-in person holds the core
+        permission behind it, `inventory.read` (403 `plugin_forbidden`);
+        the parameters are valid (400 `plugin_bad_params`). Both permissions are
+        needed: the narrower wins. The plugin's permissions are what its manifest
+        REQUESTS: an administrator does not approve them on install yet (#61).
+        The dashboard calls this on behalf of the plugin's frame; the frame has
+        no session of its own.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [op]
+              properties:
+                op: { type: string, enum: [inventory.disks, inventory.disk_moves] }
+                params: { type: object }
+      responses:
+        "200":
+          description: The answer of the route behind the operation.
+          content:
+            application/json:
+              schema: { type: object }
+        "400": { description: "Invalid JSON or parameters.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: "Unknown plugin or operation.", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/store:
+    get:
+      tags: [plugins]
+      summary: The plugin store - the sources and the plugins they offer (needs plugins.manage)
+      description: |
+        Reads the signed index of every source (the official one, regulus-plugins,
+        and the `plugin_sources` of the configuration) and answers what this hub
+        can install. An index is offered only when its Sigstore signature matches
+        the identity pinned for the source; a source that cannot be read, or whose
+        index has expired, is listed with its `state` and `error`, and an expired
+        one offers nothing. A version a source's channel does not offer is left
+        out; a version this hub cannot run is listed with `compatible: false` and
+        the reason. `latest` is the newest compatible, not yanked version, or null.
+        `installed` is the version on disk (not what the supervisor runs: a plugin
+        with only a ui component never runs) and only for the source it was
+        installed from, or null. Nothing here installs anything; see
+        `/api/store/plugins/{id}/install`. See docs/plugins/store.md.
+      responses:
+        "200":
+          description: The store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Store" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/store/plugins/{id}/install:
+    post:
+      tags: [plugins]
+      summary: Install a plugin from a source (needs plugins.manage and a recent proof of the password)
+      description: |
+        Installs a plugin that is not installed. The hub picks the version (the
+        newest one that is offered on the channel, compatible and not yanked,
+        unless `version` is given) and the source (the only one that offers the
+        plugin, unless `source` is given), downloads the package, checks its size
+        and SHA-256 against the signed index, stages it and asks the root helper
+        (`regulus plugin-apply`, started by systemd), which verifies the
+        signature of the index and the package again, unpacks it under
+        `plugins_dir/<id>/<version>/` and switches `plugins_dir/<id>/current`.
+        The request waits for the helper (up to two minutes) and answers when it
+        is done. A refusal has a stable `code`, see `StoreError`. Plugins must be
+        on (`plugins_dir`) and the helper unit enabled. Recorded in the audit log.
+        See docs/plugins/store.md.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreInstallRequest" }
+      responses:
+        "200":
+          description: Installed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
+        "400": { $ref: "#/components/responses/StoreRefused" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "422": { $ref: "#/components/responses/StoreRefused" }
+        "502": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
+  /api/store/plugins/{id}/update:
+    post:
+      tags: [plugins]
+      summary: Update an installed plugin (needs plugins.manage and a recent proof of the password)
+      description: |
+        Installs a newer version of an installed plugin, from the source it was
+        installed from and no other (`409` `no_source` for a plugin put in the
+        plugins directory by hand). The newest offered version is used unless
+        `version` is given; `409` `up_to_date` when there is nothing newer. The
+        previous version stays on disk. Same steps and answers as install.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StoreUpdateRequest" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
+        "400": { $ref: "#/components/responses/StoreRefused" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "422": { $ref: "#/components/responses/StoreRefused" }
+        "502": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
+  /api/store/plugins/{id}:
+    delete:
+      tags: [plugins]
+      summary: Remove an installed plugin (needs plugins.manage and a recent proof of the password)
+      description: |
+        Removes the plugin's directory with every version kept (through the root
+        helper). Its data directory is left, so installing it again finds its
+        state. `404` `not_installed` when it is not. Nothing checks yet whether
+        another plugin needs it (requirements are not built).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StoreOutcome" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/StoreRefused" }
+        "409": { $ref: "#/components/responses/StoreRefused" }
+        "504": { $ref: "#/components/responses/StoreRefused" }
   /api/stream:
     get:
       tags: [agents]
@@ -1667,6 +1915,11 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    StoreRefused:
+      description: The store refused; see the code.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/StoreError" }
     Unauthorized:
       description: No valid session.
       content:
@@ -1860,6 +2113,42 @@ components:
         message: { type: string }
         requested_by: { type: string }
         at: { type: string, format: date-time }
+    StoreInstallRequest:
+      type: object
+      description: Both fields are optional; an empty body is the same as {}.
+      properties:
+        version: { type: string, description: "A version offered by the source; default the newest compatible one." }
+        source: { type: string, description: "The source to install from; default the only one that offers the plugin." }
+    StoreUpdateRequest:
+      type: object
+      properties:
+        version: { type: string }
+    StoreOutcome:
+      type: object
+      required: [plugin, action]
+      properties:
+        plugin: { type: string }
+        action: { type: string, enum: [install, remove] }
+        version: { type: string, description: The version now current (not for a removal). }
+        from: { type: string, description: The version that was current before, if any. }
+        source: { type: string }
+    StoreError:
+      type: object
+      required: [error, code]
+      properties:
+        error: { type: string, description: English text. }
+        code:
+          type: string
+          description: |
+            Stable code: `plugin_not_found`, `source_ambiguous`, `source_unknown`,
+            `source_unavailable`, `version_not_offered`, `no_compatible_version`,
+            `already_installed`, `not_installed`, `no_source`, `up_to_date`,
+            `plugins_off`, `busy`, `download_failed`, `helper_timeout`,
+            `helper_failed`.
+        args:
+          type: object
+          description: For `helper_failed`, `helper_code` is the root helper's own code (`not_verified`, `incompatible`, `yanked`, `checksum`, `unsafe_package`, `bad_manifest`, `already_installed`, `not_installed`, `source_mismatch`, `hand_installed`, `plugins_dir`, `bad_request`, `unknown_source`, `internal`).
+          additionalProperties: true
     Error:
       type: object
       required: [error]
@@ -2036,6 +2325,65 @@ components:
               plugins:
                 type: array
                 items: { $ref: "#/components/schemas/Plugin" }
+    Store:
+      type: object
+      required: [sources, plugins]
+      properties:
+        sources:
+          type: array
+          items:
+            type: object
+            required: [name, trust, state]
+            properties:
+              name: { type: string }
+              trust: { type: string, enum: [official, custom] }
+              state: { type: string, enum: [ok, error, expired] }
+              error: { type: string, description: "Why the source could not be read or has expired; its last good index may still be offered while state is error" }
+              issued_at: { type: string, format: date-time }
+              expires: { type: string, format: date-time }
+        plugins:
+          type: array
+          items:
+            type: object
+            required: [id, name, description, source, homepage, audience, installed, latest, versions]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              source: { type: string }
+              homepage: { type: string }
+              kind: { type: string, description: "manager, integration or feature; absent when the index does not say" }
+              audience: { type: string, description: "admin (the default) or everyone: a hint for the dashboard, not a security boundary" }
+              installed:
+                type: [object, "null"]
+                properties: { version: { type: string } }
+              latest: { type: [string, "null"] }
+              versions:
+                type: array
+                description: Newest first.
+                items:
+                  type: object
+                  required: [version, channel, released_at, compatible, permissions, provides, needs, yanked]
+                  properties:
+                    version: { type: string }
+                    channel: { type: string, enum: [stable, beta, alpha] }
+                    released_at: { type: string }
+                    compatible: { type: boolean }
+                    incompatible_reason: { type: string }
+                    permissions:
+                      type: array
+                      items:
+                        type: object
+                        required: [id, description]
+                        properties: { id: { type: string }, description: { type: string } }
+                    provides: { type: array, items: { type: string } }
+                    needs:
+                      type: array
+                      items:
+                        type: object
+                        required: [capability]
+                        properties: { capability: { type: string }, optional: { type: boolean } }
+                    yanked: { type: boolean }
     Plugin:
       type: object
       required: [id, version, state, restarts]

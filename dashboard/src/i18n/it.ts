@@ -10,10 +10,11 @@ import { nodesIt } from "./messages/nodes.it";
 import { settingsIt } from "./messages/settings.it";
 import { servicesIt } from "./messages/services.it";
 import { automationsIt } from "./messages/automations.it";
+import { storeIt } from "./messages/store.it";
 
 // The Italian texts, typed on the English keys, so a missing text does not
 // compile. Technical words Italian users also say in English (hub, widget,
 // dashboard) stay in English; see the glossary.
-export const itAreas = { coreIt, authIt, serversIt, updatesIt, usersIt, accountIt, pluginsIt, nodesIt, settingsIt, servicesIt, automationsIt } as const;
+export const itAreas = { coreIt, authIt, serversIt, updatesIt, usersIt, accountIt, pluginsIt, nodesIt, settingsIt, servicesIt, automationsIt, storeIt } as const;
 
-export const it: Record<MessageKey, string> = { ...coreIt, ...authIt, ...serversIt, ...updatesIt, ...usersIt, ...accountIt, ...pluginsIt, ...nodesIt, ...settingsIt, ...servicesIt, ...automationsIt };
+export const it: Record<MessageKey, string> = { ...coreIt, ...authIt, ...serversIt, ...updatesIt, ...usersIt, ...accountIt, ...pluginsIt, ...nodesIt, ...settingsIt, ...servicesIt, ...automationsIt, ...storeIt };

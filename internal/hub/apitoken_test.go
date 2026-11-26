@@ -45,7 +45,7 @@ func TestAPITokenReadsAndIsRefusedOnEveryStepUpRoute(t *testing.T) {
 	}
 
 	// The widest token a user can make: it still cannot pass a step-up.
-	wide := token(auth.PermServersRead, auth.PermServersManage, auth.PermCoreUpdate)
+	wide := token(auth.PermServersRead, auth.PermServersManage, auth.PermCoreUpdate, auth.PermPluginsManage)
 	for _, r := range []struct {
 		method, path string
 		body         any
@@ -56,6 +56,9 @@ func TestAPITokenReadsAndIsRefusedOnEveryStepUpRoute(t *testing.T) {
 		{"PUT", "/api/updates/settings", map[string]string{"mode": "notify"}},
 		{"POST", "/api/updates/rollout", map[string]any{}},
 		{"POST", "/api/updates/apply", map[string]any{}},
+		{"POST", "/api/store/plugins/disks/install", map[string]any{}},
+		{"POST", "/api/store/plugins/disks/update", map[string]any{}},
+		{"DELETE", "/api/store/plugins/disks", struct{}{}},
 	} {
 		rec := call(wide, r.method, r.path, r.body)
 		var body struct {

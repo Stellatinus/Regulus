@@ -306,6 +306,43 @@ type disksJSON struct {
 	Disks []DiskRecord `json:"disks"`
 }
 
+type disksMovesJSON struct {
+	Moves []DiskMove `json:"moves"`
+}
+
+// agentDisksBody is the answer of GET /api/agents/{id}/disks. The route and
+// the plugin bridge (pluginui.go) both use it, so they cannot differ.
+func agentDisksBody(ctx context.Context, src DiskSource, id string) (disksJSON, error) {
+	disks, err := src.AgentDisks(ctx, id)
+	if err != nil {
+		return disksJSON{}, err
+	}
+	return disksJSON{Agent: id, Disks: disks}, nil
+}
+
+// diskMovesLimit reads the limit of GET /api/disks/moves: empty is 100, and
+// it must be an integer from 1 to 1000.
+func diskMovesLimit(v string) (int, error) {
+	if v == "" {
+		return 100, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > 1000 {
+		return 0, errors.New("limit must be an integer from 1 to 1000")
+	}
+	return n, nil
+}
+
+// diskMovesBody is the answer of GET /api/disks/moves, shared like
+// agentDisksBody.
+func diskMovesBody(ctx context.Context, src DiskSource, limit int) (disksMovesJSON, error) {
+	moves, err := src.DiskMoves(ctx, limit)
+	if err != nil {
+		return disksMovesJSON{}, err
+	}
+	return disksMovesJSON{Moves: moves}, nil
+}
+
 // agentDisksHandler serves GET /api/agents/{id}/disks. The serial numbers
 // identify hardware, so the route needs inventory.read, not servers.read.
 func agentDisksHandler(src DiskSource) http.HandlerFunc {
@@ -314,15 +351,14 @@ func agentDisksHandler(src DiskSource) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		id := r.PathValue("id")
-		disks, err := src.AgentDisks(r.Context(), id)
+		body, err := agentDisksBody(r.Context(), src, r.PathValue("id"))
 		if err != nil {
 			http.Error(w, "could not read the disks", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(disksJSON{Agent: id, Disks: disks})
+		_ = json.NewEncoder(w).Encode(body)
 	}
 }
 
@@ -333,24 +369,18 @@ func diskMovesHandler(src DiskSource) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		limit := 100
-		if v := r.URL.Query().Get("limit"); v != "" {
-			n, err := strconv.Atoi(v)
-			if err != nil || n < 1 || n > 1000 {
-				http.Error(w, "limit must be an integer from 1 to 1000", http.StatusBadRequest)
-				return
-			}
-			limit = n
+		limit, err := diskMovesLimit(r.URL.Query().Get("limit"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
-		moves, err := src.DiskMoves(r.Context(), limit)
+		body, err := diskMovesBody(r.Context(), src, limit)
 		if err != nil {
 			http.Error(w, "could not read the moves", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(struct {
-			Moves []DiskMove `json:"moves"`
-		}{moves})
+		_ = json.NewEncoder(w).Encode(body)
 	}
 }

@@ -29,6 +29,9 @@ const (
 	// PermTokensManage lists and revokes anyone's (#406).
 	PermTokensCreate = "tokens.create"
 	PermTokensManage = "tokens.manage"
+	// PermPluginsManage: the plugin store. Installing a plugin puts code on the
+	// servers, so it is not given to roles by default (admin has everything).
+	PermPluginsManage = "plugins.manage"
 )
 
 var catalogue = []Permission{
@@ -41,6 +44,7 @@ var catalogue = []Permission{
 	{PermInventoryRead, "See the hardware inventory: the disks of the servers with their serial numbers, and where a disk moved"},
 	{PermTokensCreate, "Make, list and revoke their own API tokens"},
 	{PermTokensManage, "List and revoke anybody's API tokens, and make tokens that never expire"},
+	{PermPluginsManage, "See the plugin store, and install, update and remove plugins"},
 	{PermCoreUpdate, "See the updates of Regulus, check for them, download them and choose the update mode and channel"},
 }
 

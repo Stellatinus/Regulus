@@ -836,6 +836,10 @@ write_settings() {
 	fi
 	[ "$builtin_agent" = default ] || set_env_value REGULUS_BUILTIN_AGENT "$builtin_agent"
 	[ "$self_update" != 1 ] || set_env_value REGULUS_UPDATES_APPLY true
+	# A hub that installs its own updates also lets the Store install plugins
+	# (the root helper, regulus-plugin-apply): plugins_dir is the empty
+	# directory the helper writes. Plugins are installed on hubs only.
+	{ [ "$self_update" != 1 ] || [ "$role" = agent ]; } || set_env_value REGULUS_PLUGINS_DIR /usr/local/lib/regulus/plugins
 	[ "$write_db" = 0 ] || write_database_settings
 	$SUDO install -m 0640 "$tmp_env" "$CONFIG_DIR/regulus.env"
 	rm -f "$tmp_env" "$tmp_env.new"
@@ -865,6 +869,12 @@ enable_self_update() {
 	unit=regulus-update.path
 	[ "$role" != agent ] || unit=regulus-agent-update.path
 	$SUDO systemctl enable --now "$unit" || warn "could not enable $unit: updates from the hub will not install until it is enabled"
+	# The plugin store's helper (install, update, remove a plugin): hubs only,
+	# plugins are not installed on other machines.
+	if [ "$role" != agent ]; then
+		$SUDO install -d -m 0755 /usr/local/lib/regulus /usr/local/lib/regulus/plugins || true
+		$SUDO systemctl enable --now regulus-plugin-apply.path || warn "could not enable regulus-plugin-apply.path: plugins from the Store will not install until it is enabled"
+	fi
 	# They only do something when the machine starts with an update unsettled
 	# (a power cut in the middle of one): the first puts things right before
 	# Regulus starts, the second checks the new version once it has started.

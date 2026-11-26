@@ -55,3 +55,84 @@ func TestDiscoverWithoutADirectory(t *testing.T) {
 		t.Errorf("%v %v %v", found, problems, err)
 	}
 }
+
+// The layout the store creates: <id>/<version>/ and <id>/current -> <version>.
+func TestDiscoverFollowsCurrentOfTheStoreLayout(t *testing.T) {
+	root := t.TempDir()
+	good := strings.ReplaceAll(goodManifest, "version: 0.3.1", "version: 0.3.1")
+	pdir := filepath.Join(root, "docker")
+	writeManifest(t, filepath.Join(pdir, "0.3.1"), good)
+	writeManifest(t, filepath.Join(pdir, "0.2.0"), strings.ReplaceAll(good, "0.3.1", "0.2.0"))
+	if err := os.Symlink("0.3.1", filepath.Join(pdir, CurrentName)); err != nil {
+		t.Fatal(err)
+	}
+	found, problems, err := Discover(root)
+	if err != nil || len(problems) != 0 || len(found) != 1 {
+		t.Fatalf("%+v %v %v", found, problems, err)
+	}
+	if f := found[0]; !f.Versioned || f.Dir != filepath.Join(pdir, "0.3.1") || f.Manifest.Version != "0.3.1" {
+		t.Fatalf("found = %+v", f)
+	}
+	if err := WriteSourceRecord(pdir, SourceRecord{Source: "regulus-plugins", Version: "0.3.1"}); err != nil {
+		t.Fatal(err)
+	}
+	if in := ListInstalled(root); len(in) != 1 || in[0].Source != "regulus-plugins" || in[0].Version != "0.3.1" {
+		t.Fatalf("installed = %+v", in)
+	}
+	// A record for another version says nothing about the one that runs.
+	_ = WriteSourceRecord(pdir, SourceRecord{Source: "regulus-plugins", Version: "0.2.0"})
+	if in := ListInstalled(root); in[0].Source != "" {
+		t.Fatalf("a stale record was used: %+v", in)
+	}
+}
+
+func TestDiscoverRefusesACurrentThatLeadsAway(t *testing.T) {
+	outside := t.TempDir()
+	writeManifest(t, outside, goodManifest)
+	for name, target := range map[string]string{
+		"absolute":   outside,
+		"parent":     "../elsewhere",
+		"nested":     "0.3.1/sub",
+		"dot":        ".",
+		"hidden":     ".git",
+		"missing":    "9.9.9",
+		"to a file":  "plugin-file",
+		"empty name": "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			pdir := filepath.Join(root, "docker")
+			writeManifest(t, filepath.Join(pdir, "0.3.1"), goodManifest)
+			_ = os.WriteFile(filepath.Join(pdir, "plugin-file"), []byte("x"), 0o644)
+			if target == "" {
+				if err := os.WriteFile(filepath.Join(pdir, CurrentName), nil, 0o644); err != nil { // not a link at all
+					t.Fatal(err)
+				}
+			} else if err := os.Symlink(target, filepath.Join(pdir, CurrentName)); err != nil {
+				t.Fatal(err)
+			}
+			found, problems, err := Discover(root)
+			if err != nil || len(found) != 0 || len(problems) != 1 {
+				t.Fatalf("found %+v, problems %v, err %v", found, problems, err)
+			}
+		})
+	}
+}
+
+func TestSourceRecordIsBounded(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := ReadSourceRecord(dir); ok {
+		t.Fatal("a missing record was read")
+	}
+	_ = os.WriteFile(filepath.Join(dir, SourceFileName), []byte(strings.Repeat("x", maxSourceRecord+1)), 0o644)
+	if _, ok := ReadSourceRecord(dir); ok {
+		t.Fatal("an oversized record was read")
+	}
+	other := filepath.Join(t.TempDir(), "target")
+	_ = os.WriteFile(other, []byte(`{"source":"x","version":"1.0.0"}`), 0o644)
+	_ = os.Remove(filepath.Join(dir, SourceFileName))
+	_ = os.Symlink(other, filepath.Join(dir, SourceFileName))
+	if _, ok := ReadSourceRecord(dir); ok {
+		t.Fatal("a link was followed")
+	}
+}

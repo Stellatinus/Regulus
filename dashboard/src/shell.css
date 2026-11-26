@@ -1924,3 +1924,150 @@ input.switch[type="checkbox"]:checked::after {
 .node-window:focus-visible {
   outline: none;
 }
+
+/* ---------- Regulus Store ---------- */
+.store-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.store-search {
+  flex: 1;
+  min-width: 12rem;
+  padding-left: 14px;
+}
+
+.store-cat-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.store-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.store-sources ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.store-sources p {
+  margin: 4px 0 0;
+  color: var(--warn);
+}
+
+.catalog-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .catalog-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.catalog-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.catalog-card:hover {
+  border-color: var(--line-3);
+}
+
+.catalog-card p,
+.store-detail p {
+  margin: 0;
+}
+
+.catalog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.catalog-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.store-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.store-confirm {
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+.store-confirm h4 {
+  margin: 0 0 0.25rem;
+}
+.store-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 12px;
+}
+
+.store-detail h4 {
+  margin: 16px 0 4px;
+  font-size: 13px;
+}
+
+.store-versions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.store-versions li.incompatible {
+  opacity: 0.55;
+}
+
+.store-toolbar select {
+  width: auto;
+}
+
+/* The page of a plugin in the node window (#21): a sandboxed frame that
+   takes the width of the window and the height the page asks for. */
+.plugin-pane {
+  display: block;
+  overflow: auto;
+}
+.plugin-frame {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  border: 0;
+  background: transparent;
+  color-scheme: normal;
+}
