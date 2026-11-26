@@ -83,8 +83,8 @@ type Verifier interface {
 
 // SigstoreVerifier is the real Verifier: the code of the core's releases
 // (update.SigstoreVerifier), with the identity of the source in place of the
-// release workflow's. It is **not verified against a real signed index**: no
-// index has been published yet.
+// release workflow's. It has verified one real signed index (2026-11-26, the
+// official one, which lists no plugin); an index with plugins is not tried yet.
 type SigstoreVerifier struct{ Trust update.TrustSource }
 
 // Verify implements Verifier.

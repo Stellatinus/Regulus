@@ -39,6 +39,23 @@ curl -fsSLO https://github.com/Stellatinus/Regulus/releases/download/vVERSION/in
 
 Use `--role agent` options as shown on **Servers → Add a server** for a remote agent; an agent that is already enrolled keeps its certificate. From the first release built after the move, updates work from the dashboard as before. See [Design decisions](decisions.md#the-repository-moved-audit-issue-231).
 
+## Bringing an installation up to date
+
+An update from the dashboard replaces **only `/usr/bin/regulus`**. The package (or `install.sh`) puts everything else on the machine: the systemd units, the plugins directory, the settings in `/etc/regulus/regulus.env`. An installation made with an older release and updated only from the dashboard never runs the package again, so **it does not have what a newer version added**. The first case: a hub installed with 0.1.0-alpha.1 and updated to 0.4.1-alpha.1 had no `regulus-plugin-apply.path`, no plugins directory and no `plugins_dir`, so the Store could show a plugin but not install it (#526, #524).
+
+**`regulus host-sync`** (`internal/hostsync`) is the answer. It runs **as root, after every update, with the new executable**: systemd runs `regulus update-apply --recover` as the `ExecStopPost` of `regulus-update.service` (outside the unit's sandbox), and that now ends with the sync. It can be run by hand too (`sudo regulus host-sync`). It is idempotent: each step looks first and changes nothing that is already right, and it never overrides what an administrator chose. It prints one line for each thing it changed (`journalctl -u regulus-update`). A failure in it is reported and never fails or rolls back the update.
+
+What it does today, on a hub that installs its updates from the dashboard (`regulus-update.path` enabled; an agent, or a hub updated by hand, is left alone):
+
+- writes `regulus-plugin-apply.path` and `.service` to `/etc/systemd/system` when no copy exists in `/etc/systemd/system`, `/usr/lib/systemd/system` or `/lib/systemd/system` (the embedded files are the ones in `packaging/`), and reloads systemd;
+- creates `/usr/local/lib/regulus/plugins`, owned by root;
+- adds `REGULUS_PLUGINS_DIR=/usr/local/lib/regulus/plugins` to `/etc/regulus/regulus.env` when neither that file nor `config.yaml` says anything about `plugins_dir` (an empty value is a choice too), and restarts the hub **once** so that it reads it;
+- enables `regulus-plugin-apply.path`.
+
+**The rule for contributors:** when a change adds something outside the executable, assume the previous version's installation does not have it. Add it to `hostsync.Sync`, make it idempotent, and test it against an installation without it. It is the same rule for a new unit, directory, setting, user or file.
+
+**Limits.** The sync runs after an update, so a hub gets it **with the first update to a release that contains it** (the update that installs that release runs the new executable's sync right away). A hub that is not updated from the dashboard (a package upgrade) already gets these files from the package's post-install script. The agent's own files are not covered yet (it has nothing to add today). **Not verified on a real machine** until the `[Test]` issue for #526 is done: the tests use a fake directory tree and a fake `systemctl`.
+
 ## What the root helper does with a request it cannot use
 
 The directory that holds `request.json` belongs to the hub's unprivileged user, and systemd starts the helper for as long as the file exists. The helper therefore **removes whatever is at that place** (garbage, a file over 64 KiB, a symbolic link, a FIFO, a directory) before it does anything else, never follows a link and never blocks on a FIFO, writes a `failed` result that the Updates page shows ("the update request could not be read … it was removed"), and exits with an error. The path unit stays active, and the next valid request is installed normally. (Before this, an unreadable file was left in place and the helper was started again and again until the path unit gave up, so no later update ran until `systemctl reset-failed regulus-update.path`.) To test it on a real machine see the `[Test]` issue for the update helper under faults.
