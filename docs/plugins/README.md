@@ -17,6 +17,8 @@ This folder is the guide to the plugin system. Read the pages in order:
 
 The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/plugin/sdk` (for plugins written in Go), `proto/regulus/plugin/v1` (the contract) and `plugins/example-hello` (the example).
 
+> **Under review (2026-11-26).** The maintainer decided that plugins are installed on the **hubs only**, and that the redundant hub has the same plugins ([#496](https://github.com/Stellatinus/Regulus/issues/496), [Direction of 2026-11-26](../ui-and-apps-direction.md)). This page still describes a plugin that can run on an agent, and the store sending plugins to agents; that part is not settled and is not to be built before #496 decides what becomes of the agent component.
+
 ## What exists and what does not
 
 | Part | Issue | Status |

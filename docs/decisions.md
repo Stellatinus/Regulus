@@ -626,6 +626,18 @@ Choices made in the design ([plugins/store.md](plugins/store.md)), all open to t
 
 Not verified, and not decided: where the index is hosted, whether the plugin policy is the root policy file or its own, per-entry audience (waits for #21), names of the views, and everything that needs plugins to run under a user of their own before a third-party source is safe.
 
+## Direction of 2026-11-26: dashboard, first plugin, apps, widgets, Docker (proposed, not designed)
+
+Recorded from the maintainer; each point has its design issue and **none is built** ([ui-and-apps-direction.md](ui-and-apps-direction.md)).
+
+- **Plugins are installed on the hubs only, and the redundant hub has the same plugins** (#496). This **contradicts** the plugin pages written before it (a plugin may have an agent component; the store sends plugins to agents); they carry a note and are not rewritten until #496 decides what becomes of the agent component. Both hubs must answer at one address, a URL rather than an IP (the maintainer's second thought).
+- **Disks is the first real plugin** (#497, regulus-plugins#10), to try the plugin system on something real; `hello-world` and `hello-guest` stay as test plugins of the store. It needs #463, #261 and the plugin tab in the node window (#21).
+- **Apps are installed on a node chosen from the hub** (#495). The maintainer first wrote "plugins" and corrected it.
+- **The repository of apps is `Regulus Apps` (`regulus-apps`)**, "Apps" rather than "Applications" (#475), with a `widgets/` folder per app.
+- **Widgets are descriptors drawn from templates** (YAML preferred over JSON, to decide), after Homepage's logic and not its format; left for the future (#498).
+- **The Dashboard is an icon in the dock, customization is a popup, and charts are redrawn once** (#493). **"File editor" becomes "File manager"** (#492).
+- **Docker management is an open decision**, plugin of our own or Portainer as an app (#503), and a shell in a container would **change** what #289 agreed ("no shell into a container in this series", #507).
+
 ## Plugins: manifest and runtime (#19)
 
 Choices made while writing the runtime, so they are not rediscovered:
