@@ -626,6 +626,19 @@ Choices made in the design ([plugins/store.md](plugins/store.md)), all open to t
 
 Not verified, and not decided: where the index is hosted, whether the plugin policy is the root policy file or its own, per-entry audience (waits for #21), names of the views, and everything that needs plugins to run under a user of their own before a third-party source is safe.
 
+## The store backend, read side (2026-11-26)
+
+`internal/store` reads the signed index of each source and `GET /api/store` serves it; **installing is not built** (`POST /api/store/plugins/{id}/install` answers 501) because it needs the root helper. Choices made, open to correction:
+
+- **A new permission, `plugins.manage`**, for the store (see it, and later install, update, remove). `admin` has it as it has every permission; `operator` and `viewer` do not, because a plugin is code that runs on the servers. Rejected: `servers.read` (as `GET /api/plugins` uses), which would show every viewer what can be installed and, later, let them install it.
+- **An index is offered only when verified.** The real verifier is the core's Sigstore code (`update.SigstoreVerifier`) with the source's identity in place of the release workflow's; the official identity is `publish-index.yml` at `refs/heads/main` of Stellatinus/Regulus-Plugins, built in. A `custom` source must pin its signer in `plugin_sources`, or the hub refuses to start. The bundle is read from the index address plus `.sigstore.json`. Verification runs on the exact bytes that are then parsed.
+- **Expired and older indexes are refused**; the last good index is kept and offered while it has not expired (with the source shown as `error`), so a source that is down for a day does not empty the store. A source whose index expired offers nothing.
+- **Channel**: a source follows its own channel or the hub's update channel; versions the channel does not offer are left out, so a plugin with only alphas shows only on `alpha`. **Yanked** versions are listed (`yanked: true`, never `latest`, never compatible) so the page can say why.
+- **The same plugin id in two sources**: both are listed, with their `source`; the installed version is shown on the first source in the list that offers the id (the official one) until the installer records which source a plugin came from.
+- **The official index address is an assumption**: `https://stellatinus.github.io/Regulus-Plugins/index.json` (GitHub Pages). It has not been published, so on a real hub the official source shows `error` today.
+
+Not verified: the signature check against a real signed index (none exists; the tests use a fake verifier, and `update.SigstoreVerifier` is tested on its own), the fetch against GitHub Pages, and the whole route on an installed hub.
+
 ## Direction of 2026-11-26: dashboard, first plugin, apps, widgets, Docker (proposed, not designed)
 
 Recorded from the maintainer; each point has its design issue and **none is built** ([ui-and-apps-direction.md](ui-and-apps-direction.md)).

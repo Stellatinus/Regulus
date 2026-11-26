@@ -34,6 +34,7 @@ import (
 	"github.com/CodexCircle/Regulus/internal/pki"
 	"github.com/CodexCircle/Regulus/internal/plugin"
 	"github.com/CodexCircle/Regulus/internal/storage"
+	pluginstore "github.com/CodexCircle/Regulus/internal/store"
 	"github.com/CodexCircle/Regulus/internal/update"
 )
 
@@ -90,6 +91,8 @@ type Hub struct {
 	seen      *seenRecorder     // writes agent presence off the handshake path
 	transport *inproc.Transport // lets the built-in agent reach the hub without a network port
 	plugins   atomic.Value      // *pluginRunner while plugins_dir is set and Serve runs
+	// pluginStore is the read side of the plugin store (internal/store).
+	pluginStore *pluginstore.Service
 	// pluginTune, if set, changes the plugin supervisor before it starts
 	// (tests).
 	pluginTune func(*plugin.Supervisor)
@@ -284,6 +287,27 @@ func New(ctx context.Context, cfg config.Config, log *slog.Logger, ui fs.FS, opt
 		GOARCH:   runtime.GOARCH,
 		Enabled:  cfg.Updates.Check,
 	})
+	h.pluginStore = pluginstore.New(pluginstore.Options{
+		Sources:  append(pluginstore.DefaultSources(), cfg.PluginSources...),
+		Verifier: pluginstore.SigstoreVerifier{},
+		HubChannel: func(ctx context.Context) update.Channel {
+			if s, err := h.updates.Settings(ctx); err == nil && s.Channel.Valid() {
+				return s.Channel
+			}
+			return update.Stable
+		},
+		Env: func() pluginstore.Env {
+			v, ok := update.ParseBuildVersion(h.version)
+			return pluginstore.Env{Hub: v, HubKnown: ok, Machine: pluginstore.Machine{OS: runtime.GOOS, Arch: runtime.GOARCH}}
+		},
+		Installed: func() map[string]string {
+			m := map[string]string{}
+			for _, p := range h.HubPlugins().Plugins {
+				m[p.ID] = p.Version
+			}
+			return m
+		},
+	})
 	if err := h.loadRollout(ctx); err != nil {
 		h.log.Warn("reading the state of the last update of the servers", "err", err)
 	}
@@ -352,7 +376,7 @@ func (h *Hub) Serve(ctx context.Context, ln net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	srv := &http.Server{
-		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
+		Handler:           NewHandler(Deps{UI: h.ui, Agents: h, Layouts: h, Log: h.log, Auth: h.auth, Fleet: h, Updates: h.updates, Rollout: h, Plugins: h, Store: h.pluginStore, Disks: h, Version: h.version, DatabaseProblem: h.dbState.get, Certificates: h, Stats: h.stats, MetricsToken: h.cfg.Prometheus.Token}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       time.Minute, // bodies are small JSON; WebSockets leave the server after the upgrade
 		IdleTimeout:       2 * time.Minute,
@@ -547,6 +571,9 @@ type Deps struct {
 	// Plugins reports the hub's own plugins. May be nil: GET /api/plugins then
 	// shows the hub's plugins as off.
 	Plugins PluginSource
+	// Store reads the plugin store's sources (GET /api/store). May be nil: the
+	// page then shows no source and no plugin.
+	Store StoreSource
 	// Version is the version the hub was built with. The enrollment answer
 	// carries it when it is a release, so a new agent installs the same one.
 	Version string
@@ -607,6 +634,8 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/disks/moves", handler: need(auth.PermInventoryRead, diskMovesHandler(d.Disks))},
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
+		{pattern: "GET /api/store", handler: need(auth.PermPluginsManage, storeHandler(d.Store))},
+		{pattern: "POST /api/store/plugins/{id}/install", handler: need(auth.PermPluginsManage, storeInstallHandler())},
 		{pattern: "GET /api/plugins", handler: need(auth.PermServersRead, pluginsHandler(d.Plugins, d.Agents))},
 		{pattern: "GET /api/stream", handler: need(auth.PermServersRead, auth.RefuseTokens(streamHandler(d.Agents, stillAllowed(d.Auth, auth.PermServersRead), d.Stats)))},
 		{pattern: "GET /api/agents/listener", handler: need(auth.PermServersRead, http.HandlerFunc(l.get)), needsAuth: true},

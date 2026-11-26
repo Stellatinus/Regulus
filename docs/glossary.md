@@ -124,6 +124,12 @@ Alphabetical. "Closest other term" says what it is most often confused with.
 
 `connected` (online), `stale` (silent for two heartbeats), `offline`, `revoked`, and `incompatible` (refused because of its version). Source: `dashboard/src/api.ts` (the `status` field) and `dashboard/src/AgentList.tsx`.
 
+## Plugin store terms
+
+- **Store / Plugin store** (*Store dei plugin*): the page of the dashboard and the code behind `GET /api/store` that read the signed indexes of the plugin **sources** and say what a hub can install ([plugins/store.md](plugins/store.md)). Read-only today: nothing is installed.
+- **Source** (*sorgente*): a place plugins come from, an index address plus the identity that must have signed it. The official one is regulus-plugins; others are `plugin_sources` in the hub configuration.
+- **Index** (*indice*): the signed `index.json` of a source: its plugins, their versions, compatibility, permissions and checksums.
+
 ## Naming plan
 
 - **Who decides.** The maintainer decides the final nomenclature, later, and it is explained in this file.

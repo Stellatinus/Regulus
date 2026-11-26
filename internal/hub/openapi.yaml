@@ -886,6 +886,47 @@ paths:
               schema: { $ref: "#/components/schemas/Plugins" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/store:
+    get:
+      tags: [plugins]
+      summary: The plugin store - the sources and the plugins they offer (needs plugins.manage)
+      description: |
+        Reads the signed index of every source (the official one, regulus-plugins,
+        and the `plugin_sources` of the configuration) and answers what this hub
+        can install. An index is offered only when its Sigstore signature matches
+        the identity pinned for the source; a source that cannot be read, or whose
+        index has expired, is listed with its `state` and `error`, and an expired
+        one offers nothing. A version a source's channel does not offer is left
+        out; a version this hub cannot run is listed with `compatible: false` and
+        the reason. `latest` is the newest compatible, not yanked version, or null.
+        `installed` is the version the hub runs, or null. Nothing here installs
+        anything. See docs/plugins/store.md.
+      responses:
+        "200":
+          description: The store.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Store" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/store/plugins/{id}/install:
+    post:
+      tags: [plugins]
+      summary: Install a plugin (needs plugins.manage) - not implemented
+      description: |
+        Always answers 501: installing writes the plugins directory, which is
+        owned by root, so it needs the root helper, which is not built. Nothing is
+        installed and nothing is faked.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "501":
+          description: Not implemented.
+          content:
+            application/json:
+              schema: { type: object, required: [error], properties: { error: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/stream:
     get:
       tags: [agents]
@@ -2036,6 +2077,65 @@ components:
               plugins:
                 type: array
                 items: { $ref: "#/components/schemas/Plugin" }
+    Store:
+      type: object
+      required: [sources, plugins]
+      properties:
+        sources:
+          type: array
+          items:
+            type: object
+            required: [name, trust, state]
+            properties:
+              name: { type: string }
+              trust: { type: string, enum: [official, custom] }
+              state: { type: string, enum: [ok, error, expired] }
+              error: { type: string, description: "Why the source could not be read or has expired; its last good index may still be offered while state is error" }
+              issued_at: { type: string, format: date-time }
+              expires: { type: string, format: date-time }
+        plugins:
+          type: array
+          items:
+            type: object
+            required: [id, name, description, source, homepage, audience, installed, latest, versions]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              source: { type: string }
+              homepage: { type: string }
+              kind: { type: string, description: "manager, integration or feature; absent when the index does not say" }
+              audience: { type: string, description: "admin (the default) or everyone: a hint for the dashboard, not a security boundary" }
+              installed:
+                type: [object, "null"]
+                properties: { version: { type: string } }
+              latest: { type: [string, "null"] }
+              versions:
+                type: array
+                description: Newest first.
+                items:
+                  type: object
+                  required: [version, channel, released_at, compatible, permissions, provides, needs, yanked]
+                  properties:
+                    version: { type: string }
+                    channel: { type: string, enum: [stable, beta, alpha] }
+                    released_at: { type: string }
+                    compatible: { type: boolean }
+                    incompatible_reason: { type: string }
+                    permissions:
+                      type: array
+                      items:
+                        type: object
+                        required: [id, description]
+                        properties: { id: { type: string }, description: { type: string } }
+                    provides: { type: array, items: { type: string } }
+                    needs:
+                      type: array
+                      items:
+                        type: object
+                        required: [capability]
+                        properties: { capability: { type: string }, optional: { type: boolean } }
+                    yanked: { type: boolean }
     Plugin:
       type: object
       required: [id, version, state, restarts]

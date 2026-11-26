@@ -478,3 +478,20 @@ func TestPrometheusTokenIsNeverWrittenToTheFile(t *testing.T) {
 		t.Fatalf("Normalize: %v", err)
 	}
 }
+
+func TestLoadHubPluginSources(t *testing.T) {
+	load := func(yaml string) (Config, error) {
+		file := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(file, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return Load([]string{"--config", file}, env(nil), io.Discard)
+	}
+	cfg, err := load("plugin_sources:\n  - name: mine\n    url: https://example.org/index.json\n    trust: custom\n    signer: https://github.com/me/p/.github/workflows/x.yml@refs/heads/main\n    channel: beta\n")
+	if err != nil || len(cfg.PluginSources) != 1 || cfg.PluginSources[0].Channel != "beta" {
+		t.Fatalf("%+v, %v", cfg.PluginSources, err)
+	}
+	if _, err := load("plugin_sources:\n  - name: mine\n    url: https://example.org/index.json\n    trust: custom\n"); err == nil || !strings.Contains(err.Error(), "signing identity") {
+		t.Errorf("a source with no signer must be refused: %v", err)
+	}
+}
