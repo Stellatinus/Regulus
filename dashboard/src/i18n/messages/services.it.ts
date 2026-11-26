@@ -7,8 +7,6 @@ export const servicesIt: Record<keyof typeof services, string> = {
   "services.tabs": "Servizi",
   "services.tab.installed": "Installati",
   "services.tab.store": "Regulus Store",
-  "services.store.title": "Lo store non è ancora disponibile",
-  "services.store.body": "I plugin arriveranno dal loro store (il repository regulus-plugins), e le app e le automazioni da store propri (#475). Finché non esistono, i plugin si aggiungono a mano alla directory dei plugin di un hub o di un server.",
   "services.pluginsOff": "I plugin sono disattivati nelle Impostazioni.",
   "services.openFeatures": "Apri le impostazioni",
   "services.apps.title": "App",

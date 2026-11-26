@@ -1,13 +1,14 @@
 import { useFeature } from "./features";
 import { useT } from "./i18n";
 import { PluginsPage } from "./PluginsPage";
+import { StorePage } from "./StorePage";
 import { useTab } from "./route";
 
 // ServicesPage is the Services section of the dock: what runs on the mesh for
 // you (plugins, and later apps) and the store to get more. Two tabs, in the
-// address: #/plugins (installed) and #/plugins/store. The store is not built:
-// the plugin store has its own repository and design, and apps have theirs
-// (#475), so the tab says so instead of showing a catalogue that does not exist.
+// address: #/plugins (installed) and #/plugins/store, the Regulus Store
+// (StorePage), which shows what the hub's plugin sources offer. Apps have
+// their own repository and design (#475) and are not in it.
 export function ServicesPage() {
   const t = useT();
   const tab = useTab();
@@ -31,10 +32,7 @@ export function ServicesPage() {
         </nav>
       </div>
       {store ? (
-        <div className="placeholder-pane">
-          <h3>{t("services.store.title")}</h3>
-          <p>{t("services.store.body")}</p>
-        </div>
+        <StorePage />
       ) : (
         <>
           {plugins ? (
