@@ -68,11 +68,9 @@ export const servers = {
   "servers.server.lastContactAt": "last contact {date} ({ago})",
   "servers.server.lastKnown": "What the hub knows without the agent (name, version, certificate end, disks it recorded) is shown here as last known. Live charts are not drawn for a server that is not connected.",
   "servers.server.nameLabel": "Name",
-  "servers.server.rename": "Rename",
   "servers.server.revoke": "Revoke this server",
   "servers.server.revokeConfirm": "Revoke {name}? It will be disconnected and can never connect again.",
   "servers.server.revokeYes": "Revoke the server",
-  "servers.server.manage": "Manage",
   // The node role (docs/glossary.md): the hub's own server is the hub, every other one is an agent.
   "servers.fact.role": "Role",
   "servers.role.hub": "hub",

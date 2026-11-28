@@ -864,6 +864,7 @@ The maintainer handed over `docs/design-system/regulus-console-v3.2.html`, a par
 The first pull request that builds from the v3.2 reference. One entry per issue; the design issues (#516, #533, #559, #560) are written as designs and wait for the maintainer before any code.
 
 - **#535, no servers in the Plugins page.** The page shows the hub's plugins only. Plugins live on the hubs only (#496), so the "Servers" section and its texts are gone, and the dashboard's type of `GET /api/plugins` no longer has `agents`. **Left:** the hub still returns `agents` in that answer (agents can still run a `plugins_dir` and report it in their metrics, `internal/agent`); removing the field and the agent-side runtime changes the agent protocol and `docs/versioning.md` applies, so it is a separate issue.
+- **#515, the pencil is the only way to manage a node.** The "Management" section of the General part is removed. It held two actions: rename (already in the pencil) and **Revoke this server**, which the pencil did not have; Revoke moved into the Edit dialog (same confirmation, same step-up, not for the hub's own server, not for a revoked one). Nothing is lost.
 
 ## Open questions
 
