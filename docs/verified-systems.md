@@ -73,6 +73,7 @@ The minimum the program must do. Verification of these requirements lists the sy
 
 - the plugin sources show as verified
 - a plugin is installed from the store, runs, shows in the dashboard and is removed
+- the store's **Downloaded** switch shows only what is installed, is remembered after a reload, and an update is still reachable from its card (#534)
 - a store card shows `[Install] [i]`: Install asks first when the plugin has permissions or needs, and **i** opens the description page (#532)
 
 **Logs**

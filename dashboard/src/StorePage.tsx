@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ApiError,
   apiErrorText,
@@ -22,7 +22,44 @@ import { errorMessage } from "./useApiList";
 // Regulus) defines it; this is the one place the dashboard names it.
 export const STORE_INSTALL_PERMISSION = "plugins.manage";
 
-type Filter = "all" | "installed" | "updates";
+// The "Downloaded" switch (#534) is remembered in this browser. Off shows the
+// whole catalogue, on only what is downloaded on the hub, which is what is
+// installed: the hub's API knows no plugin that is downloaded and not installed.
+const DOWNLOADED_KEY = "regulus.store.downloaded";
+const DOWNLOADED_CHANGED = "regulus:store-downloaded";
+
+function readDownloaded(): boolean {
+  try {
+    return window.localStorage.getItem(DOWNLOADED_KEY) === "on";
+  } catch {
+    return false; // no storage
+  }
+}
+
+function useDownloaded(): [boolean, (on: boolean) => void] {
+  const on = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener(DOWNLOADED_CHANGED, cb);
+      window.addEventListener("storage", cb);
+      return () => {
+        window.removeEventListener(DOWNLOADED_CHANGED, cb);
+        window.removeEventListener("storage", cb);
+      };
+    },
+    readDownloaded,
+    () => false,
+  );
+  const set = useCallback((next: boolean) => {
+    try {
+      window.localStorage.setItem(DOWNLOADED_KEY, next ? "on" : "off");
+    } catch {
+      // not saved
+    }
+    window.dispatchEvent(new Event(DOWNLOADED_CHANGED));
+  }, []);
+  return [on, set];
+}
+
 type State =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -122,7 +159,7 @@ export function StorePage() {
   const canInstall = can(session?.user, STORE_INSTALL_PERMISSION);
   const [state, setState] = useState<State>({ kind: "loading" });
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  const [downloaded, setDownloaded] = useDownloaded();
   const [kind, setKind] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
   // An install, update or removal blocks for up to two minutes. While one runs,
@@ -183,13 +220,18 @@ export function StorePage() {
   const plugins = useMemo(() => (state.kind === "ready" ? state.data.plugins : []), [state]);
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return plugins.filter(
-      (p) =>
-        (q === "" || `${p.name} ${p.id} ${p.description ?? ""}`.toLowerCase().includes(q)) &&
-        (kind === "all" || kindOf(p) === kind) &&
-        (filter === "all" || (filter === "installed" ? !!p.installed : hasUpdate(p))),
-    );
-  }, [plugins, query, filter, kind]);
+    // The Updates view is gone (#534): a plugin with an update stays reachable
+    // on its card, and the updatable ones come first.
+    return plugins
+      .filter(
+        (p) =>
+          (q === "" || `${p.name} ${p.id} ${p.description ?? ""}`.toLowerCase().includes(q)) &&
+          (kind === "all" || kindOf(p) === kind) &&
+          (!downloaded || !!p.installed),
+      )
+      .sort((a, b) => Number(hasUpdate(b)) - Number(hasUpdate(a)));
+  }, [plugins, query, downloaded, kind]);
+  const updates = useMemo(() => plugins.filter(hasUpdate).length, [plugins]);
 
   if (state.kind === "loading") return <p role="status">{t("store.loading")}</p>;
   if (state.kind === "error")
@@ -201,11 +243,6 @@ export function StorePage() {
 
   const { sources } = state.data;
   const detail = plugins.find((p) => p.id === open);
-  const filterLabel: Record<Filter, MessageKey> = {
-    all: "store.filter.all",
-    installed: "store.filter.installed",
-    updates: "store.filter.updates",
-  };
 
   return (
     <div className="store">
@@ -227,13 +264,11 @@ export function StorePage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <div className="store-cat-pills" role="group" aria-label={t("store.filters")}>
-              {(Object.keys(filterLabel) as Filter[]).map((f) => (
-                <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-                  {t(filterLabel[f])}
-                </button>
-              ))}
-            </div>
+            <label className="store-switch" htmlFor="store-downloaded">
+              <input id="store-downloaded" type="checkbox" role="switch" className="switch" checked={downloaded} onChange={(e) => setDownloaded(e.target.checked)} />
+              {t("store.downloaded")}
+              {updates > 0 && <span className="badge-role store-updates-count">{t("store.updatesAvailable", { count: updates })}</span>}
+            </label>
             <select aria-label={t("store.kind.all")} value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="all">{t("store.kind.all")}</option>
               {[...KINDS, "other"].map((k) => (
@@ -244,7 +279,9 @@ export function StorePage() {
             </select>
           </div>
           {shown.length === 0 ? (
-            <p className="store-note">{t("store.empty.noMatch")}</p>
+            <p className="store-note">
+              {downloaded && query.trim() === "" && kind === "all" ? t("store.empty.nothingDownloaded") : t("store.empty.noMatch")}
+            </p>
           ) : (
             <ul className="catalog-grid">
               {shown.map((p) => (

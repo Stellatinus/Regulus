@@ -3,10 +3,8 @@ import type { store } from "./store.en";
 // Italian draft, to be read by the maintainer.
 export const storeIt: Record<keyof typeof store, string> = {
   "store.search": "Cerca plugin",
-  "store.filters": "Filtri",
-  "store.filter.all": "Tutti",
-  "store.filter.installed": "Installati",
-  "store.filter.updates": "Aggiornamenti",
+  "store.downloaded": "Scaricati",
+  "store.updatesAvailable": "{count} da aggiornare",
   "store.kind.all": "Tutti i tipi",
   "store.kind.manager": "Manager",
   "store.kind.integration": "Integrazioni",
@@ -29,6 +27,7 @@ export const storeIt: Record<keyof typeof store, string> = {
   "store.empty.noPlugins.title": "Nessun plugin offerto",
   "store.empty.noPlugins.body": "Le sorgenti sono raggiungibili, ma nessuna elenca un plugin che questo hub possa installare.",
   "store.empty.noMatch": "Nessun plugin corrisponde alla ricerca e ai filtri.",
+  "store.empty.nothingDownloaded": "Nessun plugin scaricato finora.",
   "store.card.version": "Versione {version}",
   "store.card.noVersion": "Nessuna versione installabile",
   "store.card.installed": "Installato {version}",

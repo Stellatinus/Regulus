@@ -1,10 +1,8 @@
 // Texts of the Regulus Store page. Keys start with "store.". Italian in store.it.ts.
 export const store = {
   "store.search": "Search plugins",
-  "store.filters": "Filters",
-  "store.filter.all": "All",
-  "store.filter.installed": "Installed",
-  "store.filter.updates": "Updates",
+  "store.downloaded": "Downloaded",
+  "store.updatesAvailable": "{count} to update",
   "store.kind.all": "All kinds",
   "store.kind.manager": "Managers",
   "store.kind.integration": "Integrations",
@@ -27,6 +25,7 @@ export const store = {
   "store.empty.noPlugins.title": "No plugin is offered",
   "store.empty.noPlugins.body": "The sources are reachable, but none lists a plugin this hub may install.",
   "store.empty.noMatch": "No plugin matches the search and filters.",
+  "store.empty.nothingDownloaded": "Nothing downloaded yet.",
   "store.card.version": "Version {version}",
   "store.card.noVersion": "No installable version",
   "store.card.installed": "Installed {version}",

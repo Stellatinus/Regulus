@@ -88,14 +88,54 @@ describe("StorePage", () => {
     await u.type(screen.getByRole("searchbox", { name: "Search plugins" }), "hello");
     expect(screen.queryByRole("heading", { name: "Disks" })).not.toBeInTheDocument();
     await u.clear(screen.getByRole("searchbox"));
-    await u.click(screen.getByRole("button", { name: "Updates" }));
+    // The All / Installed / Updates selector is gone (#534): one switch instead.
+    for (const name of ["All", "Installed", "Updates"]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    await u.click(screen.getByRole("switch", { name: /Downloaded/ }));
     expect(screen.queryByRole("heading", { name: "Disks" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hello world" })).toBeInTheDocument();
-    await u.click(screen.getByRole("button", { name: "All" }));
+    await u.click(screen.getByRole("switch", { name: /Downloaded/ }));
+    expect(screen.getByRole("heading", { name: "Disks" })).toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox"), "feature");
     expect(screen.queryByRole("heading", { name: "Hello world" })).not.toBeInTheDocument();
     await u.selectOptions(screen.getByRole("combobox"), "other");
     expect(screen.getByText("No plugin matches the search and filters.")).toBeInTheDocument();
+  });
+
+  it("has a Downloaded switch: off is the whole catalogue, on only what is installed, and it is remembered (#534)", async () => {
+    const u = userEvent.setup();
+    mock({ "GET /api/store": { body: catalog } });
+    const first = renderPage();
+    const sw = await screen.findByRole("switch", { name: /Downloaded/ });
+    expect(sw).not.toBeChecked();
+    expect(screen.getByRole("heading", { name: "Disks" })).toBeInTheDocument();
+    await u.click(sw);
+    expect(screen.queryByRole("heading", { name: "Disks" })).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("regulus.store.downloaded")).toBe("on");
+    first.unmount();
+    // A new visit starts as it was left.
+    mock({ "GET /api/store": { body: catalog } });
+    renderPage();
+    expect(await screen.findByRole("switch", { name: /Downloaded/ })).toBeChecked();
+    expect(screen.queryByRole("heading", { name: "Disks" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hello world" })).toBeInTheDocument();
+  });
+
+  it("keeps updates visible without the Updates view: a count, updatable plugins first, and Update on the card (#534)", async () => {
+    mock({ "GET /api/store": { body: { ...catalog, plugins: [catalog.plugins[0], catalog.plugins[1]] } } });
+    renderPage();
+    await screen.findByRole("heading", { name: "Disks" });
+    expect(screen.getByText("1 to update")).toBeInTheDocument();
+    const titles = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(titles.indexOf("Hello world")).toBeLessThan(titles.indexOf("Disks"));
+    expect(screen.getByRole("button", { name: "Update: Hello world" })).toBeInTheDocument();
+  });
+
+  it("says nothing is downloaded when the switch is on and no plugin is installed (#534)", async () => {
+    const u = userEvent.setup();
+    mock({ "GET /api/store": { body: { ...catalog, plugins: [catalog.plugins[0]] } } });
+    renderPage();
+    await u.click(await screen.findByRole("switch", { name: /Downloaded/ }));
+    expect(screen.getByText("Nothing downloaded yet.")).toBeInTheDocument();
   });
 
   it("has [Install] [i] on a card, Update or Remove for an installed plugin, and no Details button (#532)", async () => {
