@@ -2,7 +2,7 @@
 
 **CodexCircle Server Manager**, also known as **Regulus**, is a platform to manage one or more Linux servers from a single web dashboard.
 
-> **Project status:** early development. Hub, built-in and remote agents, dashboard, authentication and updates are implemented; the plugin runtime exists, but no plugin does anything for the dashboard yet. Pre-releases are published (`v0.3.0-alpha.1` is the newest) and there is no stable release. On 2026-11-24 the upgrade of a hub and the installation of a remote agent were run on two real Ubuntu 26.04 LTS amd64 VMs; an update installed from the dashboard and its rollback, Ubuntu 22.04 and 24.04, arm64, PostgreSQL and most browsers have not been tested on a real system (#81, [Verification status](docs/decisions.md#verification-status)). See the [roadmap](#roadmap) and the [design decisions](docs/decisions.md).
+> **Project status:** early development. Hub, built-in and remote agents, dashboard, authentication and updates are implemented; the plugin runtime exists, but no plugin does anything for the dashboard yet. Pre-releases are published (`v0.3.0-alpha.1` is the newest) and there is no stable release. On 2026-11-24 the upgrade of a hub and the installation of a remote agent were run on two real Ubuntu 26.04 LTS amd64 VMs; an update installed from the dashboard and its rollback, Ubuntu 22.04 and 24.04, arm64 (see [Verified systems](docs/verified-systems.md)), PostgreSQL and most browsers have not been tested on a real system (#81, [Verification status](docs/decisions.md#verification-status)). See the [roadmap](#roadmap) and the [design decisions](docs/decisions.md).
 
 ## How it works
 
@@ -42,7 +42,7 @@ The words used here (hub, agent, built-in agent, role, channel…) are defined i
 
 ## Supported platforms
 
-Ubuntu Server LTS (22.04, 24.04 and 26.04, amd64 and arm64) is the reference platform; so far a release has been tested on 26.04 amd64. Debian and RHEL-like distributions follow.
+Ubuntu Server LTS (22.04, 24.04 and 26.04, amd64 and arm64) is the reference platform; so far a release has been run on real machines on **26.04 amd64 only** (a partial standard check, 2026-11-24). Which systems have been verified, when, on which kernel and machines, and how, is in [Verified systems](docs/verified-systems.md). Debian and RHEL-like distributions follow.
 
 ## Roadmap
 

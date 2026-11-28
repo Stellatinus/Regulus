@@ -23,7 +23,7 @@ Apache-2.0 was preferred to AGPL-3.0. A permissive license makes it easier for o
 
 Ubuntu Server comes first because it is the system used for the first real tests. The order is:
 
-1. Ubuntu LTS 22.04, 24.04 and 26.04, amd64 and arm64, `.deb` package (26.04 amd64 is the one tested on a real machine so far, #81; whether 22.04 stays is open in #89);
+1. Ubuntu LTS 22.04, 24.04 and 26.04, amd64 and arm64, `.deb` package (26.04 amd64 is the one run on real machines so far, #81; which systems have been run, when and on what is in [Verified systems](verified-systems.md); whether 22.04 stays is decided by its check, see "Verified systems" below);
 2. Debian, with the same `.deb`;
 3. RHEL-like distributions, `.rpm` package.
 
@@ -35,6 +35,19 @@ What runs where (#230; the table is in [Remote agents](remote-agents.md#supporte
 - **An agent that cannot read something says so** instead of sending zeros: every `MetricsReport` names its collector (`linux` or `basic`, fields 9 and 10 with `unavailable`) and the parts it could not read. Added to protocol 1 without raising `protocol.Version`: an older hub ignores the fields, an older agent sends none and looks as before. The hub keeps them in the stored report (an empty list costs nothing), so a metrics point says what its zeros mean. The basic collector is still chosen once at start, by reading `/proc/stat`; the Linux collector reports per report what it could not read.
 - **No cgroup limits (at first; #325 and #355 added them).** CPU, load and memory come from `/proc`, so in a container they are the host's unless LXCFS virtualizes `/proc`; the cgroup now replaces memory, swap, CPU usage and the CPU count, and only the load average stays the host's. The agent reports the container it detects (`SystemInfo.container`, field 8) and the dashboard says which figures may be the host's. Reading the cgroup limits of memory and the CPU quota was left for a follow-up, which is the section "Containers: the agent reads its cgroup limits (#325)" below.
 - **Network filesystems and overlay are not disks.** nfs, cifs and the like belong to the server that exports them (which reports them with its own agent) and are the mounts most likely to hang; overlay is a container's view of the host's disk. A container therefore shows "No disks reported", which is not the same as "not available".
+
+## Verified systems: a list with a date, two levels, and one issue per system (#89)
+
+**Decided 2026-11-28 with the maintainer; the wording and the open points are mine.** #89 asked to list Ubuntu 26.04 as supported and to decide whether 22.04 stays. The README already listed 22.04, 24.04 and 26.04, so the real gap was a place that says **which of them has been run**, and a way to grow that list (Debian and, much later, other systems) without rewriting prose in three documents.
+
+- **Supported and verified are two things.** *Supported* is the target: the releases are built for it and a defect there is a bug (README, [Platforms](#platforms)). *Verified* is evidence: a person ran a release on that system and wrote down what happened. The list is [Verified systems](verified-systems.md); it is the only place that says which is which, and the README and this document point to it instead of repeating it.
+- **One row per system and architecture, with a date.** The architecture is **amd64 (not ARM)** or **arm64 (ARM)**, because the ARM build is a different piece of work, and `x86_64` is written amd64 whatever the processor maker is. The row has the date of the last run, the release, the **kernel** and the **machines** (role, physical or virtual and on what, CPU, memory, disk). A result that was not captured is written as not captured, as it was for the first runs.
+- **Two levels.** **Standard**: the system installs Regulus on one node and on several, the nodes see each other, updates and plugins work, the logs are clean. **Advanced**: what a group of machines does (a backup node, switching between hubs, PostgreSQL, HTTPS, restore) and the features that read the system itself. The standard steps are defined in the page; the advanced list is **sketched, not defined**, and waits for #103 and the features it needs to exist. A row says *partial* when a step of its level was not run, and the issue lists which.
+- **Ubuntu 26.04 LTS amd64 is listed as standard, partial.** The evidence is the run of 2026-10-28 (a fresh install of `v0.1.0-alpha.1`) and of 2026-11-24 (an upgrade and a remote agent on a second VM, both 26.04), described in [Verification status](#verification-status). It is *partial* because plugins, a fresh install of the current release, an update with its rollback on this system, `apt remove` and `purge` were not run, and the logs were not kept. I did not call it a complete standard check: the page says what was and was not run, as the rule on verification asks.
+- **One `[Test]` issue per system and architecture, in the milestone M7 (System verification).** Each carries the checklist; its pull request adds the row. A system that fails a step stays out of the list until the failure, which is its own issue, is fixed. A milestone was chosen over labels because the question it answers, "which systems are left to verify", is one count; the label `test` stays on the issues too.
+- **Ubuntu 22.04 stays on the supported list for now, and its check decides.** #89 asked whether to keep it. Nothing is gained by dropping it before it has been run, and it is the only release with PostgreSQL 14, which the installer's `--db-local` supports; if its check fails for a reason that is not worth fixing, or the maintainer prefers a shorter list, it is taken off the list in the pull request that closes its issue. **This is my reading, not the maintainer's decision: change it here if it is not.**
+- **Not done:** Debian (no release chosen, no issue), RHEL-like (#401), Windows Server (no build exists), the advanced checklist, and the scripts that would print a report to paste (#440). The two older runs have no logs; the first new run on 26.04 amd64 should capture them.
+- **What counts as a run.** A release, not a build from source, on a clean machine of that system with systemd, by a person. A container, CI and a cloud session are evidence of another kind and do not put a system on the list (the 24.04 run in a container on 2026-11-24 is an example).
 
 ## Roadmap: phases and milestones
 
@@ -48,6 +61,7 @@ The README describes four **phases**; the work is tracked in six **milestones**,
 | M4 | Separate hub and agent, protocol versioning | 3 |
 | M5 | Update system | 3 |
 | M6 | Plugins | 4 |
+| M7 | System verification: one `[Test]` issue per system and architecture, with a checklist, and the list of [verified systems](verified-systems.md) | — |
 
 Some issues were moved after they were written, so their title names an earlier phase:
 
