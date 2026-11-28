@@ -190,6 +190,14 @@ Where a requirement is **used** (how one plugin calls what another provides) is 
 - **Yanked and removed.** A version marked `yanked` is hidden from new installs and offered no more as an update, but **stays in the index and stays downloadable** so a rollback or a pinned hub keeps working. A plugin removed from the catalog (such as `hello-world`) keeps its past versions the same way, with `yanked` set. Deleting a release breaks rollbacks and checksums (the same lesson as #439), so it is not done.
 - **A sideload** for developers: installing a package from a local file, through the same helper and the same checks except the index (a package whose checksum is not in a signed index is marked **unverified** and needs the administrator's explicit confirmation, shown in the plugin's state). It is how a build is tried on one machine without any index.
 
+## The Store page in the dashboard
+
+`dashboard/src/StorePage.tsx`, the *Regulus Store* tab of Services. It shows what `GET /api/store` returns and nothing else.
+
+- **A card** (#532) has `[Install] [i]` on its right. **i** is the **information** button (accessible name and tooltip *Information about <plugin>*, English and Italian): it opens the description page (what it does, source, permissions, needs, provides, versions). It replaced the *Details* button one to one. **Install** installs the offered version without opening that page. If the version has **permissions or needs** (the same ones the description page lists), Install first opens a confirmation that lists them and installs only after *Install <plugin>*; a version that asks for nothing is installed at once. The confirmation is never skipped, because the card is not a way around what the description page shows. **Not built yet:** the approval for permissions that *grew* in an update (#519) and the requirements between plugins (#518); today the confirmation shows what the offered version asks for, as the description page does.
+- **An installed plugin** shows **Update** (when the offered version is newer) or **Remove** in the same place as Install. Update asks like Install does; Remove always asks and names the plugin. The description page keeps all three actions.
+- **Not verified:** the page ran in tests against a mocked hub only, as before.
+
 ## Kinds and audiences
 
 Two separate questions, two keys. Both are **proposed manifest keys, not accepted by the code yet**.

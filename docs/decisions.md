@@ -865,6 +865,7 @@ The first pull request that builds from the v3.2 reference. One entry per issue;
 
 - **#535, no servers in the Plugins page.** The page shows the hub's plugins only. Plugins live on the hubs only (#496), so the "Servers" section and its texts are gone, and the dashboard's type of `GET /api/plugins` no longer has `agents`. **Left:** the hub still returns `agents` in that answer (agents can still run a `plugins_dir` and report it in their metrics, `internal/agent`); removing the field and the agent-side runtime changes the agent protocol and `docs/versioning.md` applies, so it is a separate issue.
 - **#515, the pencil is the only way to manage a node.** The "Management" section of the General part is removed. It held two actions: rename (already in the pencil) and **Revoke this server**, which the pencil did not have; Revoke moved into the Edit dialog (same confirmation, same step-up, not for the hub's own server, not for a revoked one). Nothing is lost.
+- **#532, store cards: `[Install] [i]`.** The **i** button replaces Details one to one. Install on the card asks first when the offered version has permissions or needs (it lists what the description page lists), and acts at once when it has none; Update behaves the same, Remove always asks. An installed plugin shows Update, or Remove if there is no update, where Install was. *Why ask:* the card must not be a way around what the description page shows. Today permissions are only a request (#61), so the confirmation is information plus a deliberate click, not enforcement.
 
 ## Open questions
 

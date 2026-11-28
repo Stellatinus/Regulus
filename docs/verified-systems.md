@@ -73,6 +73,7 @@ The minimum the program must do. Verification of these requirements lists the sy
 
 - the plugin sources show as verified
 - a plugin is installed from the store, runs, shows in the dashboard and is removed
+- a store card shows `[Install] [i]`: Install asks first when the plugin has permissions or needs, and **i** opens the description page (#532)
 
 **Logs**
 
@@ -157,7 +158,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - the example plugin runs on the hub and on a remote agent
 - a plugin that crashes is restarted; one that cannot start is shown as failed
 - a plugin widget appears on the dashboard
-- the plugin store: install, update and remove from a verified source
+- the plugin store: install, update and remove from a verified source, from the card and from the description page
 
 **Installer**
 

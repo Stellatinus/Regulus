@@ -98,11 +98,81 @@ describe("StorePage", () => {
     expect(screen.getByText("No plugin matches the search and filters.")).toBeInTheDocument();
   });
 
+  it("has [Install] [i] on a card, Update or Remove for an installed plugin, and no Details button (#532)", async () => {
+    mock({ "GET /api/store": { body: catalog } });
+    renderPage();
+    await screen.findByRole("heading", { name: "Disks" });
+    expect(screen.queryByRole("button", { name: /^Details/ })).not.toBeInTheDocument();
+    const disks = screen.getByRole("heading", { name: "Disks" }).closest("li") as HTMLElement;
+    const buttons = within(disks).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Install", "i"]);
+    const info = within(disks).getByRole("button", { name: "Information about Disks" });
+    expect(info).toHaveAttribute("title", "Information about Disks");
+    // An installed plugin with a newer version shows Update where Install was.
+    const hello = screen.getByRole("heading", { name: "Hello world" }).closest("li") as HTMLElement;
+    expect(within(hello).getByRole("button", { name: "Update: Hello world" })).toBeInTheDocument();
+    expect(within(hello).queryByRole("button", { name: /^Install/ })).not.toBeInTheDocument();
+  });
+
+  it("installs from the card after showing the permissions and needs it would have shown", async () => {
+    const u = userEvent.setup();
+    const fn = mock({
+      "GET /api/store": { body: catalog },
+      "POST /api/store/plugins/disks/install": { body: { plugin: "disks", action: "install", version: "0.1.0", source: "regulus-plugins" } },
+    });
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Install: Disks" }));
+    const confirm = await screen.findByRole("alertdialog", { hidden: true });
+    expect(confirm).toHaveTextContent("Install Disks 0.1.0?");
+    expect(within(confirm).getByText("disks.read")).toBeInTheDocument();
+    expect(within(confirm).getByText("inventory.read@1 (optional)")).toBeInTheDocument();
+    expect(fn.mock.calls.some(([url]) => url === "/api/store/plugins/disks/install")).toBe(false);
+    await u.click(within(confirm).getByRole("button", { name: "Install Disks", hidden: true }));
+    expect(await screen.findByText("Disks 0.1.0 was installed.", undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(fn.mock.calls.find(([url]) => url === "/api/store/plugins/disks/install")?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ version: "0.1.0", source: "regulus-plugins" }) });
+  });
+
+  it("installs from the card at once when the version asks for nothing", async () => {
+    const u = userEvent.setup();
+    const plain: StoreCatalog = {
+      ...catalog,
+      plugins: [{ id: "plain", name: "Plain", source: "regulus-plugins", installed: null, latest: "1.0.0", versions: [{ version: "1.0.0", channel: "stable", compatible: true, yanked: false }] }],
+    };
+    const fn = mock({
+      "GET /api/store": { body: plain },
+      "POST /api/store/plugins/plain/install": { body: { plugin: "plain", action: "install", version: "1.0.0" } },
+    });
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Install: Plain" }));
+    expect(await screen.findByText("Plain 1.0.0 was installed.", undefined, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog", { hidden: true })).not.toBeInTheDocument();
+    expect(fn.mock.calls.some(([url]) => url === "/api/store/plugins/plain/install")).toBe(true);
+  });
+
+  it("asks before removing from the card, and shows Remove when there is no update", async () => {
+    const u = userEvent.setup();
+    const current: StoreCatalog = {
+      ...catalog,
+      plugins: [{ ...catalog.plugins[1], installed: { version: "0.2.0" } }],
+    };
+    const fn = mock({
+      "GET /api/store": { body: current },
+      "DELETE /api/store/plugins/hello-world": { body: { plugin: "hello-world", action: "remove", from: "0.2.0" } },
+    });
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Remove: Hello world" }));
+    const confirm = await screen.findByRole("alertdialog", { hidden: true });
+    expect(confirm).toHaveTextContent("Remove Hello world?");
+    expect(fn.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+    await u.click(within(confirm).getByRole("button", { name: "Remove Hello world", hidden: true }));
+    expect(await screen.findByText("Hello world was removed.")).toBeInTheDocument();
+  });
+
   it("shows permissions before installing, and greys out a version that cannot run", async () => {
     const u = userEvent.setup();
     mock({ "GET /api/store": { body: catalog } });
     renderPage();
-    await u.click(await screen.findByRole("button", { name: "Details: Disks" }));
+    await u.click(await screen.findByRole("button", { name: "Information about Disks" }));
     const dialog = await screen.findByRole("dialog", { hidden: true });
     expect(within(dialog).getByText("disks.read")).toBeInTheDocument();
     expect(within(dialog).getByText("inventory.read@1 (optional)")).toBeInTheDocument();
@@ -112,7 +182,7 @@ describe("StorePage", () => {
   });
 
   const detailOf = async (u: ReturnType<typeof userEvent.setup>, name: string) => {
-    await u.click(await screen.findByRole("button", { name: `Details: ${name}` }));
+    await u.click(await screen.findByRole("button", { name: `Information about ${name}` }));
     return screen.findByRole("dialog", { hidden: true });
   };
 
@@ -221,7 +291,7 @@ describe("StorePage", () => {
       "POST /api/store/plugins/disks/install": { status: 422, body: { error: "english", code: "helper_failed", args: { helper_code: "checksum" } } },
     });
     renderPage();
-    await u.click(await screen.findByRole("button", { name: /^Dettagli: Disks/ }));
+    await u.click(await screen.findByRole("button", { name: "Informazioni su Disks" }));
     await u.click(await screen.findByRole("button", { name: "Installa 0.1.0", hidden: true }));
     expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent(
       "Non installato: Il pacchetto non corrisponde al checksum dell'indice firmato.",
@@ -233,7 +303,7 @@ describe("StorePage", () => {
     mock({ "GET /api/store": { body: catalog } });
     renderPage(user(VIEWER_PERMISSIONS));
     expect(await screen.findByText(/needs the plugins\.manage permission/)).toBeInTheDocument();
-    await u.click(screen.getByRole("button", { name: "Details: Disks" }));
+    await u.click(screen.getByRole("button", { name: "Information about Disks" }));
     expect(await screen.findByRole("button", { name: "Install 0.1.0", hidden: true })).toBeDisabled();
   });
 
@@ -288,7 +358,7 @@ describe("step-up", () => {
     });
     vi.stubGlobal("fetch", fn);
     renderPage();
-    await u.click(await screen.findByRole("button", { name: "Details: Hello world" }));
+    await u.click(await screen.findByRole("button", { name: "Information about Hello world" }));
     await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
     await u.click(await screen.findByRole("button", { name: "Remove Hello world", hidden: true }));
     expect(await screen.findByText("Hello world was removed.")).toBeInTheDocument();
@@ -312,7 +382,7 @@ describe("step-up", () => {
       ),
     );
     renderPage();
-    await u.click(await screen.findByRole("button", { name: "Details: Hello world" }));
+    await u.click(await screen.findByRole("button", { name: "Information about Hello world" }));
     await u.click(screen.getByRole("button", { name: "Remove", hidden: true }));
     await u.click(await screen.findByRole("button", { name: "Remove Hello world", hidden: true }));
     expect(await screen.findByRole("alert", { hidden: true })).toHaveTextContent(/Not removed:/);

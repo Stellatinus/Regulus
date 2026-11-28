@@ -2071,3 +2071,23 @@ input.switch[type="checkbox"]:checked::after {
   background: transparent;
   color-scheme: normal;
 }
+
+/* The "i" button of a store card (#532): a round icon button, last in the row. */
+.store-info {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-style: italic;
+  font-weight: 600;
+  flex: none;
+}
+
+.store-card-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

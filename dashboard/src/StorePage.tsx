@@ -46,6 +46,16 @@ export const hasUpdate = (p: StorePlugin) => {
   return !!p.installed && !!v && v.version !== p.installed.version;
 };
 
+// What a version needs from the hub, as a list (a plain string is a required
+// capability).
+export const needsOf = (v?: StoreVersion) =>
+  (v?.needs ?? []).map((n) => (typeof n === "string" ? { capability: n, optional: false } : { capability: n.capability, optional: !!n.optional }));
+
+// A version that asks for permissions or needs other capabilities is not
+// installed from a card without showing them first (#532): the card's Install
+// never skips what the description page shows.
+export const needsApproval = (v?: StoreVersion) => !!v && ((v.permissions?.length ?? 0) > 0 || needsOf(v).length > 0);
+
 type Action = "install" | "update" | "remove";
 type Working = { id: string; name: string; action: Action };
 type Notice = { kind: "done" | "error"; text: string };
@@ -121,6 +131,8 @@ export function StorePage() {
   const [working, setWorking] = useState<Working | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reload, setReload] = useState(0);
+  // The confirmation a card's Install, Update or Remove asks first (#532).
+  const [confirm, setConfirm] = useState<{ plugin: StorePlugin; action: Action } | null>(null);
 
   const run = useCallback(
     async (p: StorePlugin, action: Action, version?: string) => {
@@ -146,6 +158,14 @@ export function StorePage() {
     },
     [t],
   );
+
+  // A card's button: remove always asks; install and update ask when the
+  // version has permissions or needs to show, and go straight on otherwise.
+  const act = (p: StorePlugin, action: Action) => {
+    const v = offered(p);
+    if (action === "remove" || needsApproval(v)) setConfirm({ plugin: p, action });
+    else void run(p, action, v?.version);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -228,11 +248,23 @@ export function StorePage() {
           ) : (
             <ul className="catalog-grid">
               {shown.map((p) => (
-                <PluginCard key={p.id} plugin={p} onOpen={() => setOpen(p.id)} />
+                <PluginCard key={p.id} plugin={p} canInstall={canInstall} working={working} onOpen={() => setOpen(p.id)} onAct={act} />
               ))}
             </ul>
           )}
         </>
+      )}
+      {confirm && (
+        <ActionConfirm
+          plugin={confirm.plugin}
+          action={confirm.action}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => {
+            const { plugin, action } = confirm;
+            setConfirm(null);
+            void run(plugin, action, action === "remove" ? undefined : offered(plugin)?.version);
+          }}
+        />
       )}
       {detail && (
         <Detail plugin={detail} canInstall={canInstall} working={working} notice={notice} onRun={run} onClose={() => setOpen(null)} />
@@ -303,9 +335,23 @@ function Channel({ channel }: { channel: string }) {
   return <span className={`badge-role store-channel ${channel}`}>{known ? t(`store.channel.${channel}` as MessageKey) : channel}</span>;
 }
 
-function PluginCard({ plugin: p, onOpen }: { plugin: StorePlugin; onOpen: () => void }) {
+function PluginCard({
+  plugin: p,
+  canInstall,
+  working,
+  onOpen,
+  onAct,
+}: {
+  plugin: StorePlugin;
+  canInstall: boolean;
+  working: Working | null;
+  onOpen: () => void;
+  onAct: (p: StorePlugin, action: Action) => void;
+}) {
   const t = useT();
   const v = offered(p);
+  const busy = working !== null;
+  const mine = working?.id === p.id ? working.action : null;
   return (
     <li className="catalog-card">
       <div className="catalog-head">
@@ -322,11 +368,80 @@ function PluginCard({ plugin: p, onOpen }: { plugin: StorePlugin; onOpen: () => 
           {p.installed ? t("store.card.installed", { version: p.installed.version }) : t("store.card.notInstalled")}
           {hasUpdate(p) && v && <> · {t("store.card.update", { version: v.version })}</>}
         </span>
-        <button type="button" onClick={onOpen} aria-label={`${t("store.card.details")}: ${p.name}`}>
-          {t("store.card.details")}
-        </button>
+        {/* [Install] [i]: the action first, the description page last (#532). An installed plugin shows Update, or Remove, in the same place. */}
+        <div className="store-card-buttons">
+          {!p.installed ? (
+            <button type="button" className="primary" disabled={!canInstall || !v || busy} aria-busy={mine === "install"} aria-label={`${t("store.install")}: ${p.name}`} onClick={() => onAct(p, "install")}>
+              {mine === "install" ? t("store.installing") : t("store.install")}
+            </button>
+          ) : hasUpdate(p) && v ? (
+            <button type="button" className="primary" disabled={!canInstall || busy} aria-busy={mine === "update"} aria-label={`${t("store.update")}: ${p.name}`} onClick={() => onAct(p, "update")}>
+              {mine === "update" ? t("store.updating") : t("store.update")}
+            </button>
+          ) : (
+            <button type="button" disabled={!canInstall || busy} aria-busy={mine === "remove"} aria-label={`${t("store.remove")}: ${p.name}`} onClick={() => onAct(p, "remove")}>
+              {mine === "remove" ? t("store.removing") : t("store.remove")}
+            </button>
+          )}
+          <button type="button" className="store-info" onClick={onOpen} aria-label={t("store.card.info", { name: p.name })} title={t("store.card.info", { name: p.name })}>
+            <span aria-hidden="true">i</span>
+          </button>
+        </div>
       </div>
     </li>
+  );
+}
+
+// ActionConfirm is what a card's button asks before it acts: the permissions
+// and the needs of the version about to be installed, or the removal. It
+// shows what the description page shows, so the card is never a way around it.
+function ActionConfirm({ plugin: p, action, onCancel, onConfirm }: { plugin: StorePlugin; action: Action; onCancel: () => void; onConfirm: () => void }) {
+  const t = useT();
+  const ref = useRef<HTMLDialogElement>(null);
+  const v = offered(p);
+  useEffect(() => {
+    const d = ref.current;
+    if (d && typeof d.showModal === "function" && !d.open) d.showModal();
+    else if (d && !d.open) d.setAttribute("open", "");
+  }, []);
+  const needs = needsOf(v);
+  const remove = action === "remove";
+  return (
+    <dialog ref={ref} className="edit-dialog store-detail" role="alertdialog" aria-labelledby="store-action-title" onClose={onCancel} onCancel={onCancel}>
+      {remove ? (
+        <>
+          <h3 id="store-action-title">{t("store.confirmRemove.title", { name: p.name })}</h3>
+          <p>{t("store.confirmRemove.body", { name: p.name })}</p>
+        </>
+      ) : (
+        <>
+          <h3 id="store-action-title">{t(action === "update" ? "store.confirmUpdate.title" : "store.confirmInstall.title", { name: p.name, version: v?.version ?? "" })}</h3>
+          <h4>{t("store.detail.permissions")}</h4>
+          <p className="store-note">{t("store.detail.permissionsNote")}</p>
+          {v?.permissions && v.permissions.length > 0 ? (
+            <ul>
+              {v.permissions.map((perm) => (
+                <li key={perm.id}>
+                  <code>{perm.id}</code>: {perm.description}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>{t("store.detail.noPermissions")}</p>
+          )}
+          <h4>{t("store.detail.needs")}</h4>
+          <p>{needs.length === 0 ? t("store.detail.none") : needs.map((n) => (n.optional ? t("store.detail.needsOptional", { capability: n.capability }) : n.capability)).join(", ")}</p>
+        </>
+      )}
+      <div className="store-actions">
+        <button type="button" onClick={onCancel}>
+          {t("store.confirmRemove.no")}
+        </button>
+        <button type="button" className={remove ? "danger" : "primary"} onClick={onConfirm}>
+          {remove ? t("store.confirmRemove.yes", { name: p.name }) : t(action === "update" ? "store.confirmUpdate.yes" : "store.confirmInstall.yes", { name: p.name })}
+        </button>
+      </div>
+    </dialog>
   );
 }
 
@@ -356,7 +471,7 @@ function Detail({
     else if (d && !d.open) d.setAttribute("open", "");
   }, []);
 
-  const needs = (v?.needs ?? []).map((n) => (typeof n === "string" ? { capability: n, optional: false } : { capability: n.capability, optional: !!n.optional }));
+  const needs = needsOf(v);
   return (
     <dialog ref={ref} className="edit-dialog store-detail" aria-labelledby="store-detail-title" onClose={onClose} onCancel={onClose}>
       <h3 id="store-detail-title">{p.name}</h3>
