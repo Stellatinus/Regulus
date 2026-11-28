@@ -376,6 +376,81 @@ describe("StorePage", () => {
   });
 });
 
+describe("progress of an install (#530)", () => {
+  const running = (over: object) => ({
+    body: { progress: { plugin: "disks", action: "install", version: "0.1.0", state: "running", step: "downloading", percent: 40, started_at: "2026-11-28T10:00:00Z", at: "2026-11-28T10:00:01Z", ...over } },
+  });
+
+  it("shows a bar with the percentage while downloading, and the step by name after", async () => {
+    const u = userEvent.setup();
+    let progress: { body: unknown } = { body: { progress: null } };
+    let finish: (v: unknown) => void = () => undefined;
+    const fn = vi.fn((url: string) => {
+      if (url === "/api/store/plugins/disks/install")
+        return new Promise((resolve) => {
+          finish = () => resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve({ plugin: "disks", action: "install", version: "0.1.0" }) });
+        });
+      const body = url === "/api/store/progress" ? progress.body : catalog;
+      return Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: () => Promise.resolve(body) });
+    });
+    vi.stubGlobal("fetch", fn);
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Install: Disks" }));
+    progress = running({});
+    await u.click(await screen.findByRole("button", { name: "Install Disks", hidden: true }));
+    const bar = await screen.findByRole("progressbar", { name: "Disks" });
+    await waitFor(() => expect(bar).toHaveAttribute("aria-valuenow", "40"));
+    expect(bar).toHaveAttribute("aria-valuetext", "Downloading… 40%");
+    expect(screen.getByText("Downloading… 40%")).toBeInTheDocument();
+    // The next steps have no percentage: an indeterminate bar and the step's name.
+    progress = running({ step: "verifying", percent: -1 });
+    await waitFor(() => expect(screen.getByRole("progressbar", { name: "Disks" })).not.toHaveAttribute("aria-valuenow"), { timeout: 3000 });
+    expect(screen.getByRole("progressbar", { name: "Disks" })).toHaveAttribute("aria-valuetext", "Verifying the signature and the checksum");
+    progress = running({ step: "installing", percent: -1 });
+    expect(await screen.findByText("Installing", { selector: "p[aria-live]" }, { timeout: 3000 })).toBeInTheDocument();
+    finish(undefined);
+    expect(await screen.findByText("Disks 0.1.0 was installed.")).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows an operation that is already running when the page opens, and turns every action off", async () => {
+    mock({ "GET /api/store": { body: catalog }, "GET /api/store/progress": running({ plugin: "hello-world", action: "update", step: "installing", percent: -1 }) });
+    renderPage();
+    expect(await screen.findByRole("progressbar", { name: "Hello world" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Updating Hello world…");
+    expect(screen.getByRole("button", { name: "Install: Disks" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Update: Hello world" })).toBeDisabled();
+  });
+
+  it("ends the bar in an error with the reason when another administrator's operation failed, in Italian too", async () => {
+    window.localStorage.setItem("regulus.language", "it");
+    mock({
+      "GET /api/store": { body: catalog },
+      "GET /api/store/progress": running({ state: "failed", step: undefined, percent: -1, code: "helper_failed", helper_code: "checksum" }),
+    });
+    renderPage();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Non riuscito: Il pacchetto non corrisponde al checksum dell'indice firmato.");
+    expect(within(alert).getByRole("progressbar")).toHaveAttribute("aria-valuetext", expect.stringContaining("Non riuscito"));
+    // The buttons are on again.
+    expect(screen.getByRole("button", { name: "Installa: Disks" })).toBeEnabled();
+  });
+
+  it("says a failure of its own with the reason, and turns the buttons on again", async () => {
+    const u = userEvent.setup();
+    mock({
+      "GET /api/store": { body: catalog },
+      "POST /api/store/plugins/disks/install": { status: 504, body: { error: "english", code: "helper_timeout" } },
+    });
+    renderPage();
+    await u.click(await screen.findByRole("button", { name: "Install: Disks" }));
+    await u.click(await screen.findByRole("button", { name: "Install Disks", hidden: true }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not installed: The root helper did not answer within two minutes.");
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Install: Disks" })).toBeEnabled();
+  });
+});
+
 describe("step-up", () => {
   it("asks for the password again when the hub wants a recent proof, then repeats the action", async () => {
     const u = userEvent.setup();

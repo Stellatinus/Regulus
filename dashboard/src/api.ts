@@ -1161,6 +1161,29 @@ export interface StoreCatalog {
 export const fetchStore = (signal?: AbortSignal) =>
   request<StoreCatalog>("GET", "/api/store", undefined, signal);
 
+// Where the install, update or removal in progress is, or how the last one
+// ended (GET /api/store/progress, kept by the hub for a minute): the same for
+// every administrator and after a reload of the page (#530). `step` is one of
+// downloading, verifying, installing, removing (testing and rolling_back are
+// reserved and not reported yet); `percent` is 0 to 100 only while the size is
+// known and -1 otherwise. A failed one has the codes of the install answers.
+export interface StoreProgress {
+  plugin: string;
+  action: "install" | "update" | "remove";
+  version?: string;
+  state: "running" | "done" | "failed";
+  step?: string;
+  percent: number;
+  code?: string;
+  helper_code?: string;
+  message?: string;
+  started_at: string;
+  at: string;
+}
+
+export const fetchStoreProgress = (signal?: AbortSignal) =>
+  request<{ progress: StoreProgress | null }>("GET", "/api/store/progress", undefined, signal);
+
 // What the hub answers when a store action worked (install, update, remove).
 export interface StoreActionResult {
   plugin: string;

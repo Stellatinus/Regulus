@@ -25,6 +25,31 @@ type StoreInstaller interface {
 	Remove(ctx context.Context, by, id string) (store.Outcome, error)
 }
 
+// storeProgressSource is what an installer that reports progress adds to
+// StoreInstaller (*store.Installer does). It is a separate interface so a
+// stand-in installer need not implement it.
+type storeProgressSource interface {
+	Progress() (store.Progress, bool)
+}
+
+// storeProgressHandler serves GET /api/store/progress: where the install,
+// update or removal in progress is, or how the last one ended (kept for a
+// minute), the same for every administrator and after a reload of the page
+// (#530). {"progress": null} when there is none.
+func storeProgressHandler(in StoreInstaller) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var out struct {
+			Progress *store.Progress `json:"progress"`
+		}
+		if src, ok := in.(storeProgressSource); ok && in != nil {
+			if p, ok := src.Progress(); ok {
+				out.Progress = &p
+			}
+		}
+		writeJSONBody(w, http.StatusOK, out)
+	}
+}
+
 // storeHandler serves GET /api/store: the sources with their state and the
 // plugins they offer, each version marked compatible or not with the reason.
 func storeHandler(src StoreSource) http.HandlerFunc {

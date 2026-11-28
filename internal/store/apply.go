@@ -90,6 +90,16 @@ type Applier struct {
 	// PluginsDir (the real helper runs as root, so they are root's already).
 	Chown func(string) error
 	Log   *slog.Logger
+
+	// reqID is the request being handled, so progress.json says which it is for.
+	reqID string
+}
+
+// step tells the hub which step the helper is in (progress.json, #530). It is
+// information only: a failure to write it never stops the change.
+func (a *Applier) step(plugin, action, version, step string) {
+	now := a.now().UTC()
+	_ = writeProgress(ApplyDir(a.DataDir), Progress{RequestID: a.reqID, Plugin: plugin, Action: action, Version: version, State: ProgressRunning, Step: step, Percent: -1, Started: now, At: now})
 }
 
 func (a *Applier) now() time.Time {
@@ -115,6 +125,7 @@ func (a *Applier) Apply(ctx context.Context) (Result, error) {
 		return res, err
 	}
 	var aerr *applyError
+	a.reqID = req.ID
 	switch req.Action {
 	case ActionInstall:
 		res.From, aerr = a.install(ctx, req)
@@ -197,6 +208,7 @@ func (a *Applier) install(ctx context.Context, req Request) (from string, aerr *
 	if aerr := a.checkPluginsDir(); aerr != nil {
 		return "", aerr
 	}
+	a.step(req.Plugin, req.Action, req.Version, StepVerifying)
 
 	// The index again, from the staged copy, with the source's own signer.
 	sdir := stagedDir(a.DataDir, req.Plugin, req.Version)
@@ -290,6 +302,7 @@ func (a *Applier) install(ctx context.Context, req Request) (from string, aerr *
 		return from, failErr(CodeInternal, err, "cannot read the staged copy")
 	}
 	defer func() { _ = pf.Close() }()
+	a.step(req.Plugin, req.Action, req.Version, StepInstalling)
 	unpacked := filepath.Join(stage, req.Plugin)
 	if err := unpack(pf, unpacked, req.Plugin, a.Chown); err != nil {
 		return from, failErr(CodeUnsafePackage, err, "the package is refused")
@@ -469,6 +482,7 @@ func (a *Applier) remove(req Request) (from string, aerr *applyError) {
 	if aerr := a.checkPluginsDir(); aerr != nil {
 		return "", aerr
 	}
+	a.step(req.Plugin, req.Action, "", StepRemoving)
 	pdir := filepath.Join(a.PluginsDir, req.Plugin)
 	info, err := os.Lstat(pdir)
 	if errors.Is(err, os.ErrNotExist) {

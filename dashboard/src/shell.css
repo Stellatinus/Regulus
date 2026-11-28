@@ -2100,3 +2100,29 @@ input.switch[type="checkbox"]:checked::after {
   font-size: 13px;
   white-space: nowrap;
 }
+
+/* The progress bar of an install, update or removal and its step (#530). */
+.store-progress { margin: 6px 0 12px; }
+.store-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.store-progress-fill {
+  height: 100%;
+  background: var(--violet, #8b5cf6);
+  transition: width 0.3s ease;
+}
+.store-progress-track.indeterminate .store-progress-fill {
+  width: 35%;
+  animation: store-progress-slide 1.2s ease-in-out infinite;
+}
+.store-progress-track.failed .store-progress-fill { background: var(--crit); }
+@keyframes store-progress-slide {
+  0% { margin-left: -35%; }
+  100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-progress-track.indeterminate .store-progress-fill { animation: none; width: 100%; opacity: 0.5; }
+}

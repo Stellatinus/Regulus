@@ -660,6 +660,7 @@ func apiRoutes(d Deps) []route {
 		{pattern: "GET /api/layout", handler: http.HandlerFunc(h.get)},
 		{pattern: "PUT /api/layout", handler: need(auth.PermLayoutEdit, auth.RequireJSON(http.HandlerFunc(h.put)))},
 		{pattern: "GET /api/store", handler: need(auth.PermPluginsManage, storeHandler(d.Store))},
+		{pattern: "GET /api/store/progress", handler: need(auth.PermPluginsManage, storeProgressHandler(d.StoreInstaller))},
 		{pattern: "POST /api/store/plugins/{id}/install", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeInstallHandler(d.StoreInstaller))))},
 		{pattern: "POST /api/store/plugins/{id}/update", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeUpdateHandler(d.StoreInstaller))))},
 		{pattern: "DELETE /api/store/plugins/{id}", handler: need(auth.PermPluginsManage, stepUp(auth.RequireJSON(storeRemoveHandler(d.StoreInstaller))))},

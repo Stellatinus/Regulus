@@ -4,11 +4,13 @@ import {
   apiErrorText,
   can,
   fetchStore,
+  fetchStoreProgress,
   installStorePlugin,
   notifyPluginsChanged,
   removeStorePlugin,
   updateStorePlugin,
   type StoreCatalog,
+  type StoreProgress,
   type StorePlugin,
   type StoreSource,
   type StoreVersion,
@@ -135,15 +137,36 @@ const HELPER_CODES = new Set([
 // falls back to the usual text of the error.
 export function storeErrorText(t: ReturnType<typeof useT>, err: unknown): string {
   if (err instanceof ApiError && err.code) {
-    if (err.code === "helper_failed") {
-      const h = String(err.args?.helper_code ?? "");
-      return HELPER_CODES.has(h)
-        ? t(`store.error.helper.${h}` as MessageKey)
-        : t("store.error.helper_failed", { code: h || "?" });
-    }
-    if (STORE_CODES.has(err.code)) return t(`store.error.${err.code}` as MessageKey);
+    const text = storeCodeText(t, err.code, String(err.args?.helper_code ?? ""));
+    if (text) return text;
   }
   return apiErrorText(t, err);
+}
+
+// storeCodeText is the text of a store code (and of the helper's own code), or
+// "" when the code is not one of the store's. A failed operation that another
+// administrator started (GET /api/store/progress) carries the same codes.
+function storeCodeText(t: ReturnType<typeof useT>, code: string, helper: string): string {
+  if (code === "helper_failed")
+    return HELPER_CODES.has(helper) ? t(`store.error.helper.${helper}` as MessageKey) : t("store.error.helper_failed", { code: helper || "?" });
+  return STORE_CODES.has(code) ? t(`store.error.${code}` as MessageKey) : "";
+}
+
+// How often the page asks the hub where an install, update or removal is: fast
+// while one is running (here or started elsewhere), slowly otherwise, so a
+// reload, or another administrator's operation, shows up.
+export const PROGRESS_POLL_MS = 1000;
+export const PROGRESS_IDLE_POLL_MS = 5000;
+
+const STEPS = ["downloading", "verifying", "installing", "removing", "testing", "rolling_back"];
+
+// stepText is the text of the current step, in the language of the page.
+function stepText(t: ReturnType<typeof useT>, p: StoreProgress | null): string {
+  if (p?.state === "failed")
+    return t("store.step.failed", { reason: storeCodeText(t, p.code ?? "", p.helper_code ?? "") || p.message || t("store.step.unknown") });
+  if (!p || !p.step || !STEPS.includes(p.step)) return t("store.step.starting");
+  if (p.step === "downloading" && p.percent >= 0) return t("store.step.downloadingPercent", { percent: p.percent });
+  return t(`store.step.${p.step}` as MessageKey);
 }
 
 const sourceClass = { ok: "connected", error: "offline", expired: "stale" } as const;
@@ -168,6 +191,9 @@ export function StorePage() {
   const [working, setWorking] = useState<Working | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reload, setReload] = useState(0);
+  // What the hub says the running (or last) operation is doing (#530); it is
+  // what survives a reload and what another administrator started.
+  const [remote, setRemote] = useState<StoreProgress | null>(null);
   // The confirmation a card's Install, Update or Remove asks first (#532).
   const [confirm, setConfirm] = useState<{ plugin: StorePlugin; action: Action } | null>(null);
 
@@ -175,6 +201,7 @@ export function StorePage() {
     async (p: StorePlugin, action: Action, version?: string) => {
       setWorking({ id: p.id, name: p.name, action });
       setNotice(null);
+      setRemote(null);
       try {
         const r =
           action === "install"
@@ -191,10 +218,45 @@ export function StorePage() {
         setNotice({ kind: "error", text: t(failed[action], { message: storeErrorText(t, err) }) });
       } finally {
         setWorking(null);
+        setRemote(null);
       }
     },
     [t],
   );
+
+  // Ask the hub where the operation is: quickly while one runs, slowly
+  // otherwise (a reload, or another administrator's operation, shows up).
+  const polling = working !== null || remote?.state === "running";
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = async () => {
+      try {
+        const r = await fetchStoreProgress();
+        const p = r && typeof r === "object" && r.progress ? r.progress : null;
+        if (!stopped) setRemote(p);
+      } catch {
+        // The page keeps what it knew: a refusal or a lost network is not progress.
+      }
+      if (!stopped) timer = setTimeout(() => void tick(), polling ? PROGRESS_POLL_MS : PROGRESS_IDLE_POLL_MS);
+    };
+    void tick();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [polling]);
+  // An operation that someone else started has ended: read the catalog and the
+  // plugin tabs again, as after our own.
+  useEffect(() => {
+    const running = remote?.state === "running";
+    if (wasRunning.current && !running && working === null) {
+      notifyPluginsChanged();
+      setReload((n) => n + 1);
+    }
+    wasRunning.current = running;
+  }, [remote, working]);
 
   // A card's button: remove always asks; install and update ask when the
   // version has permissions or needs to show, and go straight on otherwise.
@@ -233,6 +295,13 @@ export function StorePage() {
   }, [plugins, query, downloaded, kind]);
   const updates = useMemo(() => plugins.filter(hasUpdate).length, [plugins]);
 
+  // What is busy: our own action, or an operation the hub says is running
+  // (started in another tab or by another administrator, or before a reload).
+  const running = remote?.state === "running" ? remote : null;
+  const current: Working | null =
+    working ?? (running ? { id: running.plugin, name: plugins.find((p) => p.id === running.plugin)?.name ?? running.plugin, action: running.action } : null);
+  const shownProgress = current ? (running && running.plugin === current.id ? running : null) : remote?.state === "failed" ? remote : null;
+
   if (state.kind === "loading") return <p role="status">{t("store.loading")}</p>;
   if (state.kind === "error")
     return (
@@ -246,7 +315,7 @@ export function StorePage() {
 
   return (
     <div className="store">
-      {!detail && <ActionStatus working={working} notice={notice} />}
+      {!detail && <ActionStatus working={current} notice={notice} progress={shownProgress} />}
       <SourceList sources={sources} />
       {!canInstall && <p className="store-note">{t("store.noPermission", { permission: STORE_INSTALL_PERMISSION })}</p>}
       {sources.length === 0 ? (
@@ -285,7 +354,7 @@ export function StorePage() {
           ) : (
             <ul className="catalog-grid">
               {shown.map((p) => (
-                <PluginCard key={p.id} plugin={p} canInstall={canInstall} working={working} onOpen={() => setOpen(p.id)} onAct={act} />
+                <PluginCard key={p.id} plugin={p} canInstall={canInstall} working={current} onOpen={() => setOpen(p.id)} onAct={act} />
               ))}
             </ul>
           )}
@@ -304,7 +373,7 @@ export function StorePage() {
         />
       )}
       {detail && (
-        <Detail plugin={detail} canInstall={canInstall} working={working} notice={notice} onRun={run} onClose={() => setOpen(null)} />
+        <Detail plugin={detail} canInstall={canInstall} working={current} notice={notice} progress={shownProgress} onRun={run} onClose={() => setOpen(null)} />
       )}
     </div>
   );
@@ -345,14 +414,25 @@ function SourceList({ sources }: { sources: StoreSource[] }) {
   );
 }
 
-// ActionStatus says what the running action is, or how the last one ended.
-function ActionStatus({ working, notice }: { working: Working | null; notice: Notice | null }) {
+// ActionStatus says what the running action is, with a progress bar and the
+// current step (#530), or how the last one ended.
+function ActionStatus({ working, notice, progress }: { working: Working | null; notice: Notice | null; progress: StoreProgress | null }) {
   const t = useT();
   if (working)
     return (
-      <p role="status" aria-busy="true" className="store-note">
-        {t(`store.working.${working.action}` as MessageKey, { name: working.name })}
-      </p>
+      <div>
+        <p role="status" aria-busy="true" className="store-note">
+          {t(`store.working.${working.action}` as MessageKey, { name: working.name })}
+        </p>
+        <StepBar progress={progress} label={working.name} />
+      </div>
+    );
+  // Another administrator's operation failed and nothing of ours says otherwise.
+  if (!notice && progress?.state === "failed")
+    return (
+      <div role="alert" className="error">
+        <StepBar progress={progress} label={progress.plugin} />
+      </div>
     );
   if (!notice) return null;
   return notice.kind === "error" ? (
@@ -363,6 +443,34 @@ function ActionStatus({ working, notice }: { working: Working | null; notice: No
     <p role="status" className="store-note">
       {notice.text}
     </p>
+  );
+}
+
+// StepBar is the progress bar and the text of the step. The download has a
+// real percentage; the other steps, an indeterminate bar with their name. The
+// step is in a polite live region, so it is announced as it changes.
+function StepBar({ progress, label }: { progress: StoreProgress | null; label: string }) {
+  const t = useT();
+  const text = stepText(t, progress);
+  const failed = progress?.state === "failed";
+  const known = !!progress && !failed && progress.percent >= 0;
+  return (
+    <div className="store-progress">
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={known ? progress.percent : undefined}
+        aria-valuetext={text}
+        className={`store-progress-track${failed ? " failed" : known ? "" : " indeterminate"}`}
+      >
+        <div className="store-progress-fill" style={failed ? { width: "100%" } : known ? { width: `${progress.percent}%` } : undefined} />
+      </div>
+      <p className="store-note" aria-live="polite">
+        {text}
+      </p>
+    </div>
   );
 }
 
@@ -487,6 +595,7 @@ function Detail({
   canInstall,
   working,
   notice,
+  progress,
   onRun,
   onClose,
 }: {
@@ -494,6 +603,7 @@ function Detail({
   canInstall: boolean;
   working: Working | null;
   notice: Notice | null;
+  progress: StoreProgress | null;
   onRun: (p: StorePlugin, action: Action, version?: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -564,7 +674,7 @@ function Detail({
         ))}
       </ul>
 
-      <ActionStatus working={working} notice={notice} />
+      <ActionStatus working={working} notice={notice} progress={progress} />
       {confirmRemove && p.installed && (
         <div role="alertdialog" aria-labelledby="store-remove-title" className="store-confirm">
           <h4 id="store-remove-title">{t("store.confirmRemove.title", { name: p.name })}</h4>
