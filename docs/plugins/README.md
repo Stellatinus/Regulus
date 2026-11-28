@@ -27,7 +27,7 @@ The code is in `internal/plugin` (manifest, discovery, supervisor), `internal/pl
 | Discovery of the plugins directory | #19 | **implemented**, unit tests |
 | Runtime: separate processes, gRPC on a Unix socket, identity check, health checks, restart with backoff, giving up, stopping the process group | #19 | **implemented** for the agent (`plugins_dir`), tests with real processes; **not verified** on a real server (no `[Test]` run yet) |
 | Running plugins on the hub | #262 | **implemented** (`plugins_dir` of the hub), tests with real processes; **not verified** on an installed hub |
-| State of the plugins outside the log | #262 | **implemented**: `GET /api/plugins` (hub and agents), the console's Status tab and `regulus status` (hub); agents report theirs with their metrics; and the dashboard's **Plugins** page (`dashboard/src/PluginsPage.tsx`), which reads `GET /api/plugins` again when the hub pushes `plugins.changed`. The page was opened on a real hub with no plugin directory on 2026-11-24 and said so; it has **not been checked** with a running plugin on an installed hub (#310, #327) |
+| State of the plugins outside the log | #262 | **implemented**: `GET /api/plugins` (hub; the `agents` list it still returns is not shown by the dashboard since #535 and goes with the agent component, see #496), the console's Status tab and `regulus status` (hub); agents report theirs with their metrics; and the dashboard's **Plugins** page (`dashboard/src/PluginsPage.tsx`), which reads `GET /api/plugins` again when the hub pushes `plugins.changed`. The page was opened on a real hub with no plugin directory on 2026-11-24 and said so; it has **not been checked** with a running plugin on an installed hub (#310, #327) |
 | The host side of plugin features (what a plugin can ask Regulus for, how its data reaches the dashboard) | #19 follow-up | **not designed**: today a plugin can only prove it runs and is healthy |
 | Index, signatures, installation, update and removal (hub only, root helper `regulus plugin-apply`) | regulus-plugins#1 | **implemented** (2026-11-26), tests with a fake signed index and the helper in-process; **not verified** as root under systemd or against a real release. Not built: rollback, pin, requirements between plugins, the automatic mode, per-plugin update mode |
 | Dashboard widgets loaded at runtime | #21 | **minimal version implemented**: a plugin's module is served by the hub and shown in a sandboxed frame as a **tab of the node window** (`components.ui.node_tab`); other places for widgets (the Dashboard grid) are not built. Not verified on an installed hub: the frame mechanics were checked in headless Chromium against a stand-in server (see [Runtime](runtime.md#the-page-of-a-plugin-in-the-dashboard-21-261)) |
@@ -73,6 +73,31 @@ A module served from the hub's own origin passes the Content-Security-Policy and
 **Built differently from the paragraph above.** The module is **not** fetched by the frame (an opaque origin sends no cookie, so it could not authenticate). The hub serves **one HTML page with the module inlined** (`GET /api/plugins/{id}/ui`), with its own policy that allows the two inline scripts by hash and no network, and the dashboard puts that page in the frame; so a module is one self-contained file. The dashboard's own policy does not apply to that page (a frame loaded from a URL has its own), and the page can be framed only by the hub's own origin. Only the dashboard, as the logged-in person, calls the hub, through `POST /api/plugins/{id}/call`.
 
 [Decisions](../decisions.md) records the choice. #21 and #261 must follow it.
+
+## A plugin item in the dock (design, **proposed, waiting for agreement**, #560)
+
+**No code until this is agreed.** Design v3.2 ([design-system.md](../design-system.md)) draws a **slot in the dock** where an installed plugin (the AI Assistant) adds its own item. Design v3 decided the opposite: *plugins live inside Services, not as new items of the dock* ([decisions.md](../decisions.md), "Web UI: design system v3"). Today a plugin can add **a tab to the node window** (`components.ui.node_tab`) and nothing else; the dock has no plugin slot, and the dashboard draws none.
+
+**Recommendation: keep it as it is until AI Support (#63) is designed, and reserve the shape below.** The only plugin that wants a dock item is the AI Assistant, which is not designed and may not be a plugin page at all (it may be a panel inside the console, or a chat opened from a node). Building a general slot for one unknown user is the mistake the first-party-only list would repeat (below).
+
+**If a dock item is allowed, this is the shape:**
+
+1. **Who decides: the administrator, not the manifest.** A manifest may *offer* an item (`components.ui.dock: {id, title: {en, it}, icon}`, a key the parser does not accept today); it appears in the dock only when (a) the plugin is installed and running, (b) an administrator switched **Show in the dock** on in Services (off by default, so installing a plugin never changes the dock by itself) and (c) the viewer holds the permission the plugin asked for and the hub approved. A plugin cannot put itself in the dock.
+2. **Not only first-party plugins.** A list of trusted plugins depends on a signature scheme that regulus-plugins#3 has not designed, and [Dashboard widgets](#how-widget-code-is-isolated-from-the-session-315) already rejects an exception for first-party code: one mechanism for every plugin. The administrator's switch is the control.
+3. **The sandbox is the same.** The item opens a *page of the plugin* at `#/plugin/<id>` in the sandboxed frame of #315 (no cookie, no network, `postMessage` only, the narrower of the plugin's and the viewer's permissions). It is a **new kind of UI component**: today the frame is given a node (`context: {node}`) and the host side has two read operations built for Disks. A page without a node needs its own context and, for most uses, operations that do not exist yet (#261). The icon is **a name from a fixed set of icons** the dashboard draws, never markup from the plugin.
+4. **Many plugins.** The dock has five sections and a divider and must fit a phone (below 680 px only the icons show). **At most two plugin items**, in the order the administrator pinned them; more cannot be shown, and Services lists every plugin and its page anyway. No overflow menu: a menu inside the dock is a section of its own, which is a different design.
+5. **What v3.2's slot means for the dashboard:** the slot is drawn **only from a plugin that is really installed**, never from the example catalogue of the file.
+
+**What it depends on:** the manifest key (#19 follows), a page component and route (#21), the host side (#261), the sandbox (#315, built for tabs), and the shape of AI Support (#63), which may settle the question.
+
+**Open questions for the maintainer.**
+
+1. Is a plugin item in the dock **allowed at all**, or do plugins stay in Services (the decision of design v3)?
+2. If allowed: **the administrator's switch** as above, or something else?
+3. **Two items** at most, or another number?
+4. Wait for **AI Support (#63)** before building anything (recommended)?
+
+Until this is answered, **the dock has no plugin slot**.
 
 ## Repository layout (regulus-plugins#2)
 

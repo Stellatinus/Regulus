@@ -492,9 +492,11 @@ describe("ServerPage", () => {
     for (const title of ["System", "CPU", "Memory", "Network", "Disk usage"]) {
       expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
     }
-    // A viewer cannot manage the server.
+    // A viewer cannot manage the server, and the window has no Management
+    // section: the pencil is the only way to manage a node (#515).
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke this server" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^(Manage|Management)$/ })).not.toBeInTheDocument();
   });
 
   it("says what the agent of a server cannot read, and its container", async () => {
@@ -571,10 +573,14 @@ describe("ServerPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServerPage id="web1" />);
 
-    const input = await screen.findByLabelText("Name");
+    // The name is changed from the pencil (#515), and nowhere else.
+    expect(screen.queryByRole("heading", { name: /^(Manage|Management)$/ })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Edit the node" }));
+    const edit = screen.getByRole("dialog", { name: /^Edit / });
+    const input = within(edit).getByLabelText("Name");
     await user.clear(input);
     await user.type(input, "Frontend");
-    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(within(edit).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "Frontend" }));
     // The page is fetched again after the change.
@@ -600,7 +606,8 @@ describe("ServerPage", () => {
     const user = userEvent.setup();
     renderAs(admin, <ServerPage id="web1" />);
 
-    await user.click(await screen.findByRole("button", { name: "Revoke this server" }));
+    await user.click(await screen.findByRole("button", { name: "Edit the node" }));
+    await user.click(screen.getByRole("button", { name: "Revoke this server" }));
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
     await user.click(screen.getByRole("button", { name: "Revoke the server" }));
     await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
@@ -628,5 +635,7 @@ describe("ServerPage", () => {
     renderAs(admin, <ServerPage id="local" />);
     await screen.findByRole("dialog", { name: /web1\.lan/ });
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Edit the node" }));
+    expect(screen.queryByRole("button", { name: "Revoke this server" })).not.toBeInTheDocument();
   });
 });

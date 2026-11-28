@@ -142,12 +142,13 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 
 - every widget shows correct values; the range choice (10 minutes, 1 hour) works
 - widgets can be added, removed, arranged and the layout is kept
-- Nodes page: cards, compact list and map; the node window
-- Plugins page: every state is shown with its error; an invalid directory is listed as invalid
+- Nodes page: cards, compact list and map; the node window; the pencil renames and revokes a node, and is the only place to do it (#515)
+- Plugins page: every state is shown with its error; an invalid directory is listed as invalid; it has no section for servers (plugins live on the hubs only, #535)
 - Users, Updates, Settings and Disks pages
+- Admin: the **+** of Users and of Roles opens a popup (Escape, Cancel, a click outside and success close it, and the focus goes back to the **+**); Recent activity has the search bar, the refresh icon and the filter button, and filtering by account and by event group works, with a keyboard and on a phone width (#514)
 - the live indicator: Connecting, Reconnecting and Hub unreachable states
 - English and Italian, with no untranslated text and no broken layout
-- the themes
+- the modes (dark, light, system); the colour themes (Regulus Dark, Obsidian OLED, Slate) are **not built yet** (design waiting, #516)
 - a phone and a tablet
 - Chrome, Firefox and Safari
 - keyboard use and a screen reader
@@ -157,7 +158,11 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - the example plugin runs on the hub and on a remote agent
 - a plugin that crashes is restarted; one that cannot start is shown as failed
 - a plugin widget appears on the dashboard
-- the plugin store: install, update and remove from a verified source; `/usr/local/lib/regulus/plugins` is `0755` root after an upgrade from a version that left it `0700`
+- the plugin store: install, update and remove from a verified source, from the card and from the description page
+- installing, updating and removing a plugin show a progress bar with the current step (downloading with a percentage, verifying, installing, removing); it reappears after a reload of the page and for a second administrator, and a failure ends in an error with its reason (#530)
+- the store's **Downloaded** switch shows only what is installed, is remembered after a reload, and an update is still reachable from its card (#534)
+- a store card shows `[Install] [i]`: Install asks first when the plugin has permissions or needs, and **i** opens the description page (#532)
+- the Disks plugin installed from the store: its tab (Dischi in Italian) appears in the node window between General and SSH terminal, shows a card for each real disk with its device, interface, model, serial, size, first and last seen and identity, the moves of disks, the note about S.M.A.R.T.; the core's Physical disks panel is then not drawn; with the plugin removed, the panel is back (#497)
 
 **Installer**
 

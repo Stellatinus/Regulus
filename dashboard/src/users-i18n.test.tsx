@@ -47,7 +47,10 @@ describe("UsersPage in Italian", () => {
     expect(await screen.findByRole("heading", { name: "Sicurezza" })).toBeInTheDocument();
     expect(await screen.findByText("Ancora niente.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Aggiungi un ruolo" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Aggiungi utente" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aggiungi un utente" })).toBeInTheDocument();
+    expect(screen.getByRole("searchbox", { name: "Cerca nelle attività" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Aggiorna" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Filtri/ })).toBeInTheDocument();
   });
 
   it("refuses a user without permission in Italian", () => {

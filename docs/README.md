@@ -33,6 +33,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | read the proposed design of the web terminal and the file browser of a node (not implemented) | [Web terminal and file browser](node-access.md) |
 | see open ports and the traffic map of the group (design only) | [Network visibility](network-visibility.md) |
 | know how alerts will tell an administrator that a server is offline or a disk is full (design only) | [Alerts](alerts.md) |
+| read the proposed design of the bell and the notification panel (design only, waiting for agreement) | [Notification panel](notifications.md) |
 | know how a hub will be backed up and restored (design only) | [Hub backup and restore](backup.md) |
 | read the design of apps: the manifest, the volume layout, the catalog and the lifecycle (design only) | [Apps](apps.md) |
 | build and test Regulus | [Development](development.md) and [CONTRIBUTING](../CONTRIBUTING.md) |

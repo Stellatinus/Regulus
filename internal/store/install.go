@@ -52,7 +52,15 @@ type Installer struct {
 	Audit func(ctx context.Context, actor, event, target, detail string)
 
 	mu sync.Mutex
+	// progress is where the operation in progress is (Progress, #530).
+	progress tracker
 }
+
+// Progress returns the install, update or removal in progress, or the last one
+// for a minute after it ended; false when there is none. It is what
+// GET /api/store/progress answers, so it is the same for every administrator
+// and survives a reload of the page.
+func (i *Installer) Progress() (Progress, bool) { return i.progress.get() }
 
 // Outcome is what a successful request did.
 type Outcome struct {
@@ -133,11 +141,15 @@ func (i *Installer) Remove(ctx context.Context, by, id string) (Outcome, error) 
 		return Outcome{}, errf(ErrCodeNotInstalled, "%s is not installed", id)
 	}
 	req := Request{Action: ActionRemove, Plugin: id}
+	i.progress.begin(id, "remove", "")
+	i.progress.step(StepRemoving, -1)
 	res, err := i.ask(ctx, by, req)
 	if err != nil {
+		i.progress.finish(err)
 		i.audit(ctx, by, EventInstallFailed, id, "remove: "+err.Error())
 		return Outcome{}, err
 	}
+	i.progress.finish(nil)
 	i.reload()
 	i.audit(ctx, by, EventRemoved, id, "version "+cur.Version)
 	return Outcome{Plugin: id, Action: "remove", From: res.From}, nil
@@ -155,7 +167,14 @@ func (i *Installer) ready() error {
 
 func (i *Installer) run(ctx context.Context, by, event, action string, o Offer, from string) (Outcome, error) {
 	id, version := o.Plugin.ID, o.Version.Version
+	shown := "install" // what the administrator asked for; the helper knows only install
+	if event == EventUpdated {
+		shown = "update"
+	}
+	i.progress.begin(id, shown, version)
+	i.progress.step(StepDownloading, 0)
 	fail := func(err error) (Outcome, error) {
+		i.progress.finish(err)
 		i.audit(ctx, by, EventInstallFailed, id, fmt.Sprintf("%s %s: %v", action, version, err))
 		return Outcome{}, err
 	}
@@ -168,9 +187,11 @@ func (i *Installer) run(ctx context.Context, by, event, action string, o Offer, 
 	if err := os.MkdirAll(ApplyDir(i.DataDir), 0o750); err != nil {
 		return fail(errf(ErrCodeHelperFailed, "cannot create the request directory: %v", err))
 	}
-	if err := i.download(ctx, o.Artifact, filepath.Join(sdir, stagedPackage)); err != nil {
+	if err := i.download(ctx, o.Artifact, filepath.Join(sdir, stagedPackage), func(percent int) { i.progress.step(StepDownloading, percent) }); err != nil {
 		return fail(err)
 	}
+	// From here the root helper takes over; until it says more, it is verifying.
+	i.progress.step(StepVerifying, -1)
 	if err := writeFile(filepath.Join(sdir, stagedIndex), o.Index); err != nil {
 		return fail(errf(ErrCodeDownload, "cannot stage the index: %v", err))
 	}
@@ -181,6 +202,7 @@ func (i *Installer) run(ctx context.Context, by, event, action string, o Offer, 
 	if err != nil {
 		return fail(err)
 	}
+	i.progress.finish(nil)
 	i.reload()
 	i.audit(ctx, by, event, id, fmt.Sprintf("version %s from %s", version, o.Source.Name))
 	if res.From != "" {
@@ -234,6 +256,10 @@ func (i *Installer) ask(ctx context.Context, by string, req Request) (Result, er
 			}
 			return res, &Error{CodeStr: ErrCodeHelperFailed, Msg: res.Message, Helper: res.Code}
 		}
+		// The helper says which step it is in; an older file is for another request.
+		if p, ok := ReadProgress(dir); ok && p.RequestID == req.ID && p.Step != "" {
+			i.progress.step(p.Step, -1)
+		}
 		select {
 		case <-ctx.Done():
 			i.withdraw(dir)
@@ -257,7 +283,7 @@ func writeFile(path string, data []byte) error {
 // download fetches the package of a and writes it to dst, checking the size
 // and the SHA-256 that the signed index gives. HTTPS only, except for a
 // loopback address (tests, a local mirror).
-func (i *Installer) download(ctx context.Context, a Artifact, dst string) error {
+func (i *Installer) download(ctx context.Context, a Artifact, dst string, onPercent func(int)) error {
 	if a.Size <= 0 || a.Size > MaxPackage || len(a.SHA256) != 64 {
 		return errf(ErrCodeDownload, "the index gives no usable size and checksum for the package")
 	}
@@ -290,7 +316,7 @@ func (i *Installer) download(ctx context.Context, a Artifact, dst string) error 
 		return errf(ErrCodeDownload, "%v", err)
 	}
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, a.Size+1))
+	n, err := io.Copy(io.MultiWriter(f, h, &countWriter{total: a.Size, report: onPercent}), io.LimitReader(resp.Body, a.Size+1))
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -304,6 +330,29 @@ func (i *Installer) download(ctx context.Context, a Artifact, dst string) error 
 		return errf(ErrCodeDownload, "the package does not match the checksum of the signed index")
 	}
 	return nil
+}
+
+// countWriter reports the percentage of the download each time it changes
+// (at most 100 times): the size is known, from the signed index.
+type countWriter struct {
+	total, done int64
+	last        int
+	report      func(int)
+}
+
+func (c *countWriter) Write(p []byte) (int, error) {
+	c.done += int64(len(p))
+	if c.report != nil && c.total > 0 {
+		pc := int(c.done * 100 / c.total)
+		if pc > 100 {
+			pc = 100
+		}
+		if pc != c.last {
+			c.last = pc
+			c.report(pc)
+		}
+	}
+	return len(p), nil
 }
 
 func isLoopback(host string) bool {

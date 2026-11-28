@@ -2071,3 +2071,74 @@ input.switch[type="checkbox"]:checked::after {
   background: transparent;
   color-scheme: normal;
 }
+
+/* The "i" button of a store card (#532): a round icon button, last in the row. */
+.store-info {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-style: italic;
+  font-weight: 600;
+  flex: none;
+}
+
+.store-card-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The "Downloaded" switch of the store toolbar (#534). */
+.store-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* The progress bar of an install, update or removal and its step (#530). */
+.store-progress { margin: 6px 0 12px; }
+.store-progress-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.store-progress-fill {
+  height: 100%;
+  background: var(--violet, #8b5cf6);
+  transition: width 0.3s ease;
+}
+.store-progress-track.indeterminate .store-progress-fill {
+  width: 35%;
+  animation: store-progress-slide 1.2s ease-in-out infinite;
+}
+.store-progress-track.failed .store-progress-fill { background: var(--crit); }
+@keyframes store-progress-slide {
+  0% { margin-left: -35%; }
+  100% { margin-left: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-progress-track.indeterminate .store-progress-fill { animation: none; width: 100%; opacity: 0.5; }
+}
+
+/* Admin (#514): the heading row with a + at its right, and Recent activity's toolbar. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.panel-head h3 { margin: 0; }
+.plus-btn { width: 42px; padding: 0; font-size: 20px; line-height: 1; }
+.square-btn { width: 42px; padding: 0; }
+.audit-bar { margin-bottom: 12px; }
+.audit-chips { margin-bottom: 16px; }
+.popover-field { display: block; margin-bottom: 12px; }
+.popover-field select { width: 100%; }

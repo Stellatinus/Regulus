@@ -143,6 +143,28 @@ describe("UsersPage", () => {
     await waitFor(() => expect(screen.queryByRole("button", { name: "Edit helpdesk" })).not.toBeInTheDocument());
   });
 
+  it("adds a role from a popup opened by the + of the Roles row, and edits it on the page (#514)", async () => {
+    mockHub({
+      "GET /api/users": () => ({ data: [admin] }),
+      "GET /api/audit?limit=100": () => ({ data: [] }),
+      "POST /api/roles": () => ({ status: 201, data: helpdesk }),
+    });
+    renderAs(admin, <UsersPage />);
+    const user = userEvent.setup();
+    const plus = await screen.findByRole("button", { name: "Add a role" });
+    expect(screen.queryByLabelText("Role name")).not.toBeInTheDocument();
+    await user.click(plus);
+    const dialog = screen.getByRole("dialog", { name: "Add a role" });
+    expect(within(dialog).getByLabelText("Role name")).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(plus).toHaveFocus());
+    await user.click(plus);
+    await user.type(screen.getByLabelText("Role name"), "helpdesk");
+    await user.click(screen.getByRole("button", { name: "Save role" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
   it("shows the hub's refusal when a role asks for too much", async () => {
     mockHub({
       "GET /api/users": () => ({ data: [admin] }),
@@ -155,6 +177,97 @@ describe("UsersPage", () => {
     await user.type(screen.getByLabelText("Role name"), "boss");
     await user.click(screen.getByRole("button", { name: "Save role" }));
     expect(await screen.findByText(/permissions you do not have/)).toBeInTheDocument();
+  });
+
+  describe("Recent activity toolbar (#514)", () => {
+    const entry = (id: number, actor: string, event: string, target: string): AuditEntry => ({ id, at: now, actor, event, target, remote: "10.0.0.2", detail: "" });
+    const audit = [
+      entry(1, "admin", "login", ""),
+      entry(2, "admin", "user_created", "eve"),
+      entry(3, "eve", "login_failed", ""),
+      entry(4, "admin", "update_downloaded", ""),
+      entry(5, "ada", "plugin_installed", "disks"),
+    ];
+    const open = async () => {
+      const calls = mockHub({ "GET /api/audit?limit=100": () => ({ data: audit }) });
+      renderAs({ ...viewer, username: "ada", role: "auditor", permissions: ["audit.read"] }, <UsersPage part="activity" />);
+      await screen.findByText("user created");
+      return calls;
+    };
+
+    it("has a search bar, a square refresh icon with a name and a tooltip, and a filter button", async () => {
+      await open();
+      expect(screen.getByRole("searchbox", { name: "Search the activity" })).toBeInTheDocument();
+      const refresh = screen.getByRole("button", { name: "Refresh" });
+      expect(refresh).toHaveAttribute("title", "Refresh");
+      expect(refresh).toHaveTextContent(""); // an icon, no text
+      expect(screen.getByRole("button", { name: /Filter/ })).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByRole("textbox", { name: /Filter by user/ })).not.toBeInTheDocument();
+    });
+
+    it("searches the user, the event and the target", async () => {
+      await open();
+      const user = userEvent.setup();
+      const search = screen.getByRole("searchbox", { name: "Search the activity" });
+      await user.type(search, "disks");
+      expect(screen.getAllByRole("row")).toHaveLength(2); // header and one entry
+      await user.clear(search);
+      await user.type(search, "sign-in failed"); // the text of the event, not its name
+      expect(screen.getByText("sign-in failed")).toBeInTheDocument();
+      expect(screen.queryByText("user created")).not.toBeInTheDocument();
+      await user.clear(search);
+      await user.type(search, "ada");
+      expect(screen.getByText("plugin installed")).toBeInTheDocument();
+      await user.type(search, "zzz");
+      expect(screen.getByText("No entry matches the filter.")).toBeInTheDocument();
+    });
+
+    it("refreshes by asking the hub again", async () => {
+      const calls = await open();
+      await userEvent.setup().click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(calls.filter((c) => c.path === "/api/audit?limit=100")).toHaveLength(2));
+    });
+
+    it("filters by account and by event group from the panel, shows that a filter is on, and clears it", async () => {
+      await open();
+      const user = userEvent.setup();
+      const button = screen.getByRole("button", { name: /Filter/ });
+      await user.click(button);
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      const panel = screen.getByRole("group", { name: "Filter the activity" });
+      // The accounts and the groups come from the entries.
+      expect(within(panel).getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "All accounts", "ada", "admin", "eve",
+        "All activity", "Sign-in and security", "Servers and updates", "Accounts and roles", "Plugins and automations",
+      ]);
+      await user.selectOptions(within(panel).getByLabelText("Account"), "admin");
+      expect(screen.queryByText("sign-in failed")).not.toBeInTheDocument();
+      expect(screen.getByText("user created")).toBeInTheDocument();
+      await user.selectOptions(within(panel).getByLabelText("Event group"), "nodes");
+      expect(screen.queryByText("user created")).not.toBeInTheDocument();
+      expect(screen.getByText("update downloaded")).toBeInTheDocument();
+      expect(screen.getByLabelText("2 filters active")).toBeInTheDocument();
+      await user.click(within(panel).getByRole("button", { name: "Clear filters" }));
+      expect(screen.queryByLabelText(/filters active/)).not.toBeInTheDocument();
+      expect(screen.getByText("sign-in failed")).toBeInTheDocument();
+      // Escape closes the panel and gives the focus back to its button.
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("group", { name: "Filter the activity" })).not.toBeInTheDocument();
+      expect(button).toHaveFocus();
+    });
+
+    it("has a chip for each group that is present, and the chip is the group filter", async () => {
+      await open();
+      const user = userEvent.setup();
+      const chips = screen.getByRole("group", { name: "Event group" });
+      expect(within(chips).getAllByRole("button").map((b) => b.textContent)).toEqual([
+        "All activity", "Sign-in and security", "Servers and updates", "Accounts and roles", "Plugins and automations",
+      ]);
+      await user.click(within(chips).getByRole("button", { name: "Accounts and roles" }));
+      expect(screen.getByText("user created")).toBeInTheDocument();
+      expect(screen.queryByText("sign-in failed")).not.toBeInTheDocument();
+      expect(within(chips).getByRole("button", { name: "Accounts and roles" })).toHaveAttribute("aria-pressed", "true");
+    });
   });
 
   it("lists accounts and activity, and protects the own account", async () => {
@@ -189,13 +302,65 @@ describe("UsersPage", () => {
     await screen.findByText("admin (you)");
 
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("Username"), " eve ");
-    await user.type(screen.getByLabelText("Password"), "correct horse battery");
-    await user.click(screen.getByRole("button", { name: "Add user" }));
+    // The form is not on the page: the + at the right of "Users" opens it (#514).
+    expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+    const plus = screen.getByRole("button", { name: "Add a user" });
+    await user.click(plus);
+    const dialog = screen.getByRole("dialog", { name: "Add a user" });
+    await user.type(within(dialog).getByLabelText("Username"), " eve ");
+    await user.type(within(dialog).getByLabelText("Password"), "correct horse battery");
+    await user.click(within(dialog).getByRole("button", { name: "Add user" }));
 
     expect(await screen.findByText("eve")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ username: "eve", password: "correct horse battery", role: "viewer" });
+    // It closes on success, and the focus goes back to the +.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(plus).toHaveFocus());
+  });
+
+  it("closes the add-user popup on Cancel, on Escape and on a click outside, and starts empty again", async () => {
+    mockHub({ "GET /api/users": () => ({ data: [admin] }), "GET /api/audit?limit=100": () => ({ data: [] }) });
+    renderAs(admin, <UsersPage />);
+    await screen.findByText("admin (you)");
+    const user = userEvent.setup();
+    const plus = screen.getByRole("button", { name: "Add a user" });
+    expect(plus).toHaveAttribute("aria-haspopup", "dialog");
+
+    await user.click(plus);
+    await user.type(screen.getByLabelText("Username"), "half");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(plus).toHaveFocus());
+
+    await user.click(plus);
     expect(screen.getByLabelText("Username")).toHaveValue("");
+    expect(screen.getByLabelText("Username")).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(plus).toHaveFocus());
+
+    await user.click(plus);
+    // A click on the backdrop closes it; a click inside does not.
+    await user.click(screen.getByRole("dialog"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.click(screen.getByRole("dialog").parentElement as HTMLElement);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps Tab inside the popup", async () => {
+    mockHub({ "GET /api/users": () => ({ data: [admin] }), "GET /api/audit?limit=100": () => ({ data: [] }) });
+    renderAs(admin, <UsersPage />);
+    await screen.findByText("admin (you)");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add a user" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Add user" }));
+    // Focus is on the last control (a click focuses the button); Tab wraps to the first.
+    within(dialog).getByRole("button", { name: "Add user" }).focus();
+    await user.tab();
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    await user.tab({ shift: true });
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
   });
 
   it("shows the hub's refusal when creating a user", async () => {
@@ -207,10 +372,12 @@ describe("UsersPage", () => {
     renderAs(admin, <UsersPage />);
     await screen.findByText("admin (you)");
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add a user" }));
     await user.type(screen.getByLabelText("Username"), "eve");
     await user.type(screen.getByLabelText("Password"), "correct horse battery");
     await user.click(screen.getByRole("button", { name: "Add user" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("that username is taken");
+    // The popup stays open with the refusal in it.
+    expect(await within(screen.getByRole("dialog")).findByRole("alert")).toHaveTextContent("that username is taken");
   });
 
   it("changes a role, disables and deletes", async () => {

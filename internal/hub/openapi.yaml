@@ -1043,6 +1043,45 @@ paths:
               schema: { $ref: "#/components/schemas/Store" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+  /api/store/progress:
+    get:
+      tags: [plugins]
+      summary: Where the install, update or removal in progress is (needs plugins.manage)
+      description: |
+        The hub keeps the one operation it is running, or the last one for a
+        minute after it ended, so every administrator sees it and a reload of
+        the page does not lose it. `state` is `running`, `done` or `failed`.
+        While running, `step` is `downloading` (with `percent` 0 to 100),
+        `verifying`, `installing` or `removing` (`percent` is -1: the size is not
+        known); `testing` and `rolling_back` are reserved and not reported yet.
+        A failed one has `code` (and `helper_code` when the root helper refused),
+        the codes of the install answers, and an English `message`. `progress` is
+        null when there is nothing to show. See docs/plugins/store.md.
+      responses:
+        "200":
+          description: The progress, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  progress:
+                    nullable: true
+                    type: object
+                    properties:
+                      plugin: { type: string }
+                      action: { type: string, enum: [install, update, remove] }
+                      version: { type: string }
+                      state: { type: string, enum: [running, done, failed] }
+                      step: { type: string, enum: [downloading, verifying, installing, removing, testing, rolling_back] }
+                      percent: { type: integer, minimum: -1, maximum: 100 }
+                      code: { type: string }
+                      helper_code: { type: string }
+                      message: { type: string }
+                      started_at: { type: string, format: date-time }
+                      at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
   /api/store/plugins/{id}/install:
     post:
       tags: [plugins]

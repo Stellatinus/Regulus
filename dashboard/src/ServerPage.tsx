@@ -260,7 +260,7 @@ function NodeWindow({
         </div>
       </div>
       {part === "general" && (
-        <General agent={agent} canManage={canManage} canSeeDisks={canSeeDisks && !hasDisksPlugin(pluginTabs)} onChanged={onChanged} />
+        <General agent={agent} canSeeDisks={canSeeDisks && !hasDisksPlugin(pluginTabs)} />
       )}
       {pluginTabs.map((p) => part === `plugin:${p.id}` && <PluginFrame key={p.id} plugin={p} node={agent.id} />)}
       {part === "terminal" && (
@@ -296,6 +296,21 @@ function EditNode({ agent, canManage, onClose, onSaved }: { agent: Agent; canMan
   const [type, setType] = useState<NodeTypeId | "auto">(savedNodeType(agent.id) ?? "auto");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Revoking is the one action the old Management section had besides the
+  // rename (#515): it is here now, so the pencil is the only place to manage a
+  // node. Not for the hub's own server, and not for one already revoked.
+  const canRevoke = canManage && agent.id !== "local" && agent.status !== "revoked";
+
+  const revoke = async () => {
+    setError("");
+    try {
+      await revokeAgent(agent.id);
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -357,6 +372,17 @@ function EditNode({ agent, canManage, onClose, onSaved }: { agent: Agent; canMan
             <p className="muted">{t("nodes.edit.typeLocal")}</p>
           </>
         )}
+        {canRevoke && (
+          <>
+            <span className="ws-section-title">{t("nodes.edit.danger")}</span>
+            <ConfirmButton
+              label={t("servers.server.revoke")}
+              message={t("servers.server.revokeConfirm", { name: displayName(agent) })}
+              confirmLabel={t("servers.server.revokeYes")}
+              onConfirm={() => void revoke()}
+            />
+          </>
+        )}
         {error && <p role="alert">{error}</p>}
         <div className="dialog-actions">
           <button type="button" onClick={onClose}>
@@ -373,17 +399,7 @@ function EditNode({ agent, canManage, onClose, onSaved }: { agent: Agent; canMan
 
 // General is the main part of the window: what the server is doing now (the
 // widgets bound to it), and what it is.
-function General({
-  agent,
-  canManage,
-  canSeeDisks,
-  onChanged,
-}: {
-  agent: Agent;
-  canManage: boolean;
-  canSeeDisks: boolean;
-  onChanged: () => void;
-}) {
+function General({ agent, canSeeDisks }: { agent: Agent; canSeeDisks: boolean }) {
   const t = useT();
   // An agent connected only to be updated sends no metrics: the widgets would
   // stay empty, so the page says why instead.
@@ -427,7 +443,6 @@ function General({
             <DisksPanel serverId={agent.id} />
           </PanelBoundary>
         )}
-        {canManage && agent.id !== "local" && <Manage agent={agent} onChanged={onChanged} />}
       </div>
     </div>
   );
@@ -547,56 +562,4 @@ function certificateEnd(
   return days < 0
     ? t("servers.fact.certificateEnded", { date })
     : t("servers.fact.certificateIn", { date, days });
-}
-
-function Manage({ agent, onChanged }: { agent: Agent; onChanged: () => void }) {
-  const t = useT();
-  const [name, setName] = useState(agent.name ?? "");
-  const [error, setError] = useState("");
-
-  const run = async (action: () => Promise<unknown>) => {
-    setError("");
-    try {
-      await action();
-      onChanged();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  };
-
-  return (
-    <section className="panel" aria-labelledby="manage-heading">
-      <h3 id="manage-heading">{t("servers.server.manage")}</h3>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(() => renameAgent(agent.id, name.trim()));
-        }}
-      >
-        <label>
-          {t("servers.server.nameLabel")}
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={64}
-            placeholder={agent.hostname || agent.id}
-          />
-        </label>
-        <button type="submit">{t("servers.server.rename")}</button>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      {agent.status !== "revoked" && (
-        <div style={{ marginTop: 12 }}>
-          <ConfirmButton
-            label={t("servers.server.revoke")}
-            message={t("servers.server.revokeConfirm", {
-              name: displayName(agent),
-            })}
-            confirmLabel={t("servers.server.revokeYes")}
-            onConfirm={() => void run(() => revokeAgent(agent.id))}
-          />
-        </div>
-      )}
-    </section>
-  );
 }

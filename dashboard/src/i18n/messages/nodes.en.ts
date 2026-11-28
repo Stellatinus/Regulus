@@ -61,6 +61,7 @@ export const nodes = {
   "nodes.edit.typeFixed": "The hub keeps its own type.",
   "nodes.edit.typeLocal": "The type is a look kept in this browser until the hub knows node types (#164).",
   "nodes.edit.save": "Save",
+  "nodes.edit.danger": "Revoke",
   "nodes.plugin.loading": "Loading the plugin…",
   "nodes.plugin.unavailable": "The plugin's page could not be loaded.",
   "nodes.plugin.timeout": "The plugin's page did not start in time.",

@@ -164,3 +164,55 @@ func TestStoreWritesNeedThePermissionAndTheInstaller(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 }
+
+// progressInstaller is a fakeInstaller that also reports progress.
+type progressInstaller struct {
+	fakeInstaller
+	p  store.Progress
+	ok bool
+}
+
+func (f *progressInstaller) Progress() (store.Progress, bool) { return f.p, f.ok }
+
+func TestStoreProgressRoute(t *testing.T) {
+	type answer struct {
+		Progress *struct {
+			Plugin  string `json:"plugin"`
+			Action  string `json:"action"`
+			State   string `json:"state"`
+			Step    string `json:"step"`
+			Percent int    `json:"percent"`
+			Code    string `json:"code"`
+			Helper  string `json:"helper_code"`
+		} `json:"progress"`
+	}
+	read := func(a *api) (int, answer) {
+		rec := a.do("GET", "/api/store/progress", nil)
+		var out answer
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	// The operation in progress, with the step and the percentage.
+	in := &progressInstaller{p: store.Progress{Plugin: "disks", Action: "install", State: store.ProgressRunning, Step: store.StepDownloading, Percent: 42}, ok: true}
+	code, out := read(storeAPIWith(t, auth.RoleAdmin, in))
+	if code != http.StatusOK || out.Progress == nil || out.Progress.Step != "downloading" || out.Progress.Percent != 42 || out.Progress.Plugin != "disks" {
+		t.Fatalf("running: %d %+v", code, out)
+	}
+	// A failed one carries its codes, not text to show.
+	in = &progressInstaller{p: store.Progress{Plugin: "disks", Action: "update", State: store.ProgressFailed, Percent: -1, Code: store.ErrCodeHelperFailed, Helper: store.CodeChecksum}, ok: true}
+	if _, out = read(storeAPIWith(t, auth.RoleAdmin, in)); out.Progress == nil || out.Progress.State != "failed" || out.Progress.Code != "helper_failed" || out.Progress.Helper != "checksum" {
+		t.Fatalf("failed: %+v", out)
+	}
+	// Nothing in progress, an installer that does not report, and no installer at all: null.
+	for name, in := range map[string]StoreInstaller{"idle": &progressInstaller{}, "no progress source": &fakeInstaller{}, "plugins off": nil} {
+		if code, out = read(storeAPIWith(t, auth.RoleAdmin, in)); code != http.StatusOK || out.Progress != nil {
+			t.Errorf("%s: %d %+v", name, code, out)
+		}
+	}
+	// It is for those who manage plugins.
+	for _, role := range []auth.Role{auth.RoleViewer, auth.RoleOperator} {
+		if code, _ := read(storeAPIWith(t, role, &progressInstaller{})); code != http.StatusForbidden {
+			t.Errorf("%s = %d, want 403", role, code)
+		}
+	}
+}
