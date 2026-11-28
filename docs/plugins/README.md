@@ -74,6 +74,31 @@ A module served from the hub's own origin passes the Content-Security-Policy and
 
 [Decisions](../decisions.md) records the choice. #21 and #261 must follow it.
 
+## A plugin item in the dock (design, **proposed, waiting for agreement**, #560)
+
+**No code until this is agreed.** Design v3.2 ([design-system.md](../design-system.md)) draws a **slot in the dock** where an installed plugin (the AI Assistant) adds its own item. Design v3 decided the opposite: *plugins live inside Services, not as new items of the dock* ([decisions.md](../decisions.md), "Web UI: design system v3"). Today a plugin can add **a tab to the node window** (`components.ui.node_tab`) and nothing else; the dock has no plugin slot, and the dashboard draws none.
+
+**Recommendation: keep it as it is until AI Support (#63) is designed, and reserve the shape below.** The only plugin that wants a dock item is the AI Assistant, which is not designed and may not be a plugin page at all (it may be a panel inside the console, or a chat opened from a node). Building a general slot for one unknown user is the mistake the first-party-only list would repeat (below).
+
+**If a dock item is allowed, this is the shape:**
+
+1. **Who decides: the administrator, not the manifest.** A manifest may *offer* an item (`components.ui.dock: {id, title: {en, it}, icon}`, a key the parser does not accept today); it appears in the dock only when (a) the plugin is installed and running, (b) an administrator switched **Show in the dock** on in Services (off by default, so installing a plugin never changes the dock by itself) and (c) the viewer holds the permission the plugin asked for and the hub approved. A plugin cannot put itself in the dock.
+2. **Not only first-party plugins.** A list of trusted plugins depends on a signature scheme that regulus-plugins#3 has not designed, and [Dashboard widgets](#how-widget-code-is-isolated-from-the-session-315) already rejects an exception for first-party code: one mechanism for every plugin. The administrator's switch is the control.
+3. **The sandbox is the same.** The item opens a *page of the plugin* at `#/plugin/<id>` in the sandboxed frame of #315 (no cookie, no network, `postMessage` only, the narrower of the plugin's and the viewer's permissions). It is a **new kind of UI component**: today the frame is given a node (`context: {node}`) and the host side has two read operations built for Disks. A page without a node needs its own context and, for most uses, operations that do not exist yet (#261). The icon is **a name from a fixed set of icons** the dashboard draws, never markup from the plugin.
+4. **Many plugins.** The dock has five sections and a divider and must fit a phone (below 680 px only the icons show). **At most two plugin items**, in the order the administrator pinned them; more cannot be shown, and Services lists every plugin and its page anyway. No overflow menu: a menu inside the dock is a section of its own, which is a different design.
+5. **What v3.2's slot means for the dashboard:** the slot is drawn **only from a plugin that is really installed**, never from the example catalogue of the file.
+
+**What it depends on:** the manifest key (#19 follows), a page component and route (#21), the host side (#261), the sandbox (#315, built for tabs), and the shape of AI Support (#63), which may settle the question.
+
+**Open questions for the maintainer.**
+
+1. Is a plugin item in the dock **allowed at all**, or do plugins stay in Services (the decision of design v3)?
+2. If allowed: **the administrator's switch** as above, or something else?
+3. **Two items** at most, or another number?
+4. Wait for **AI Support (#63)** before building anything (recommended)?
+
+Until this is answered, **the dock has no plugin slot**.
+
 ## Repository layout (regulus-plugins#2)
 
 `plugins/example-hello` stays in this repository: the tests of the runtime build and run it. The plugins that are released through the store live in [regulus-plugins](https://github.com/Stellatinus/Regulus-Plugins), in `plugins/<id>/`, with the manifest and the source next to each other ([the plugin store](store.md) says how that repository is laid out).
