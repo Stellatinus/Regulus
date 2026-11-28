@@ -532,3 +532,21 @@ func TestLoadSources(t *testing.T) {
 		t.Fatal("a source without a signer was accepted")
 	}
 }
+
+// An installation that an earlier version brought up to date has the plugins
+// directory at 0700 (created under UMask=0077): the hub's user cannot read it
+// ("reading the plugins directory: permission denied"). The helper repairs it
+// on the next install and never takes a permission away.
+func TestHelperMakesAnUnreadablePluginsDirectoryReadable(t *testing.T) {
+	e := newEnv2(t, "0.1.0-alpha.1")
+	e.svc.o.HubChannel = func(context.Context) update.Channel { return update.Alpha }
+	if err := os.Chmod(e.plugins, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.do(func() (Outcome, error) { return e.inst.Install(context.Background(), "ann", "disks", "", "") }); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(e.plugins); err != nil || st.Mode().Perm() != 0o755 {
+		t.Fatalf("the plugins directory: %v, %v", st, err)
+	}
+}

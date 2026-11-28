@@ -72,7 +72,7 @@ The minimum the program must do. Verification of these requirements lists the sy
 **Plugins**
 
 - the plugin sources show as verified
-- a plugin is installed from the store, runs, shows in the dashboard and is removed
+- a plugin is installed from the store (the password and 2FA dialog is in front of the plugin's window and accepts the code), runs, shows in the dashboard with no "permission denied" on the plugins directory and is removed
 
 **Logs**
 

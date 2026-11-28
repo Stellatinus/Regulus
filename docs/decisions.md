@@ -901,3 +901,14 @@ The first pull request that builds from the v3.2 reference. One entry per issue;
 - Plugin features, dependencies, signatures and isolation: see the open questions in [plugins](plugins/README.md).
 - Do older stable versions get fixes, and how is a fix tagged from a release branch when the release workflow accepts only commits on `main`? (#438)
 - How are old pre-releases deleted without breaking the update check, `latest.json`, installs of a kept release and rollbacks? (#439)
+
+### Store: the 2FA dialog and the plugins directory's mode (2026-11-28)
+
+**What was found.** The first install of a plugin (Disks) from the Store on a real hub, two bugs. (1) The step-up dialog (password and 2FA code) opened *under* the store's detail window: the detail window is a native `<dialog>` opened with `showModal()`, which sits in the browser's top layer above any `z-index`, and the step-up was a `div` with `z-index: 50`. The code could not be typed, so the install failed. (2) After the install the Plugins page said "reading the plugins directory: open /usr/local/lib/regulus/plugins: permission denied". `regulus host-sync` creates the directory with `MkdirAll(0o755)`, but it runs from `regulus-update.service`, which has `UMask=0077`, so `/usr/local/lib/regulus` and `plugins` were created `0700` and the hub's user could not read them. It is the same cause as #448 (executables left `0700`), in a place that fix did not reach.
+
+**Decision.** (1) The step-up dialog is a native `<dialog>` opened with `showModal()` too, so it is above anything opened before it. A rule for the dashboard: a dialog that can be opened *from inside another dialog* must be a native modal dialog, never a positioned `div`. (2) `host-sync` sets the mode explicitly (`chmod`, not the umask's) and, on a machine that already has the directories at `0700`, adds the read and search bits for group and others (`perm | 0o055`); it never removes a bit and does nothing when the mode is right. The plugin helper does the same for the plugins directory itself before it installs (so even a hub that did not run `host-sync` since the fix is repaired by its next install). The parent `/usr/local/lib/regulus` is repaired by `host-sync` only: the helper does not touch directories above a `plugins_dir` that an administrator chose.
+
+**Rejected:** giving `regulus-update.service` another `UMask` (it protects the update's files; the fix belongs where the directory is made); making the hub read the directory through a capability (the hub is unprivileged on purpose).
+
+**Not verified on a real machine:** the repair on a hub that had the directories at `0700` (run `sudo regulus host-sync` after the update, or install a plugin again), and the dialog order in a real browser (the tests run in jsdom, which has no top layer; they check that the dialog is opened as a modal).
+

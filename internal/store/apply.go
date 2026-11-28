@@ -190,6 +190,14 @@ func (a *Applier) checkPluginsDir() *applyError {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok && int(st.Uid) != a.OwnerUID {
 		return fail(CodePluginsDir, "%s is not owned by the user the helper expects (uid %d)", a.PluginsDir, a.OwnerUID)
 	}
+	// The hub's user must be able to read what is installed. An installation
+	// made by an earlier version has the directory at 0700 (created under
+	// UMask=0077); add the read and search bits, never take any away.
+	if perm := info.Mode().Perm(); perm&0o055 != 0o055 {
+		if err := os.Chmod(a.PluginsDir, perm|0o055); err != nil {
+			return failErr(CodePluginsDir, err, "the plugins directory cannot be made readable by the hub")
+		}
+	}
 	return nil
 }
 
