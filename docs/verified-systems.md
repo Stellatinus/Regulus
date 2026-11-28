@@ -148,6 +148,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - Nodes page: cards, compact list and map; the node window; the pencil renames and revokes a node, and is the only place to do it (#515)
 - Plugins page: every state is shown with its error; an invalid directory is listed as invalid; it has no section for servers (plugins live on the hubs only, #535)
 - Users, Updates, Settings and Disks pages
+- Admin: the **+** of Users and of Roles opens a popup (Escape, Cancel, a click outside and success close it, and the focus goes back to the **+**); Recent activity has the search bar, the refresh icon and the filter button, and filtering by account and by event group works, with a keyboard and on a phone width (#514)
 - the live indicator: Connecting, Reconnecting and Hub unreachable states
 - English and Italian, with no untranslated text and no broken layout
 - the themes

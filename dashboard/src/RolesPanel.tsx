@@ -2,7 +2,8 @@ import { useState, type FormEvent } from "react";
 import { createRole, deleteRole, updateRole, type PermissionInfo, type RoleInfo } from "./api";
 import { permissionText, roleText } from "./hubTexts";
 import { useT } from "./i18n";
-import { ConfirmButton, RowActions } from "./ui";
+import { ConfirmButton, Modal, RowActions, useModal } from "./ui";
+import { PlusButton } from "./UsersPage";
 import { errorMessage } from "./useApiList";
 
 interface Props {
@@ -16,7 +17,9 @@ interface Props {
 // that would give someone more than the person asking holds.
 export function RolesPanel({ roles, permissions, onChanged }: Props) {
   const t = useT();
-  const [editing, setEditing] = useState<RoleInfo | "new" | null>(null);
+  // Editing a role stays on the page; adding one is a popup opened by the +.
+  const [editing, setEditing] = useState<RoleInfo | null>(null);
+  const add = useModal();
   const [error, setError] = useState("");
 
   const remove = async (role: RoleInfo) => {
@@ -31,7 +34,10 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
 
   return (
     <section aria-labelledby="roles-heading" className="panel">
-      <h3 id="roles-heading">{t("users.roles.title")}</h3>
+      <div className="panel-head">
+        <h3 id="roles-heading">{t("users.roles.title")}</h3>
+        <PlusButton label={t("users.roles.add")} modal={add} />
+      </div>
       {error && <p role="alert">{error}</p>}
       <table className="cards">
         <thead>
@@ -89,14 +95,10 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
           ))}
         </tbody>
       </table>
-      {editing === null ? (
-        <button type="button" onClick={() => setEditing("new")}>
-          {t("users.roles.add")}
-        </button>
-      ) : (
+      {editing && (
         <RoleForm
-          key={editing === "new" ? "new" : editing.name}
-          role={editing === "new" ? null : editing}
+          key={editing.name}
+          role={editing}
           permissions={permissions}
           onDone={() => {
             setEditing(null);
@@ -105,6 +107,20 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
           onCancel={() => setEditing(null)}
         />
       )}
+      {add.open && (
+        <Modal labelId="new-role-title" onClose={add.hide}>
+          <RoleForm
+            role={null}
+            inDialog
+            permissions={permissions}
+            onDone={() => {
+              add.hide();
+              onChanged();
+            }}
+            onCancel={add.hide}
+          />
+        </Modal>
+      )}
     </section>
   );
 }
@@ -112,10 +128,14 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
 function RoleForm({
   role,
   permissions,
+  inDialog = false,
   onDone,
   onCancel,
 }: {
   role: RoleInfo | null;
+  // In the add-a-role popup: the form has no panel of its own and its title
+  // is what labels the dialog.
+  inDialog?: boolean;
   permissions: PermissionInfo[];
   onDone: () => void;
   onCancel: () => void;
@@ -154,8 +174,16 @@ function RoleForm({
   };
 
   return (
-    <form className="panel" onSubmit={(e) => void submit(e)} aria-label={role ? t("users.roles.formLabel", { name: role.name }) : t("users.roles.add")}>
-      <h4>{role ? t("users.roles.formTitle", { name: role.name }) : t("users.roles.add")}</h4>
+    <form
+      className={inDialog ? undefined : "panel"}
+      onSubmit={(e) => void submit(e)}
+      aria-label={inDialog ? undefined : role ? t("users.roles.formLabel", { name: role.name }) : t("users.roles.add")}
+    >
+      {inDialog ? (
+        <h3 id="new-role-title">{t("users.roles.add")}</h3>
+      ) : (
+        <h4>{role ? t("users.roles.formTitle", { name: role.name }) : t("users.roles.add")}</h4>
+      )}
       <label>
         {t("users.roles.name")}
         <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" required />

@@ -2126,3 +2126,19 @@ input.switch[type="checkbox"]:checked::after {
 @media (prefers-reduced-motion: reduce) {
   .store-progress-track.indeterminate .store-progress-fill { animation: none; width: 100%; opacity: 0.5; }
 }
+
+/* Admin (#514): the heading row with a + at its right, and Recent activity's toolbar. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.panel-head h3 { margin: 0; }
+.plus-btn { width: 42px; padding: 0; font-size: 20px; line-height: 1; }
+.square-btn { width: 42px; padding: 0; }
+.audit-bar { margin-bottom: 12px; }
+.audit-chips { margin-bottom: 16px; }
+.popover-field { display: block; margin-bottom: 12px; }
+.popover-field select { width: 100%; }

@@ -1,6 +1,8 @@
 import {
   Component,
+  useCallback,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ErrorInfo,
@@ -212,5 +214,64 @@ export function CopyButton({ text, label, copiedLabel }: { text: string; label: 
         </span>
       )}
     </>
+  );
+}
+
+// useModal is the state of a popup opened by a button: open, show and hide, and
+// the ref to put on the button that opens it. Hiding puts the focus back on
+// that button (#514).
+export function useModal() {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const show = useCallback(() => setOpen(true), []);
+  const hide = useCallback(() => {
+    setOpen(false);
+    setTimeout(() => trigger.current?.focus(), 0);
+  }, []);
+  return { open, show, hide, trigger };
+}
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Modal is a real dialog over the page: labelled by the element `labelId`
+// names, it takes the focus, keeps Tab inside, and closes on Escape and on a
+// click outside it. The caller closes it on success and on Cancel too.
+export function Modal({ labelId, onClose, children }: { labelId: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const first = ref.current?.querySelector<HTMLElement>("input, select, textarea, button");
+    first?.focus();
+  }, []);
+  return (
+    <div
+      className="node-backdrop edit-backdrop"
+      style={{ zIndex: 90 }}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        if (e.key !== "Tab" || !ref.current) return;
+        const items = Array.from(ref.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }}
+    >
+      <div ref={ref} className="edit-dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}>
+        {children}
+      </div>
+    </div>
   );
 }
