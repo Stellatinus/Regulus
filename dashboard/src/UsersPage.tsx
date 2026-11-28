@@ -103,9 +103,9 @@ function RoleOptions({ roles, current }: { roles: RoleInfo[]; current?: Role }) 
 // PlusButton is the "+" at the right of a heading row: it opens the popup that
 // adds a user or a role (#514). It has an accessible name and a tooltip, and
 // says it opens a dialog.
-export function PlusButton({ label, modal }: { label: string; modal: ReturnType<typeof useModal> }) {
+export function PlusButton({ label, triggerRef, onOpen }: { label: string; triggerRef: React.RefObject<HTMLButtonElement | null>; onOpen: () => void }) {
   return (
-    <button ref={modal.trigger} type="button" className="icon-btn plus-btn" aria-label={label} title={label} aria-haspopup="dialog" onClick={modal.show}>
+    <button ref={triggerRef} type="button" className="icon-btn plus-btn" aria-label={label} title={label} aria-haspopup="dialog" onClick={onOpen}>
       <span aria-hidden="true">+</span>
     </button>
   );
@@ -134,7 +134,7 @@ function UserTable({ self, roles }: { self: string; roles: RoleInfo[] }) {
     <>
       <div className="panel-head">
         <h3>{t("users.title")}</h3>
-        <PlusButton label={t("users.add.title")} modal={add} />
+        <PlusButton label={t("users.add.title")} triggerRef={add.trigger} onOpen={add.show} />
       </div>
       {users.kind === "loading" && <p>{t("users.loading")}</p>}
       {users.kind === "error" && <p role="alert">{t("users.loadFailed", { message: users.message })}</p>}
@@ -399,7 +399,7 @@ function Audit() {
     };
   }, [filterOpen]);
 
-  const items = entries.kind === "ready" ? entries.items : [];
+  const items = useMemo(() => (entries.kind === "ready" ? entries.items : []), [entries]);
   // The accounts and the groups come from the entries themselves, not from a list.
   const accounts = useMemo(() => [...new Set(items.map((a) => a.actor).filter(Boolean))].sort((x, y) => x.localeCompare(y)), [items]);
   const groups = useMemo(() => AUDIT_GROUPS.filter((g) => items.some((a) => auditGroup(a.event) === g)), [items]);

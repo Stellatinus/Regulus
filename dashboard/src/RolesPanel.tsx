@@ -36,7 +36,7 @@ export function RolesPanel({ roles, permissions, onChanged }: Props) {
     <section aria-labelledby="roles-heading" className="panel">
       <div className="panel-head">
         <h3 id="roles-heading">{t("users.roles.title")}</h3>
-        <PlusButton label={t("users.roles.add")} modal={add} />
+        <PlusButton label={t("users.roles.add")} triggerRef={add.trigger} onOpen={add.show} />
       </div>
       {error && <p role="alert">{error}</p>}
       <table className="cards">

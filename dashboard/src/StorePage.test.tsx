@@ -381,7 +381,7 @@ describe("progress of an install (#530)", () => {
     body: { progress: { plugin: "disks", action: "install", version: "0.1.0", state: "running", step: "downloading", percent: 40, started_at: "2026-11-28T10:00:00Z", at: "2026-11-28T10:00:01Z", ...over } },
   });
 
-  it("shows a bar with the percentage while downloading, and the step by name after", async () => {
+  it("shows a bar with the percentage while downloading, and the step by name after", { timeout: 15000 }, async () => {
     const u = userEvent.setup();
     let progress: { body: unknown } = { body: { progress: null } };
     let finish: (v: unknown) => void = () => undefined;
@@ -408,8 +408,11 @@ describe("progress of an install (#530)", () => {
     expect(screen.getByRole("progressbar", { name: "Disks" })).toHaveAttribute("aria-valuetext", "Verifying the signature and the checksum");
     progress = running({ step: "installing", percent: -1 });
     expect(await screen.findByText("Installing", { selector: "p[aria-live]" }, { timeout: 3000 })).toBeInTheDocument();
+    // The hub says it is done (it keeps the record for a minute), then answers the request.
+    progress = running({ state: "done", step: undefined, percent: -1 });
     finish(undefined);
     expect(await screen.findByText("Disks 0.1.0 was installed.")).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 1200)); // a poll after the end must not bring the bar back
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
