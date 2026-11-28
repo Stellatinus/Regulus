@@ -42,7 +42,7 @@ The words used here (hub, agent, built-in agent, role, channel…) are defined i
 
 ## Supported platforms
 
-Ubuntu Server LTS (22.04, 24.04 and 26.04, amd64 and arm64) is the reference platform; so far a release has been run on real machines on **26.04 amd64 only** (a partial standard check, 2026-11-24). Which systems have been verified, when, on which kernel and machines, and how, is in [Verified systems](docs/verified-systems.md). Debian and RHEL-like distributions follow.
+Ubuntu Server LTS (22.04, 24.04 and 26.04, amd64 and arm64) is the reference platform; so far a release has been run on real machines on **26.04 amd64 only** (the standard level, partial, on pre-releases, 2026-11-24). Systems are verified on stable major releases only (`1.0.0`, `2.0.0`); none exists yet. Which systems have been verified, when, on which kernel and machines, and how, is in [Verified systems](docs/verified-systems.md). Debian and RHEL-like distributions follow.
 
 ## Roadmap
 

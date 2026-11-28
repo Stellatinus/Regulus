@@ -1,110 +1,187 @@
 # Verified systems
 
-Which operating systems Regulus has **been run on**, when, on what machine, and how much of it was checked. This is the evidence behind the [supported platforms](../README.md#supported-platforms): a system can be *supported* (the releases are built for it and a defect on it is a bug) without being *verified* (a person ran a release on it and wrote down what happened). Only this page says which is which. Why it is built this way: [Design decisions](decisions.md#verified-systems-a-list-with-a-date-two-levels-and-one-issue-per-system-89).
+Which operating systems Regulus has **been run on**, when, on what machine, and at which level. This is the evidence behind the [supported platforms](../README.md#supported-platforms): a system is *supported* when the releases are built for it, and *verified* when a person ran a release on it and wrote the result down. Only this page says which is which. Why: [Design decisions](decisions.md#verified-systems-three-levels-major-releases-only-and-one-issue-per-system-and-level-89).
+
+## When a system is verified
+
+- **On a stable major release only** (`1.0.0`, `2.0.0`), never on a minor or patch release (`1.1.0`, `1.0.1`). A minor release adds things on top of the core (features, plugins) and does not change what is under it, so it does not need a new verification; a change that touches the core's structure is a major release. The features a minor adds go into the lists below and are run at the next major verification. **No stable release exists yet**, so every run so far is on a pre-release and is *provisional*: it is written here, and the system is verified again on `1.0.0`.
+- **One verification per system, architecture and level.** The architecture is **amd64** (not ARM: every x86-64 processor, Intel or AMD) or **arm64** (ARM).
+- **Three levels:** **standard** (the minimum the program must do), **advanced** (the advanced functions) and **complete** (everything). Each is a list below; a level is *verified* when every line of it was run on that system and architecture.
+- **Every run records:** the **kernel** (`uname -r`), the architecture (`uname -m`), each **machine** (role, physical or virtual and on what, CPU, memory, disk), the release, the date and the tester. Logs and screenshots go in the issue.
 
 ## The list
 
-One row per **system and architecture**. The architecture is written in two classes, because the arm64 build is not the same work as the amd64 one:
+| System | Architecture | Standard | Advanced | Complete | Release | Kernel | Machines | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| Ubuntu 26.04 LTS | amd64 | **partial**, provisional, 2026-11-24 | not run | not run | pre-releases `v0.1.0-alpha.1` (2026-10-28) and `v0.3.0-alpha.1` (2026-11-24); no stable release yet | 7.0 (reported in #89 for the first run; `uname -r` was not captured, and the second run's kernel neither) | a hub VM on Hyper-V and an agent VM (hypervisor not recorded); CPU, memory and disk not recorded | #81, #89, #443, [Verification status](decisions.md#verification-status) |
 
-- **amd64** (not ARM): every x86-64 processor, Intel or AMD. The name comes from the architecture, not from the company.
-- **arm64** (ARM).
+**Ubuntu 26.04 LTS amd64, standard: what was run.** The `.deb` as a fresh install and as an upgrade from `v0.1.0-alpha.1`, the unit, the built-in agent and its metrics, the update check, the dashboard and the console, a remote agent on a second machine (online, offline, online again, reconnecting after a restart of the hub). **Not run:** a fresh install of the current release, plugins, an update installed from the dashboard and its rollback on this system, `apt remove` and `purge`; the journals were not kept.
 
-Level: **standard** or **advanced** (see [the levels](#the-levels)); *partial* means some steps of that level were not run, and the row says which. A row appears here only after a person ran a release on that system; the date is the last run, and the verification issue says what was run on every date.
+A container, CI or a cloud session is not a verification: the `.deb` was run through real `dpkg` on Ubuntu 24.04 in a container without systemd (2026-11-24) and the package lifecycle runs in CI in `ubuntu:22.04`, `24.04` and `26.04` containers, and neither puts those systems on the list.
 
-| System | Architecture | Level | Date of the last run | Release | Kernel | Machines | Evidence |
-|---|---|---|---|---|---|---|---|
-| Ubuntu 26.04 LTS | amd64 (not ARM) | **standard, partial** | 2026-11-24 (first run 2026-10-28) | `v0.3.0-alpha.1` (first run: `v0.1.0-alpha.1`) | 7.0 (as reported in #89 for the first run; the exact `uname -r` was not captured, and neither was the kernel of the second run) | a hub VM on Hyper-V (installed 2026-10-28, upgraded 2026-11-24) and an agent VM (new on 2026-11-24, hypervisor not recorded). CPU, memory and disk were not recorded for either | #81, #89, #443, [Verification status](decisions.md#verification-status) |
+### Still to verify
 
-**What the 26.04 amd64 row covers, and what it does not.** Run and working: the `.deb` on a fresh install and as an upgrade from `v0.1.0-alpha.1`, the systemd unit, the built-in agent and its metrics, the update check, the dashboard and the console, a remote agent installed on a second machine from the command that **Add a server** prints, enrolled, shown online and offline, and back online after a restart of the hub. **Not run**, so the row says *partial*: a fresh install of the current release, plugins, the update installed from the dashboard on this system and its rollback, `apt remove` and `purge`, PostgreSQL, the HTTPS listener, and the logs and journals of both machines, which were not kept (the results are the tester's reading of the screen). What is missing is the checklist of #536.
-
-Not counted as verification: the `.deb` was also run through real `dpkg` on **Ubuntu 24.04 amd64** inside a container without systemd on 2026-11-24 (see [Verification status](decisions.md#verification-status)), and the package lifecycle runs in CI in `ubuntu:22.04`, `24.04` and `26.04` containers. Those checks are useful and are not a run on a machine with systemd, so they do not put 22.04 or 24.04 on the list.
-
-### Systems still to verify
-
-| System | Architecture | State |
+| System | Architecture | Issues (standard, advanced, complete) |
 |---|---|---|
-| Ubuntu 26.04 LTS | arm64 | supported on paper, never run (#537) |
-| Ubuntu 24.04 LTS | amd64, arm64 | supported on paper, never run on a machine with systemd (#538, #539) |
-| Ubuntu 22.04 LTS | amd64, arm64 | supported on paper, never run on a machine with systemd; whether it stays is decided by its check (see the decision; #540, #541) |
-| Debian | amd64, arm64 | planned, with the same `.deb`; the release is not chosen yet (#543) |
-| RHEL-like (`.rpm`) | amd64, arm64 | not supported; its own `[Test]` issue (#401) |
-| Windows Server | — | not built (Regulus releases are Linux only); there is no plan to verify it until a build exists |
+| Ubuntu 26.04 LTS | amd64 | #536, #545, #546 |
+| Ubuntu 26.04 LTS | arm64 | #537, #547, #548 |
+| Ubuntu 24.04 LTS | amd64 | #538, #549, #550 |
+| Ubuntu 24.04 LTS | arm64 | #539, #551, #552 |
+| Ubuntu 22.04 LTS | amd64 | #540, #553, #554 (also decides whether 22.04 stays) |
+| Ubuntu 22.04 LTS | arm64 | #541, #555, #556 |
+| Debian | amd64, arm64 | release not chosen yet (#543) |
+| Windows Server | amd64 only (no ARM) | not built: Regulus releases are Linux only |
+| RHEL-like (`.rpm`) | amd64, arm64 | not supported (#401) |
 
-## The levels
+## Standard
 
-A verification is a person running **a release** (not a build from source) on a clean machine with the system installed, following a checklist, and writing the result down in the issue of that system. A step that was not run is written as *not run*, never left out.
+The minimum the program must do. Verification of these requirements lists the system as working at the standard level.
 
-### Standard
+**Machines**
 
-The base: the system installs Regulus and the parts work together. **All** of these steps, on one machine and then on two or more:
+- machines recorded (role, physical or virtual and on what, CPU, memory, disk)
+- kernel recorded (`uname -r`) and architecture (`uname -m`)
 
-1. **The machine is described** (see [what is recorded](#what-is-recorded)).
-2. **One node.** `install.sh` on a clean machine: the checksum and the signature are verified, the package installs, the unit starts, the dashboard answers, the setup token creates the first admin, the built-in agent shows metrics, the service comes back after a restart and after a reboot of the machine. `apt remove`, then install again, then `apt purge` leave what [Installation](installation.md) says they leave.
-3. **Several nodes.** A second machine of the same system joins from **Servers → Add a server**: it installs, enrolls, shows online and feeds a widget. After `systemctl restart regulus` on the hub it reconnects by itself; when it is shut down the hub shows it offline, and online again when it starts.
-4. **Updates.** The update check reports a newer release; the update installed from the dashboard succeeds and the hub comes back; a rollback works.
-5. **Plugins.** The plugin sources show as verified; a plugin is installed from the store, runs, shows in the dashboard, and is removed.
-6. **The logs are clean.** The journal of every machine has no error that the checks above do not explain.
+**One node**
 
-### Advanced
+- `install.sh` verifies the checksum and the signature and installs the `.deb`
+- `regulus.service` is active and the dashboard answers
+- the setup token creates the first admin; sign in and sign out work
+- the built-in agent feeds the System, CPU, Memory, Network and Disks widgets
+- `regulus --version` and `regulus status` are correct
+- the service is back after `systemctl restart regulus`
+- the service is back after a reboot of the machine
+- `apt remove` keeps the data; installing again starts like a first install
+- `apt purge` removes the configuration and keeps the data and the user
 
-What a group of machines does that one node does not, and the features that depend on the system under them. It is **sketched here and not defined**: the list is written when the hub redundancy epic (#103) and the other features it needs have an implementation to check. What it will cover, as a start:
+**Several nodes**
 
-- a **backup node** (a redundant hub) that keeps up with the active hub, and **switching** between the two, in both directions, with the agents following;
-- **PostgreSQL** (`install.sh --db-local`, and a database on another machine) and moving from SQLite;
-- the **HTTPS listener**, step-up re-authentication and two-factor authentication on a real browser;
-- **backup and restore** of a hub ([Hub backup and restore](backup.md), once implemented);
-- features that read the system itself: **disk identity**, container limits, the console on a real terminal, a scrape by Prometheus;
-- an **upgrade from the previous release** of an installation that has data.
+- remote agents are turned on from the dashboard
+- **Servers → Add a server**: the printed command installs and enrolls an agent on a second machine
+- the agent shows online and feeds a widget
+- the agent reconnects by itself after `systemctl restart regulus` on the hub
+- agent machine shut down: shown offline; started: shown online
+- an enrollment token used twice is refused; a wrong `--ca-fingerprint` is refused
 
-The advanced check is run after the standard one passed on the same system and architecture, and gets its own checklist in the issue when it is defined.
+**Updates**
 
-## What is recorded
+- the update check reports a newer release
+- the update installed from the dashboard succeeds and the hub comes back
+- a rollback works
 
-Every run records, so that a result can be repeated and a failure traced:
+**Plugins**
 
-| What | How |
-|---|---|
-| System | `lsb_release -a` (or `/etc/os-release`) |
-| **Kernel** | `uname -r` |
-| **Architecture class** | `uname -m`: `x86_64` is **amd64 (not ARM)**, `aarch64` is **arm64 (ARM)** |
-| **Each machine used** | its role in the run (hub, agent, backup node), physical or virtual and on which hypervisor or cloud, the number of CPUs and the model, memory, the disk type and size, and whether it is on its own network or behind a NAT |
-| Release | the version tag, and whether it was installed fresh or as an upgrade from which version |
-| Date | the day of the run, in `YYYY-MM-DD` |
-| Who | the tester |
-| Evidence | the logs (`journalctl -u regulus`) and screenshots the checklist asks for, attached to the issue. A result without them is written as the tester's reading, as in the 26.04 row |
+- the plugin sources show as verified
+- a plugin is installed from the store, runs, shows in the dashboard and is removed
 
-## Keeping the checklist current
+**Logs**
 
-This page is **the reference**: every test of a system, on one machine or on several, follows the [Standard](#standard) steps and [the checklist](#the-checklist-of-one-system) as they are written here, not an older copy. **Every pull request that adds or changes a feature a person can use, or one that depends on the system under it, adds the step to the checklist in the same pull request**, or says why none is needed (the rule is in [AGENTS.md](../AGENTS.md)). The open `[Test]` issues of M7 are copies made when they were opened, so a step added later is also added to them. A row in [the list](#the-list) is judged against the checklist of the day it was verified; a step added after that makes the row *partial* until the step is run, and the page says so.
+- `journalctl -u regulus` on every machine has no unexplained error
 
-## The checklist of one system
+## Advanced
 
-Every verification issue carries this list, with the steps of [Standard](#standard) in full. A step is ticked only when it was run **on that system and architecture**, and gets a note when it was not run or did not pass; the issue stays open until every standard step is ticked, and the row of this page is updated in the pull request that closes it.
+The advanced functions. Run after the standard level passed. Verification of these requirements lists the system as working at the advanced level.
 
-```text
-Machines (one line each: role, kind, CPU, memory, disk) …
-Kernel (uname -r) …            Architecture (uname -m) …            Release …
+**Database**
 
-Standard
-[ ] 1 machines described, kernel and architecture recorded
-[ ] 2 one node: install.sh verified and installed; unit starts; dashboard; setup token and first admin
-[ ] 2 one node: built-in agent shows metrics; restart; reboot; remove, reinstall, purge
-[ ] 3 several nodes: Add a server; the agent installs, enrolls and shows online
-[ ] 3 several nodes: it reconnects after the hub restarts; offline and online again
-[ ] 4 updates: check; install from the dashboard; rollback
-[ ] 5 plugins: sources verified; install, run, show, remove
-[ ] 6 logs: no unexplained error on any machine
+- `install.sh --db-local` installs PostgreSQL, creates the role and database, and the hub runs on it
+- a database on another machine with `sslmode=verify-full`
+- a wrong password or a missing database stops the installer before anything changes
+- moving the data between SQLite and PostgreSQL (not implemented yet: #124)
 
-Advanced: not defined yet
-```
+**Security**
+
+- HTTPS listener (`tls_cert`, `tls_key`) in a browser; a replaced certificate is served without a restart
+- `trusted_proxies` behind nginx and Caddy: the client address is the real one
+- two-factor sign-in, a recovery code, and step-up re-authentication on a sensitive action
+- users and roles: a viewer cannot do what an admin can
+- an API token: bearer works, read-only by default, revoked token refused
+- `regulus reset-admin` and the reset of a user's credentials
+- the sign-in limit and the session lifetime
+
+**Backup and restore**
+
+- `regulus backup` and `regulus restore` on SQLite, with an enrolled agent
+- `regulus backup` and `regulus restore` on PostgreSQL, with an enrolled agent
+
+**Updates**
+
+- an upgrade from the previous release keeps the users, roles, audit log and settings
+- an edited `config.yaml` survives the package upgrade
+- the channels: alpha, beta and stable offer what they should
+- update modes: manual, download-only and automatic
+- a rollout to several agents, and an agent that fails is judged after the stability window
+- an update interrupted by a power cut is settled when the machine starts
+- a rollback restores the SQLite database
+- the local update policy file is respected
+
+**Monitoring**
+
+- a scrape of `/metrics` by a real Prometheus
+- the metrics history of the last hour survives a restart of the hub
+- the audit log records sign-ins, changes and updates
+
+**The system itself**
+
+- disk identity: Physical disks panel, a disk moved between two servers, a contested disk
+- container limits (memory, CPU, swap from the cgroup) in a real Docker and LXC container
+- an agent on a system without `/proc` reports what it could not read
+- `regulus console` in a real terminal: Settings, Actions, the log and the reachability check
+
+**Backup node and switching (not implemented yet: #103)**
+
+- a redundant hub is added and keeps up with the active hub
+- switching from the active hub to the backup node, and back, with the agents following
+- a network split leaves one active hub at most
+
+## Complete
+
+Everything: all of **Standard**, all of **Advanced**, and the rest below.
+
+**Dashboard**
+
+- every widget shows correct values; the range choice (10 minutes, 1 hour) works
+- widgets can be added, removed, arranged and the layout is kept
+- Nodes page: cards, compact list and map; the node window
+- Plugins page: every state is shown with its error; an invalid directory is listed as invalid
+- Users, Updates, Settings and Disks pages
+- the live indicator: Connecting, Reconnecting and Hub unreachable states
+- English and Italian, with no untranslated text and no broken layout
+- the themes
+- a phone and a tablet
+- Chrome, Firefox and Safari
+- keyboard use and a screen reader
+
+**Plugins**
+
+- the example plugin runs on the hub and on a remote agent
+- a plugin that crashes is restarted; one that cannot start is shown as failed
+- a plugin widget appears on the dashboard
+- the plugin store: install, update and remove from a verified source
+
+**Installer**
+
+- `install.sh` options: `--version`, `--role agent`, `--database`, `--allow-unsigned`
+- an unsigned or wrongly signed release is refused
+- the closing text of the installer after a first install and after an upgrade
+
+**Console and commands**
+
+- `regulus config`, including `config set`, and `regulus version`
+- the console in English and Italian
+
+**HTTP API**
+
+- `/api/openapi.yaml` is served and the endpoints answer as described
+
+**Containers and other systems**
+
+- an agent in a container and on a machine without systemd (runs, no updates)
+
+## Keeping the lists current
+
+This page is **the reference**: every test of a system follows these lists as written here, not an older copy. Every pull request that adds or changes a feature a person can use, or one that depends on the system under it, adds a line for it in the same pull request, or says why none is needed (the rule is in [AGENTS.md](../AGENTS.md)): in **Standard** if it is a minimum requirement, in **Advanced** if it is an advanced function, and always in **Complete**. The `[Test]` issues are copies made when they were opened, so a line added later is also added to the open ones. A row of the list is judged against the lists of the day it was verified; a line added after that makes the level *partial* until the line is run.
 
 ## Where the checks are tracked
 
-The milestone **M7 System verification** holds one `[Test]` issue per system and architecture (#536 to #541 for Ubuntu), each with the checklist above. When an issue's standard steps are all ticked, its row is added to [the list](#the-list) (or its level changed) in a pull request, and the issue is closed with it. A system that fails a step stays out of the list until the failure is fixed; the failure is its own issue.
-
-## Adding a system
-
-1. Open a `[Test]` issue in M7 with the checklist; for a system that is not built or designed yet, open a design issue first (see [AGENTS.md](../AGENTS.md)).
-2. Run the checklist on real machines and write what was run in the issue.
-3. Add the row to [the list](#the-list), with the kernel, the machines and the date, and take the system out of [the table of what is still to verify](#systems-still-to-verify). Say in the pull request which steps were not run.
-4. If the system is new to the documents, add it to [Platforms](decisions.md#platforms) too.
+The milestone **M7 System verification** holds one `[Test]` issue per system, architecture and level, each with its list as checkboxes. When all its lines are ticked on a stable major release, the row above is updated in a pull request and the issue is closed with it. A failing line keeps the level off the list until it is fixed; the failure is its own issue. To add a system, open the three issues, run them, and add the row; a system that is not built or designed yet starts with a design issue (see [AGENTS.md](../AGENTS.md)); add it to [Platforms](decisions.md#platforms) as well.
