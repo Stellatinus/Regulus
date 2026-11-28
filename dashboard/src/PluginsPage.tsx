@@ -47,9 +47,9 @@ const STATE_CLASS: Record<string, string> = {
   invalid: "failed",
 };
 
-// PluginsPage shows the state of the plugins of the hub and of every
-// connected server that runs plugins (#262), and the directories that are not
-// usable plugins (state "invalid", #319). It loads them once, then again
+// PluginsPage shows the state of the plugins of the hub (#262; plugins live on
+// the hubs only, never on a server, #496 and #535), and the directories that
+// are not usable plugins (state "invalid", #319). It loads them once, then again
 // whenever the live stream says they may have changed ("plugins.changed", a
 // snapshot after a reconnection, a server that comes or goes): no polling.
 export function PluginsPage() {
@@ -107,19 +107,6 @@ export function PluginsPage() {
               <p>{t("plugins.hub.none")}</p>
             ) : (
               <PluginTable plugins={state.data.hub.plugins} />
-            )}
-          </section>
-          <section className="panel" aria-labelledby="plugins-agents-heading">
-            <h3 id="plugins-agents-heading">{t("plugins.agents.title")}</h3>
-            {state.data.agents.length === 0 ? (
-              <p>{t("plugins.agents.none")}</p>
-            ) : (
-              state.data.agents.map((a) => (
-                <div key={a.id}>
-                  <h4 className="mono">{a.name || a.id}</h4>
-                  <PluginTable plugins={a.plugins} />
-                </div>
-              ))
             )}
           </section>
         </>

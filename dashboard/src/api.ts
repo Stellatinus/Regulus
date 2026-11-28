@@ -1055,8 +1055,6 @@ export interface PluginsStatus {
     problem?: string;
     plugins: PluginStatus[];
   };
-  // Connected agents that report a plugins directory, ordered by id.
-  agents: { id: string; name?: string; plugins: PluginStatus[] }[];
 }
 
 // A physical disk and its identity (GET /api/agents/{id}/disks, needs

@@ -859,6 +859,12 @@ The maintainer handed over `docs/design-system/regulus-console-v3.2.html`, a par
 - **Not taken over:** plugins installed on a node (against #496 and #535), the example data, and the plugin item in the dock until #560 is decided (design v3 says plugins live in Services).
 - **Tracking:** #558 (the dashboard follows v3.2 where the hub has the data), #559 (name and email), #560 (a plugin in the dock). Existing issues that v3.2 touches: #497, #516, #514, #515, #532, #534, #533.
 
+## Web UI: building from v3.2 (2026-11-28, #558)
+
+The first pull request that builds from the v3.2 reference. One entry per issue; the design issues (#516, #533, #559, #560) are written as designs and wait for the maintainer before any code.
+
+- **#535, no servers in the Plugins page.** The page shows the hub's plugins only. Plugins live on the hubs only (#496), so the "Servers" section and its texts are gone, and the dashboard's type of `GET /api/plugins` no longer has `agents`. **Left:** the hub still returns `agents` in that answer (agents can still run a `plugins_dir` and report it in their metrics, `internal/agent`); removing the field and the agent-side runtime changes the agent protocol and `docs/versioning.md` applies, so it is a separate issue.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)

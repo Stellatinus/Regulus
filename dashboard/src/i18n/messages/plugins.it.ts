@@ -11,8 +11,6 @@ export const pluginsIt: Record<keyof typeof plugins, string> = {
   "plugins.hub.problem": "Nessun plugin è in esecuzione sull'hub: {problem}",
   "plugins.hub.none": "La directory dei plugin non contiene plugin per l'hub.",
 
-  "plugins.agents.title": "Server",
-  "plugins.agents.none": "Nessun server connesso segnala plugin.",
 
   "plugins.column.server": "Server",
   "plugins.column.plugin": "Plugin",

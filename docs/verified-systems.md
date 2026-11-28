@@ -143,7 +143,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - every widget shows correct values; the range choice (10 minutes, 1 hour) works
 - widgets can be added, removed, arranged and the layout is kept
 - Nodes page: cards, compact list and map; the node window
-- Plugins page: every state is shown with its error; an invalid directory is listed as invalid
+- Plugins page: every state is shown with its error; an invalid directory is listed as invalid; it has no section for servers (plugins live on the hubs only, #535)
 - Users, Updates, Settings and Disks pages
 - the live indicator: Connecting, Reconnecting and Hub unreachable states
 - English and Italian, with no untranslated text and no broken layout

@@ -22,7 +22,7 @@ function mockHub(extra: Record<string, Handler> = {}) {
         "GET /api/agents?all=true": () => ({ data: [] as Agent[] }),
         "GET /api/account/two-factor": () => ({ data: { enabled: false, mandatory: false, policy: "off", recovery_codes_left: 0 } }),
         "GET /api/account/sessions": () => ({ data: [] }),
-        "GET /api/plugins": () => ({ data: { hub: { enabled: false, plugins: [] }, agents: [] } }),
+        "GET /api/plugins": () => ({ data: { hub: { enabled: false, plugins: [] } } }),
         "GET /api/store": () => ({ data: { sources: [], plugins: [] } }),
         ...extra,
       };

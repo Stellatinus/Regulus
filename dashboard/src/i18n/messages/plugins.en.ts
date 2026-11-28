@@ -10,8 +10,6 @@ export const plugins = {
   "plugins.hub.problem": "No plugin runs on the hub: {problem}",
   "plugins.hub.none": "The plugins directory holds no plugin for the hub.",
 
-  "plugins.agents.title": "Servers",
-  "plugins.agents.none": "No connected server reports plugins.",
 
   "plugins.column.server": "Server",
   "plugins.column.plugin": "Plugin",
