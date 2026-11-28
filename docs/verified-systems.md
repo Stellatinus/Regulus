@@ -162,6 +162,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - a plugin that crashes is restarted; one that cannot start is shown as failed
 - a plugin widget appears on the dashboard
 - the plugin store: install, update and remove from a verified source, from the card and from the description page
+- the Disks plugin installed from the store: its tab (Dischi in Italian) appears in the node window between General and SSH terminal, shows a card for each real disk with its device, interface, model, serial, size, first and last seen and identity, the moves of disks, the note about S.M.A.R.T.; the core's Physical disks panel is then not drawn; with the plugin removed, the panel is back (#497)
 
 **Installer**
 

@@ -47,9 +47,27 @@ The page of each server (**Servers**, then the server) has a **Physical disks** 
 - The move is recorded in its own table; the event log of the disk (#150) is not built.
 - Serials of cloud volumes (for example an EBS volume reports `vol…` as its serial) are stable but are treated as virtual only when the vendor or model says so.
 
-## Becoming a plugin (design, **not agreed**: nothing here is built)
+## The Disks tab, as design v3.2 draws it (#497)
 
-Direction of 2026-11-26 ([Direction](ui-and-apps-direction.md), #497, Stellatinus/Regulus-Plugins#10): the **Physical disks** panel and the moves become the first real plugin, the **Disks** tab (**Dischi**) of the node window. This section is the proposed cut. It must be agreed before any code is written ([AGENTS.md](../AGENTS.md)).
+Design v3.2 ([Design system](design-system.md), "Third version") draws a **Disks** part of the node window: for each disk a card with the device and how it is attached, the model, the serial, a health state, the used space, four numbers (temperature, wear, hours of use, reallocated sectors) and three test buttons (short, extended, integrity). Its data is made up. This is what the tab (the plugin, Stellatinus/Regulus-Plugins `plugins/disks`) shows and what it does not:
+
+| In v3.2 | In the tab | Why |
+|---|---|---|
+| Device, interface, model, serial/ID | **shown**: `device`, `transport`, `vendor` and `model`, `serial` | the agent reads them ([What the agent reads](#what-the-agent-reads)) |
+| State pill | **shown**, but the states are the hub's: present, not reported now, not identifiable (with the reason), conflict | v3.2's "Healthy (PASSED)" is a S.M.A.R.T. verdict, not a state the hub has |
+| Capacity | **shown** (`size_bytes`) | |
+| Used space (%) | **not shown** | the agent reports the use of *filesystems* (the Disk usage widget), not of physical disks; a disk with several partitions, RAID or LVM has no single figure |
+| Temperature, wear, hours of use, reallocated sectors, health | **not shown**: one note says why | needs S.M.A.R.T. data the agent does not collect (**#149**); the tab shows nothing rather than an invented value |
+| Short, extended and integrity test buttons | **not shown** | a test is a command to a node; no command can be sent to a node from the dashboard ([dashboard.md](dashboard.md)) |
+| (not in v3.2) | **shown**: first and last seen, the identity key and its kind, and the moves of disks to and from the server | what the Physical disks panel always showed |
+
+**When S.M.A.R.T. arrives (#149)**, the card gets its four boxes and the health state, and the note goes. What that needs, to be designed in #149 and not before: the agent reading S.M.A.R.T. (it needs a privilege for most devices: an ioctl on the device or `smartctl`, which the agent does not have as an unprivileged user), a field in the report with its own version like `disk_identity_version`, a history on the hub (a table, expand-only) and a new read operation of the plugin's door. The tests need node commands first.
+
+**The tab's place.** The tab sits between General and SSH terminal, as #497 says; v3.2 draws it last (General, SSH terminal, File editor, Disks). #497 and #558 disagree on the order and nothing else depends on it: the maintainer decides, and the order is the core's (`ServerPage.tsx`), not the plugin's.
+
+## Becoming a plugin (the cut is built as proposed; two points are not agreed, #497)
+
+Direction of 2026-11-26 ([Direction](ui-and-apps-direction.md), #497, Stellatinus/Regulus-Plugins#10): the **Physical disks** panel and the moves become the first real plugin, the **Disks** tab (**Dischi**) of the node window. This section is the cut, **as it was proposed and as it is now built**: a tab extension point in the node window, a sandboxed frame, the read door with two read-only operations, and the UI module in regulus-plugins. **Not agreed yet, and not done:** removing the panel from the core page for good (it is only *not drawn* while the plugin's tab is installed: no store release exists yet, so an installation without the plugin keeps its disks screen), and the open points below. Not verified on a real hub or in a real browser frame (a `[Test]` issue is open).
 
 ### The cut
 
@@ -75,7 +93,7 @@ Direction of 2026-11-26 ([Direction](ui-and-apps-direction.md), #497, Stellatinu
 
 - **No data moves**, so nothing is lost: `disks` and `disk_moves` stay where they are, with their history, whether or not the plugin is installed.
 - **The routes stay** (`docs/versioning.md`): an older dashboard keeps working, and the plugin reads the same routes.
-- **The panel goes from the core page of the node** only when the plugin exists *and* the store can install it (#497). Until then it stays: removing it earlier would leave the data with no screen. An installation that does not install the plugin has no Disks tab; that is the point of a plugin, and the release notes of that version must say it.
+- **The panel goes from the core page of the node** only when the plugin exists *and* the store can install it (#497). Until then it stays (today it is not drawn when the plugin's tab is installed): removing it earlier would leave the data with no screen. An installation that does not install the plugin has no Disks tab; that is the point of a plugin, and the release notes of that version must say it.
 
 ### What is open (the maintainer decides)
 
