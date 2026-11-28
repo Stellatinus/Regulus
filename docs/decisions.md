@@ -851,6 +851,14 @@ Proposed on 2026-11-19, **waiting for the maintainer's agreement**; nothing is i
 
 **Open:** the same for the agent's own files when it has any; whether `install.sh` and the post-install script should call `host-sync` instead of repeating the steps (one place for the list); the Store page still offers Install on a hub whose helper is missing and the dialog does not show the timeout (#524).
 
+## Web UI: the third version of the console design (2026-11-28)
+
+The maintainer handed over `docs/design-system/regulus-console-v3.2.html`, a partly finished third version that will change again. It is kept as the reference next to v3 and v3.1; the comparison, with an issue for each difference, is in [design-system.md](design-system.md), "Third version (v3.2)". Nothing was built from it in this change.
+
+- **New in the file:** a Disks part in the node window (S.M.A.R.T. and statistics), the SSH terminal and file editor drawn, theme cards, a profile with name and email, category chips in Recent activity, a plugin item in the dock.
+- **Not taken over:** plugins installed on a node (against #496 and #535), the example data, and the plugin item in the dock until #560 is decided (design v3 says plugins live in Services).
+- **Tracking:** #558 (the dashboard follows v3.2 where the hub has the data), #559 (name and email), #560 (a plugin in the dock). Existing issues that v3.2 touches: #497, #516, #514, #515, #532, #534, #533.
+
 ## Open questions
 
 - Should the other privileged actions use a `sudoers.d` rule or a root helper like the updates? (#60)
