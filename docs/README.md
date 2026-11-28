@@ -12,6 +12,7 @@ Find what you need by what you want to do. For what Regulus is, see the [README]
 | add other servers (remote agents) | [Remote agents](remote-agents.md), and **Servers → Add a server** in the dashboard |
 | update the hub and the servers | [Updates](updates.md) |
 | know how releases and channels work | [Releases](releases.md) |
+| see which operating systems Regulus has been run on, when and on what, and how a system gets verified | [Verified systems](verified-systems.md) |
 | know which versions of hub, agents and helper work together, and what may change in the protocol | [Versioning](versioning.md) |
 | scrape the hub and its servers with Prometheus | [Metrics for Prometheus](metrics.md) |
 | use the API | [HTTP API](http-api.md) and `internal/hub/openapi.yaml` (also served at `/api/openapi.yaml`) |
