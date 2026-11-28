@@ -151,7 +151,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - Admin: the **+** of Users and of Roles opens a popup (Escape, Cancel, a click outside and success close it, and the focus goes back to the **+**); Recent activity has the search bar, the refresh icon and the filter button, and filtering by account and by event group works, with a keyboard and on a phone width (#514)
 - the live indicator: Connecting, Reconnecting and Hub unreachable states
 - English and Italian, with no untranslated text and no broken layout
-- the themes
+- the modes (dark, light, system); the colour themes (Regulus Dark, Obsidian OLED, Slate) are **not built yet** (design waiting, #516)
 - a phone and a tablet
 - Chrome, Firefox and Safari
 - keyboard use and a screen reader

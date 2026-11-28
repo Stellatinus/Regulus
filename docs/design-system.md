@@ -15,30 +15,31 @@ The file has example data (eight made-up nodes, a fake ping, fake updates). It i
 | **Node window** | A node opens in a window of 90 vw x 90 vh over the page (the address `#/servers/<id>` still works and is what the cards link to). Header: logo, name, type, state, host name, last contact, a three-way switch **General / SSH terminal / File editor** (one is always chosen; General is the default), an edit button (pencil) and close. | `ServerPage.tsx` |
 | **Logo library** | Seven node-type logos, drawn for Regulus: primary hub, secondary hub, compute, generic, proxy/gateway, storage/NAS, dev and AI. Each is an SVG in `currentColor`, tinted by a `role-*` class. The reference's "role library" window is not part of the dashboard: the logos are used where a node is drawn, and picked in the edit dialog. | `nodeTypes.tsx` |
 | **Settings** | Behind *Settings* in the account menu (`#/settings/<category>`): a list of categories and the chosen one. Personal: *Account and security* (password, two-factor, sessions), *Appearance and language*. System: *Plugins, apps, automations* (three switches), *Network and core*, *Database*, *Metrics and telemetry* (what the hub's configuration file holds; not editable yet, #483) and *Mesh updates* (the Updates page, with `core.update`). | `SettingsPage.tsx`, `features.ts` |
-| **Services** | *Installed* (the plugins of the hub and the servers; apps later) and *Regulus Store* (`StorePage.tsx`, built against `GET /api/store`: sources and the state of their index, search, filters, cards, a detail with the permissions shown before installing, versions that cannot run greyed out with the reason; **Install, Update and Remove** against the hub's lifecycle routes, with step-up, a busy state and translated refusals. **Not built:** rollback, pin, requirements between plugins, the automatic mode and "needs approval", adding a source from the page). Hidden when Plugins and Apps are both off. | `ServicesPage.tsx` |
+| **Services** | *Installed* (the plugins of the hub; apps later, and no servers: plugins live on the hubs only) and *Regulus Store* (`StorePage.tsx`, built against `GET /api/store`: sources and the state of their index, search, filters, cards, a detail with the permissions shown before installing, versions that cannot run greyed out with the reason; **Install, Update and Remove** against the hub's lifecycle routes, with step-up, a progress bar with the current step and translated refusals; cards are `[Install] [i]`, the *All, Installed, Updates* selector is a **Downloaded** switch. **Not built:** rollback, pin, requirements between plugins, the automatic mode and "needs approval", adding a source from the page). Hidden when Plugins and Apps are both off. | `ServicesPage.tsx` |
 | **Automations** | A list of automations and an editor (trigger, nodes to watch, condition, actions). For now drafts kept in this browser that do not run (#476). | `AutomationsPage.tsx` |
-| **Admin** | Tabs: *Accounts*, *Roles and permissions*, *Recent activity* (each with its permission). Updates is no longer a tab: it is in Settings. | `Shell.tsx`, `UsersPage.tsx` |
+| **Admin** | Tabs: *Accounts* (the *Users* table with a **+** that opens the add-user popup), *Roles and permissions* (a **+** for the add-role popup), *Recent activity* (search, refresh, filter and group chips), each with its permission. Updates is no longer a tab: it is in Settings. | `Shell.tsx`, `UsersPage.tsx` |
 
 ## Third version (v3.2, 2026-11-28)
 
-The maintainer handed over `docs/design-system/regulus-console-v3.2.html` ("Console Multiserver Mesh"). It is partly finished and will change again; it is the reference for the parts below, and nothing in it is built yet unless the table says so. The file is in Italian and uses example data (made-up nodes, IPs, disks, a made-up user); none of that is fact.
+The maintainer handed over `docs/design-system/regulus-console-v3.2.html` ("Console Multiserver Mesh"). It is partly finished and will change again; it is the reference for the parts below. The file is in Italian and uses example data (made-up nodes, IPs, disks, a made-up user); none of that is fact. The **Status** column says what was done with each difference (the pull request that builds from v3.2 is described in [decisions.md](decisions.md), "Web UI: building from v3.2"). A *design* is written and waits for the maintainer: no code until it is agreed ([AGENTS.md](../AGENTS.md)).
 
-| In v3.2 | Compared with v3.1 and the dashboard | Issue |
-|---|---|---|
-| **Node window with four parts:** General, SSH terminal, File editor, **Disks** | Disks is new. It shows each disk's model, serial, interface, capacity and use, with **S.M.A.R.T.** values and statistics. The dashboard has a Physical disks panel (identity and moves) but no S.M.A.R.T. history yet. | #497 (the Disks plugin), #149 (S.M.A.R.T. data), #558 (tracking) |
-| SSH terminal with quick-command chips; File editor | placeholders in the dashboard; v3.2 draws what they look like | #236, #237 (designs, closed), #558 |
-| **Log search** and a list of services and containers inside the node window | the window shows neither (no data) | #508 (container logs), #558 |
-| **Settings > Appearance:** three theme cards (Regulus Dark, Obsidian OLED, Slate) and the language choice | mode (dark, light, system) exists; colour themes do not | #516 (themes), #482 (languages) |
-| **Settings > Account:** name and email | accounts have a username and a role only | #559 |
-| **Admin > Recent activity:** chips by category (security, nodes, accounts and roles, plugins and automations) | the page has no category filter; search and refresh are not drawn | #514 |
-| **Admin > Accounts:** the add-user form opens on the page | #514 asks for a popup; v3.2 does not draw it | #514 |
-| **A plugin item in the dock** (AI Assistant) | decided against in design v3 (plugins live in Services) | #560 |
-| **Services** with *Installed* and a store, catalogue cards with Install or Import | the store is built for plugins from the hub's API; #532 and #534 change the cards and the selector | #532, #534, #530 |
-| **Automations** whose actions call plugins and apps on nodes | drafts only | #476 |
-| No notification bell | the bell is designed in #533 and is not in the file | #533 |
+| In v3.2 | Compared with v3.1 and the dashboard | Status | Issue |
+|---|---|---|---|
+| **Node window with four parts:** General, SSH terminal, File editor, **Disks** | Disks is the plugin's tab: model, serial, interface, size, state, first and last seen, identity and the moves, as cards; v3.2's S.M.A.R.T. values, used-space bar and test buttons are **not drawn** (no data, no node commands) and a note says so. The part sits between General and SSH terminal (#497), v3.2 draws it last: the maintainer decides | **built** in the plugin ([disks.md](disks.md)); S.M.A.R.T. **waits for #149** | #497, #149, #558 |
+| SSH terminal with quick-command chips; File editor | placeholders in the dashboard; v3.2 draws what they look like | waits for the build of the terminal and the file editor | #236, #237 (designs, closed), #558 |
+| **Log search** and a list of services and containers inside the node window | the window shows neither (no data) | waits for data | #508 (container logs), #558 |
+| **Settings > Appearance:** three theme cards (Regulus Dark, Obsidian OLED, Slate) and the language choice | mode (dark, light, system) exists; colour themes do not | **design written** ([decisions.md](decisions.md), "Colour themes"), waiting; languages wait for #482 | #516, #482 |
+| **Settings > Account:** name and email | accounts have a username and a role only | **design written** ([authentication.md](authentication.md), "User profile"), waiting | #559 |
+| **Admin > Recent activity:** chips by category | the page has a search bar, a square refresh icon, a filter button (account, event group) and the chips | **built**; the hub cannot filter yet, so it works on the 100 entries loaded | #514 |
+| **Admin > Accounts:** the add-user form opens on the page | the form is a popup opened by a **+** at the right of *Users*, and so is the add-a-role form | **built** (v3.2 does not draw the popup) | #514 |
+| **A plugin item in the dock** (AI Assistant) | decided against in design v3 (plugins live in Services) | **design written** ([plugins/README.md](plugins/README.md), "A plugin item in the dock"), waiting; the dock has no slot | #560 |
+| **Services** with *Installed* and a store, catalogue cards with Install or Import | store cards are `[Install] [i]`, the selector is a **Downloaded** switch, and installing shows a progress bar with the step | **built** for plugins from the hub's API ([plugins/store.md](plugins/store.md)); the example catalogue (Docker apps, automations) is not copied | #532, #534, #530 |
+| **Services:** the plugins page lists the hubs' plugins only | the page had a *Servers* section; v3.2's file does not need it | **built**: removed (plugins live on the hubs only) | #535 |
+| **Node window:** a separate *Management* section | the pencil is the only way to manage a node, and Revoke moved into it | **built** | #515 |
+| **Automations** whose actions call plugins and apps on nodes | drafts only | waits for #476 | #476 |
+| No notification bell | the bell is designed, not in the file | **design written** ([notifications.md](notifications.md)), waiting | #533 |
 
 **Where v3.2 conflicts with a decision:** it shows plugins installed *on a node* (an activity line "plugin installed on node", automations that target a node with a plugin). Plugins live on the hubs only (#496, #535), so the dashboard does not draw that.
-
 
 ## Decisions made while building it
 
@@ -67,6 +68,10 @@ The reference shows facts Regulus does not have. The dashboard leaves them out i
 | Updates by APT, Ubuntu and Regulus Mesh | one pill: *Update* when the agent runs an older Regulus than the hub (the Updates page does the update) | package and OS updates per node (issue) |
 | Services and containers of a node, a log console | not shown | node services and logs (issue) |
 | Ping, restart | not shown | node commands (issue) |
+| A person's full name and email | the username only; nothing is shown until the data exists | the profile design agreed, then a build (#559) |
+| S.M.A.R.T. health, temperature, wear, hours and reallocated sectors of a disk; the test buttons | one note in the Disks tab says why | S.M.A.R.T. data from the agent (#149); node commands for the tests |
+| Used space of a *physical* disk (a percentage bar) | not shown: the agent reports file systems, not disks | a design for disk use per physical disk, if wanted |
+| Quick-command chips of the SSH terminal | the terminal is a placeholder | the terminal (#236) |
 | Where the map puts a node (proxy left, secondary hub below) | by node type; with no types on the hub, every server hangs from the hub on the right | node types |
 
 ## Screens still to come
