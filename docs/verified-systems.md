@@ -73,6 +73,10 @@ Every run records, so that a result can be repeated and a failure traced:
 | Who | the tester |
 | Evidence | the logs (`journalctl -u regulus`) and screenshots the checklist asks for, attached to the issue. A result without them is written as the tester's reading, as in the 26.04 row |
 
+## Keeping the checklist current
+
+This page is **the reference**: every test of a system, on one machine or on several, follows the [Standard](#standard) steps and [the checklist](#the-checklist-of-one-system) as they are written here, not an older copy. **Every pull request that adds or changes a feature a person can use, or one that depends on the system under it, adds the step to the checklist in the same pull request**, or says why none is needed (the rule is in [AGENTS.md](../AGENTS.md)). The open `[Test]` issues of M7 are copies made when they were opened, so a step added later is also added to them. A row in [the list](#the-list) is judged against the checklist of the day it was verified; a step added after that makes the row *partial* until the step is run, and the page says so.
+
 ## The checklist of one system
 
 Every verification issue carries this list, with the steps of [Standard](#standard) in full. A step is ticked only when it was run **on that system and architecture**, and gets a note when it was not run or did not pass; the issue stays open until every standard step is ticked, and the row of this page is updated in the pull request that closes it.
