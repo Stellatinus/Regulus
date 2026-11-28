@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 )
@@ -94,7 +95,7 @@ func TestAnOldInstallationGetsTheHelper(t *testing.T) {
 			t.Errorf("did not run %q (ran %v)", want, r.calls)
 		}
 	}
-	if len(changes) != 6 {
+	if len(changes) != 7 { // the units (2), the two directories, plugins_dir, the helper, the restart
 		t.Errorf("changes = %v", changes)
 	}
 }
@@ -213,5 +214,58 @@ func TestAFailureDoesNotStopTheOtherSteps(t *testing.T) {
 	}
 	if !r.called("systemctl enable --now regulus-plugin-apply.path") || len(changes) == 0 {
 		t.Errorf("the steps after the failure did not run: %v %v", changes, r.calls)
+	}
+}
+
+// Run under the update helper's UMask=0077 (what really happens), a directory
+// created with 0755 must still come out 0755: the hub's user reads it.
+func TestTheDirectoriesAreReadableWhateverTheUmask(t *testing.T) {
+	old := syscall.Umask(0o077)
+	defer syscall.Umask(old)
+	r := newRig(t)
+	if _, err := Sync(context.Background(), r.o); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{filepath.Dir(r.o.PluginsDir), r.o.PluginsDir} {
+		if st, err := os.Stat(d); err != nil || st.Mode().Perm() != 0o755 {
+			t.Errorf("%s: %v, %v", d, st, err)
+		}
+	}
+}
+
+// An installation updated by a version that had the bug has both directories
+// at 0700: the next sync repairs them, adds nothing else, removes nothing, and
+// a second run changes nothing.
+func TestAnInstallationWithUnreadableDirectoriesIsRepaired(t *testing.T) {
+	r := newRig(t)
+	parent := filepath.Dir(r.o.PluginsDir)
+	for _, d := range []string{parent, r.o.PluginsDir} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(r.o.PluginsDir, 0o750); err != nil { // group read kept, others added
+		t.Fatal(err)
+	}
+	if _, err := Sync(context.Background(), r.o); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(parent); st.Mode().Perm() != 0o755 {
+		t.Errorf("parent mode %o", st.Mode().Perm())
+	}
+	if st, _ := os.Stat(r.o.PluginsDir); st.Mode().Perm() != 0o755 {
+		t.Errorf("plugins mode %o", st.Mode().Perm())
+	}
+	changes, err := Sync(context.Background(), r.o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range changes {
+		if strings.Contains(c, "readable") {
+			t.Errorf("a second run changed modes again: %q", c)
+		}
 	}
 }

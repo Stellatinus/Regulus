@@ -72,7 +72,7 @@ The minimum the program must do. Verification of these requirements lists the sy
 **Plugins**
 
 - the plugin sources show as verified
-- a plugin is installed from the store, runs, shows in the dashboard and is removed
+- a plugin is installed from the store (the password and 2FA dialog is in front of the plugin's window and accepts the code), runs, shows in the dashboard with no "permission denied" on the plugins directory and is removed
 
 **Logs**
 
@@ -157,7 +157,7 @@ Everything: all of **Standard**, all of **Advanced**, and the rest below.
 - the example plugin runs on the hub and on a remote agent
 - a plugin that crashes is restarted; one that cannot start is shown as failed
 - a plugin widget appears on the dashboard
-- the plugin store: install, update and remove from a verified source
+- the plugin store: install, update and remove from a verified source; `/usr/local/lib/regulus/plugins` is `0755` root after an upgrade from a version that left it `0700`
 
 **Installer**
 

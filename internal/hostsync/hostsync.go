@@ -104,11 +104,17 @@ func Sync(ctx context.Context, o Options) (changes []string, err error) {
 		note("wrote %s", filepath.Join(o.WriteDir, name))
 	}
 
-	if _, serr := os.Stat(o.PluginsDir); errors.Is(serr, fs.ErrNotExist) {
-		if merr := os.MkdirAll(o.PluginsDir, 0o755); merr != nil {
-			fail(merr)
-		} else {
-			note("created %s (owned by root: whatever is in it runs as the hub's user)", o.PluginsDir)
+	// The plugins directory and the directory above it must be readable and
+	// searchable by the hub's user: this runs under UMask=0077 (the update
+	// helper's), so a directory created here with 0755 would be 0700 and the
+	// hub could not read the plugins ("permission denied"), and an installation
+	// updated by an earlier version already has them that way.
+	for _, dir := range []string{filepath.Dir(o.PluginsDir), o.PluginsDir} {
+		msg, derr := ensureReadableDir(dir)
+		if derr != nil {
+			fail(derr)
+		} else if msg != "" {
+			note("%s", msg)
 		}
 	}
 
@@ -143,6 +149,37 @@ func Sync(ctx context.Context, o Options) (changes []string, err error) {
 		}
 	}
 	return changes, errors.Join(errs...)
+}
+
+// ensureReadableDir creates dir when it is missing (0755, whatever the umask)
+// and, when it exists, adds the read and search bits for group and others that
+// it lacks. It never removes a permission and never touches the owner: what an
+// administrator made stricter than 0755 in another way (a group) is kept.
+func ensureReadableDir(dir string) (string, error) {
+	st, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+		if err := os.Chmod(dir, 0o755); err != nil { // not the umask's
+			return "", err
+		}
+		return fmt.Sprintf("created %s (owned by root: whatever is in it runs as the hub's user)", dir), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !st.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", dir)
+	}
+	perm := st.Mode().Perm()
+	if want := perm | 0o055; want != perm {
+		if err := os.Chmod(dir, want); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("made %s readable by the hub's user (mode %o, was %o)", dir, want, perm), nil
+	}
+	return "", nil
 }
 
 func unitExists(dirs []string, name string) bool {
